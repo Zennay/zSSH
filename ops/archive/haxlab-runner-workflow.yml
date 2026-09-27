@@ -1,0 +1,44 @@
+# Archived migration artifact
+#
+# This was the temporary HaxLab self-hosted-runner transport used while zSSH
+# still lived outside its own repository. It is intentionally NOT installed as
+# a GitHub Actions workflow in Zennay/zSSH. Keep only for migration traceability.
+#
+name: zSSH guarded live promotion
+
+on:
+  push:
+    branches:
+      - "ops/zssh-github-runtime-promote"
+    paths:
+      - ".github/workflows/zssh-runtime-promote-once.yml"
+      - ".github/scripts/zssh-runtime-promote.sh"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: zssh-runtime-promote
+  cancel-in-progress: false
+
+jobs:
+  promote:
+    name: Promote canonical zSSH to VPS
+    runs-on:
+      - self-hosted
+      - haxlab
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout transport branch
+        uses: actions/checkout@v4
+
+      - name: Validate transport script
+        shell: bash
+        run: bash -n .github/scripts/zssh-runtime-promote.sh
+
+      - name: Guarded canonical zSSH promotion
+        shell: bash
+        env:
+          ZSSH_CANONICAL_SHA: b1363aee962d5d67f38352c4169166b7c52c2bca
+        run: bash .github/scripts/zssh-runtime-promote.sh

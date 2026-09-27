@@ -1,0 +1,31 @@
+name: zSSH CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install dependencies
+        run: npm install --ignore-scripts --no-audit --no-fund
+      - name: Run security and deployment tests
+        run: npm test
+      - name: Validate deployment scripts
+        run: |
+          bash -n deploy/install-live.sh
+          bash -n ops/diagnose-vps.sh
+          bash -n ops/register-zcloud.sh
+      - name: Validate server syntax
+        run: node --check server.mjs
