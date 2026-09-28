@@ -89,6 +89,36 @@ Production hardening still requires a dedicated service account, scoped sudo/cap
 
 OpenAI's current plugin documentation uses remote MCP over streamable HTTP. Public submission requires a stable public HTTPS endpoint. Development bearer auth is temporary; OAuth-compatible user authentication, target pairing, and public submission remain later milestones. The loopback gateway is not yet a plugin that normal ChatGPT chats can select.
 
+## Easy VPS installation
+
+Run this as the dedicated unprivileged VPS user (never as root):
+
+```bash
+curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/Zennay/zSSH/main/deploy/bootstrap-vps.sh | bash
+```
+
+For a reproducible install, pin the source revision:
+
+```bash
+ZSSH_REF=7499713db2a795f346ed9d45ad45dbc91fef44e2 \
+  bash <(curl --proto '=https' --tlsv1.2 -fsSL \
+  https://raw.githubusercontent.com/Zennay/zSSH/7499713db2a795f346ed9d45ad45dbc91fef44e2/deploy/bootstrap-vps.sh)
+```
+
+The bootstrap clones the canonical repository, checks out the selected revision, runs the tests, creates a non-root user service, generates a random local bearer token, and runs the live canary before declaring success. Raw shell remains disabled.
+
+## Connect as a ChatGPT MCP app
+
+For a private VPS, install OpenAI's `tunnel-client` and create a tunnel in Platform settings. Then run:
+
+```bash
+bash deploy/configure-tunnel.sh
+```
+
+The helper asks for the tunnel ID and runtime key, stores the key with mode 0600, configures the loopback-only MCP route, enables `zssh-tunnel.service`, and runs the tunnel doctor check. In ChatGPT web, enable Developer mode, choose Apps → Create → Tunnel, select the tunnel, scan the tools, and create the app. See OpenAI's Secure MCP Tunnel documentation for current plan and workspace requirements.
+
+The helper sets `ZSSH_TRUST_LOCAL_TUNNEL=1` only for the loopback tunnel path. It never enables raw shell. To enable full shell on a disposable/trusted target, change `ZSSH_EXEC_MODE=full` explicitly in `~/.config/zssh/gateway.env`, restart `zssh.service`, and review the audit log first.
+
 ## Canonical project docs
 
 - Project HQ: https://app.notion.com/p/3e89e19ac955811a9008d420e3e2a634
