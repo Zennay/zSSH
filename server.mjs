@@ -16,6 +16,7 @@ const COMMAND_TIMEOUT_SECONDS = clampInt(process.env.ZSSH_COMMAND_TIMEOUT_SECOND
 const MAX_OUTPUT_BYTES = clampInt(process.env.ZSSH_MAX_OUTPUT_BYTES, 4096, 1048576, 131072);
 const MAX_FILE_BYTES = clampInt(process.env.ZSSH_MAX_FILE_BYTES, 1024, 1048576, 131072);
 const DEV_TOKEN = process.env.ZSSH_DEV_BEARER_TOKEN || "";
+const TRUST_LOCAL_TUNNEL = process.env.ZSSH_TRUST_LOCAL_TUNNEL === "1";
 const AUDIT_LOG = path.resolve(process.env.ZSSH_AUDIT_LOG || "./data/audit.jsonl");
 const SAFE_PROGRAM_PATHS = Object.freeze({
   uptime: "/usr/bin/uptime",
@@ -470,7 +471,13 @@ function createMcpServer() {
   return server;
 }
 
+function isLoopbackRequest(req) {
+  const address = String(req.socket?.remoteAddress || "");
+  return address === "127.0.0.1" || address === "::1" || address === "::ffff:127.0.0.1";
+}
+
 function authorized(req) {
+  if (TRUST_LOCAL_TUNNEL && isLoopbackRequest(req)) return true;
   if (!DEV_TOKEN) return process.env.NODE_ENV !== "production";
   const expected = "Bearer " + DEV_TOKEN;
   const actual = String(req.headers.authorization || "");
@@ -490,8 +497,8 @@ export function start() {
   if (typeof process.getuid === "function" && process.getuid() === 0 && process.env.ZSSH_ALLOW_ROOT !== "1") {
     throw new Error("zSSH refuses to run as root; use a dedicated unprivileged service account");
   }
-  if (process.env.NODE_ENV === "production" && !DEV_TOKEN) {
-    throw new Error("production requires authentication; development bearer is the M0 placeholder");
+  if (process.env.NODE_ENV === "production" && !DEV_TOKEN && !TRUST_LOCAL_TUNNEL) {
+    throw new Error("production requires authentication; configure a bearer token or explicitly trust the loopback tunnel");
   }
 
   const httpServer = createServer(async (req, res) => {
