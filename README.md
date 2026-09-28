@@ -4,7 +4,7 @@ zSSH is a **standalone security-first remote operations project**. zCloud is its
 
 ## Current milestone
 
-**M0 — Genesis + portfolio registration.**
+**M1 — Safe local execution proof.** M0 and the standalone repository migration are complete.
 
 This branch proves the smallest safe foundation:
 
@@ -58,7 +58,8 @@ M0 runs the gateway and execution adapter together to keep the proof small. M2 s
 Requires Node 20+.
 
 ```bash
-cd zssh
+git clone https://github.com/Zennay/zSSH.git
+cd zSSH
 npm install
 cp .env.example .env
 # export values from .env in your preferred way
@@ -67,6 +68,14 @@ npm start
 ```
 
 The server binds to `127.0.0.1` by default. Put TLS/reverse proxy or a development tunnel in front of it rather than binding the M0 process directly to the public internet.
+
+`node live-canary.mjs` checks authenticated MCP discovery, non-root execution,
+the safe runner, a temporary read/write roundtrip inside the first allowed root,
+rejection of an outside-root read, and rejection of raw shell. It deletes its
+temporary test directory on exit. The first allowed root must be writable by
+the zSSH service user for the file proof. CI runs this against a production-mode
+server with an isolated temporary root; a green CI result is not evidence that
+the same proof has passed on the OVH runtime.
 
 ## Policy
 
@@ -78,7 +87,7 @@ Production hardening still requires a dedicated service account, scoped sudo/cap
 
 ## ChatGPT integration status
 
-OpenAI's current plugin documentation uses remote MCP over streamable HTTP. Public submission requires a stable public HTTPS endpoint. Development bearer auth in M0 is temporary; production authentication and public submission are later milestones.
+OpenAI's current plugin documentation uses remote MCP over streamable HTTP. Public submission requires a stable public HTTPS endpoint. Development bearer auth is temporary; OAuth-compatible user authentication, target pairing, and public submission remain later milestones. The loopback gateway is not yet a plugin that normal ChatGPT chats can select.
 
 ## Canonical project docs
 
