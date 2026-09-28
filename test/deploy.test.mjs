@@ -36,3 +36,19 @@ test("live MCP canary proves fail-closed raw shell plus safe execution", async (
   assert.match(text, /program: "whoami"/);
   assert.doesNotMatch(text, /console\.log\([^\n]*token/i);
 });
+
+
+test("onboarding scripts preserve secure defaults and loopback-only tunnel setup", async () => {
+  const bootstrap = await readFile(path.join(ROOT, "deploy", "bootstrap-vps.sh"), "utf8");
+  const tunnel = await readFile(path.join(ROOT, "deploy", "configure-tunnel.sh"), "utf8");
+  const server = await readFile(path.join(ROOT, "server.mjs"), "utf8");
+  assert.match(bootstrap, /Refusing to bootstrap zSSH as root/);
+  assert.match(bootstrap, /ZSSH_EXPECTED_SHA/);
+  assert.match(tunnel, /CONTROL_PLANE_API_KEY/);
+  assert.match(tunnel, /chmod 600/);
+  assert.match(tunnel, /127\.0\.0\.1:8788\/mcp/);
+  assert.match(tunnel, /ZSSH_TRUST_LOCAL_TUNNEL=1/);
+  assert.match(server, /isLoopbackRequest/);
+  assert.match(server, /TRUST_LOCAL_TUNNEL/);
+  assert.match(server, /httpServer\.listen\(PORT, "127\.0\.0\.1"/);
+});

@@ -65,6 +65,12 @@ if [[ ! -d "$RELEASE" ]]; then
 fi
 
 if [[ ! -f "$ENV_FILE" ]]; then
+  ALLOWED_ROOTS="${ZSSH_ALLOWED_ROOTS:-$HOME/zennay-cloud}"
+  AUDIT_PATH="${ZSSH_AUDIT_LOG:-$HOME/.local/state/zssh/audit.jsonl}"
+  if [[ "$ALLOWED_ROOTS" == *$'\n'* || "$AUDIT_PATH" == *$'\n'* ]]; then
+    echo "zSSH paths may not contain newlines" >&2
+    exit 2
+  fi
   umask 077
   if command -v openssl >/dev/null 2>&1; then
     TOKEN="$(openssl rand -hex 32)"
@@ -75,13 +81,14 @@ if [[ ! -f "$ENV_FILE" ]]; then
 NODE_ENV=production
 PORT=8788
 ZSSH_DEV_BEARER_TOKEN=$TOKEN
-ZSSH_ALLOWED_ROOTS=/home/ubuntu/zennay-cloud
+ZSSH_TRUST_LOCAL_TUNNEL=0
+ZSSH_ALLOWED_ROOTS=$ALLOWED_ROOTS
 ZSSH_EXEC_MODE=disabled
 ZSSH_SAFE_PROGRAMS=uptime,whoami,id,uname,pwd,df,free
 ZSSH_COMMAND_TIMEOUT_SECONDS=30
 ZSSH_MAX_OUTPUT_BYTES=131072
 ZSSH_MAX_FILE_BYTES=131072
-ZSSH_AUDIT_LOG=/home/ubuntu/.local/state/zssh/audit.jsonl
+ZSSH_AUDIT_LOG=$AUDIT_PATH
 EOF
 fi
 chmod 600 "$ENV_FILE"
