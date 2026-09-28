@@ -100,9 +100,9 @@ curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/Zennay/z
 For a reproducible install, pin the source revision:
 
 ```bash
-ZSSH_REF=7499713db2a795f346ed9d45ad45dbc91fef44e2 \
+ZSSH_REF=193c287a49afa94314019254b5b30520b9ee9844 \
   bash <(curl --proto '=https' --tlsv1.2 -fsSL \
-  https://raw.githubusercontent.com/Zennay/zSSH/7499713db2a795f346ed9d45ad45dbc91fef44e2/deploy/bootstrap-vps.sh)
+  https://raw.githubusercontent.com/Zennay/zSSH/193c287a49afa94314019254b5b30520b9ee9844/deploy/bootstrap-vps.sh)
 ```
 
 The bootstrap clones the canonical repository, checks out the selected revision, runs the tests, creates a non-root user service, generates a random local bearer token, and runs the live canary before declaring success. Raw shell remains disabled.
