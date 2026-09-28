@@ -41,4 +41,4 @@ EXPECTED_SHA="$(git -C "$SOURCE_ROOT" rev-parse HEAD)"
 
 ZSSH_EXPECTED_SHA="$EXPECTED_SHA" bash "$SOURCE_ROOT/deploy/install-live.sh" "$SOURCE_ROOT"
 printf 'ZSSH_BOOTSTRAP_GREEN sha=%s source=%s\n' "$EXPECTED_SHA" "$SOURCE_ROOT"
-echo "Next: run deploy/configure-tunnel.sh after creating an OpenAI MCP tunnel."
+printf 'Next: cd "%s" && bash deploy/configure-tunnel.sh after creating an OpenAI MCP tunnel.\n' "$SOURCE_ROOT"

@@ -112,6 +112,7 @@ The bootstrap clones the canonical repository, checks out the selected revision,
 For a private VPS, install OpenAI's `tunnel-client` and create a tunnel in Platform settings. Then run:
 
 ```bash
+cd ~/.local/src/zssh
 bash deploy/configure-tunnel.sh
 ```
 
