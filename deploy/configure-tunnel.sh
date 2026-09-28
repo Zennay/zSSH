@@ -64,6 +64,7 @@ else
   printf 'ZSSH_TRUST_LOCAL_TUNNEL=1\n' >> "$GATEWAY_ENV"
 fi
 chmod 600 "$GATEWAY_ENV"
+systemctl --user restart zssh.service
 
 cat > "$UNIT" <<EOF
 [Unit]
