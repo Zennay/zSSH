@@ -52,3 +52,19 @@ test("onboarding scripts preserve secure defaults and loopback-only tunnel setup
   assert.match(server, /TRUST_LOCAL_TUNNEL/);
   assert.match(server, /httpServer\.listen\(PORT, "127\.0\.0\.1"/);
 });
+
+test("Claude configuration uses remote HTTP with explicit auth", async () => {
+  const config = await readFile(path.join(ROOT, "deploy", "claude-code.example.json"), "utf8");
+  assert.match(config, /"type": "http"/);
+  assert.match(config, /\/mcp/);
+  assert.match(config, /Authorization/);
+  assert.match(config, /Bearer YOUR_ZSSH_BEARER_TOKEN/);
+});
+
+test("Claude canary uses Streamable HTTP and bearer auth", async () => {
+  const text = await readFile(path.join(ROOT, "mcp-claude-canary.mjs"), "utf8");
+  assert.match(text, /StreamableHTTPClientTransport/);
+  assert.match(text, /Authorization/);
+  assert.match(text, /zssh_server_info/);
+  assert.match(text, /compatible: "claude-mcp"/);
+});
