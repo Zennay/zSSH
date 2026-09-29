@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "zssh": {
+      "type": "http",
+      "url": "https://YOUR-ZSSH-DOMAIN.example/mcp",
+      "headers": {
+        "Authorization": "Bearer YOUR_ZSSH_BEARER_TOKEN"
+      }
+    }
+  }
+}
