@@ -1,0 +1,5 @@
+# Replace the hostname with a real DNS name pointing to the VPS.
+# Caddy automatically provisions and renews the HTTPS certificate.
+zssh.example.com {
+    reverse_proxy 127.0.0.1:8788
+}
