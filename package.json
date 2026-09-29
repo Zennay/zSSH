@@ -9,7 +9,8 @@
   },
   "scripts": {
     "start": "node server.mjs",
-    "test": "node --test"
+    "test": "node --test",
+    "mcp:claude-canary": "node mcp-claude-canary.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.20.2",
