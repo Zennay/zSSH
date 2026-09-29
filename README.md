@@ -89,6 +89,45 @@ Production hardening still requires a dedicated service account, scoped sudo/cap
 
 OpenAI's current plugin documentation uses remote MCP over streamable HTTP. Public submission requires a stable public HTTPS endpoint. Development bearer auth is temporary; OAuth-compatible user authentication, target pairing, and public submission remain later milestones. The loopback gateway is not yet a plugin that normal ChatGPT chats can select.
 
+## Claude MCP compatibility
+
+zSSH exposes the standard Streamable HTTP MCP transport at `/mcp`, so it can be
+used by Claude Code and by Claude's MCP connector. Claude Code requires the
+remote server to be declared as an HTTP server; a URL without `type: "http"`
+is interpreted as a local stdio server and will not connect.
+
+Claude Code setup:
+
+```bash
+claude mcp add --transport http zssh "$ZSSH_MCP_URL" \
+  --header "Authorization: Bearer $ZSSH_BEARER_TOKEN"
+claude mcp get zssh
+```
+
+Or copy `deploy/claude-code.example.json` into a Claude MCP configuration and
+replace the hostname and token. The equivalent JSON transport name
+`streamable-http` is also accepted by Claude Code.
+
+Before adding the server to Claude, verify the endpoint from the client
+machine:
+
+```bash
+ZSSH_MCP_URL=https://YOUR-ZSSH-DOMAIN.example/mcp \
+ZSSH_MCP_TOKEN="$ZSSH_BEARER_TOKEN" \
+npm run mcp:claude-canary
+```
+
+The endpoint must be reachable over public HTTPS for Claude's hosted MCP
+connector; local stdio servers cannot be used by that connector. For a VPS,
+put Caddy or another TLS reverse proxy in front of the loopback-only zSSH
+service. `deploy/Caddyfile.example` contains the minimal reverse-proxy config.
+Do not expose port 8788 directly and do not commit the bearer token.
+
+Claude's hosted connector can pass the same token as its
+`authorization_token`; its toolset then points at the `zssh` MCP server. The
+current bearer token is an initial compatibility path. OAuth 2.1, pairing,
+revocation, and per-user authorization remain the production-hardening phase.
+
 ## Easy VPS installation
 
 Run this as the dedicated unprivileged VPS user (never as root):
