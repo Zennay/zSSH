@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, writeFile, rm, symlink } from "node:fs/promises";
+import { mkdtemp, writeFile, rm, symlink, realpath } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { classifyCommand, redactSecrets, resolveAllowedPath, runSafeProgram, isMainEntry } from "../server.mjs";
@@ -33,7 +33,7 @@ test("allowed path gate accepts inside root and rejects outside root", async () 
   const previous = process.env.ZSSH_ALLOWED_ROOTS;
   process.env.ZSSH_ALLOWED_ROOTS = root;
   try {
-    assert.equal(await resolveAllowedPath(file), file);
+    assert.equal(await resolveAllowedPath(file), await realpath(file));
     await assert.rejects(() => resolveAllowedPath("/etc/hosts"), /outside allowed roots/);
   } finally {
     if (previous === undefined) delete process.env.ZSSH_ALLOWED_ROOTS;
@@ -89,7 +89,7 @@ test("safe runner defaults cwd to the first configured allowed root", async () =
   try {
     const result = await runSafeProgram("pwd", [], undefined, 5);
     assert.equal(result.ok, true);
-    assert.equal(result.stdout.trim(), root);
+    assert.equal(result.stdout.trim(), await realpath(root));
   } finally {
     if (previousRoots === undefined) delete process.env.ZSSH_ALLOWED_ROOTS;
     else process.env.ZSSH_ALLOWED_ROOTS = previousRoots;

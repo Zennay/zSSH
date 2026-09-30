@@ -91,6 +91,13 @@ OpenAI's current plugin documentation uses remote MCP over streamable HTTP. Publ
 
 ## Claude MCP compatibility
 
+For an uploadable Claude plugin with browser sign-in, follow
+[`docs/claude.md`](docs/claude.md). Build the ZIP with your public `/mcp` URL using
+`npm run plugin:pack -- --url https://YOUR-ZSSH-DOMAIN.example/mcp`.
+The VPS gateway now offers an optional single-owner OAuth flow when
+`ZSSH_PUBLIC_URL` and `ZSSH_OWNER_PASSWORD` are set; it does not require putting
+SSH private keys or bearer tokens in the plugin.
+
 zSSH exposes the standard Streamable HTTP MCP transport at `/mcp`, so it can be
 used by Claude Code and by Claude's MCP connector. Claude Code requires the
 remote server to be declared as an HTTP server; a URL without `type: "http"`
@@ -123,10 +130,12 @@ put Caddy or another TLS reverse proxy in front of the loopback-only zSSH
 service. `deploy/Caddyfile.example` contains the minimal reverse-proxy config.
 Do not expose port 8788 directly and do not commit the bearer token.
 
-Claude's hosted connector can pass the same token as its
-`authorization_token`; its toolset then points at the `zssh` MCP server. The
-current bearer token is an initial compatibility path. OAuth 2.1, pairing,
-revocation, and per-user authorization remain the production-hardening phase.
+The Anthropic API MCP connector can pass a bearer token using
+`authorization_token`. Claude's normal web/desktop custom-connector interface
+uses browser authentication instead; use the optional OAuth setup above.
+This is a private single-owner pilot. Multi-user authorization, target-agent
+pairing and durable grants remain later milestones. A gateway restart revokes
+all current OAuth grants.
 
 ## Easy VPS installation
 

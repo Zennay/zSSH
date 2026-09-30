@@ -19,7 +19,7 @@ jobs:
         with:
           node-version: 20
       - name: Install dependencies
-        run: npm install --ignore-scripts --no-audit --no-fund
+        run: npm ci --ignore-scripts --no-audit --no-fund
       - name: Run security and deployment tests
         run: npm test
       - name: Validate deployment scripts
@@ -30,7 +30,13 @@ jobs:
           bash -n ops/diagnose-vps.sh
           bash -n ops/register-zcloud.sh
       - name: Validate server syntax
-        run: node --check server.mjs
+        run: |
+          node --check server.mjs
+          node --check claude-auth.mjs
+          node --check deploy/configure-claude.mjs
+          node --check scripts/package-claude.mjs
+      - name: Build Claude plugin archive
+        run: npm run plugin:pack -- --url https://zssh.test.example/mcp
       - name: Exercise authenticated MCP file roundtrip and policy canary
         shell: bash
         run: |

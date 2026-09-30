@@ -8,6 +8,8 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { z } from "zod";
+import express from "express";
+import { createClaudeAuth } from "./claude-auth.mjs";
 
 const VERSION = "0.1.0";
 const PORT = Number(process.env.PORT || 8788);
@@ -23,7 +25,7 @@ const SAFE_PROGRAM_PATHS = Object.freeze({
   whoami: "/usr/bin/whoami",
   id: "/usr/bin/id",
   uname: "/usr/bin/uname",
-  pwd: "/usr/bin/pwd",
+  pwd: "/bin/pwd",
   df: "/usr/bin/df",
   free: "/usr/bin/free"
 });
@@ -476,9 +478,11 @@ function isLoopbackRequest(req) {
   return address === "127.0.0.1" || address === "::1" || address === "::ffff:127.0.0.1";
 }
 
-function authorized(req) {
-  if (TRUST_LOCAL_TUNNEL && isLoopbackRequest(req)) return true;
-  if (!DEV_TOKEN) return process.env.NODE_ENV !== "production";
+function authorized(req, oauthEnabled = false) {
+  // A public reverse proxy also originates on loopback. OAuth deployments must
+  // never inherit the separate local-tunnel authentication bypass.
+  if (TRUST_LOCAL_TUNNEL && !oauthEnabled && isLoopbackRequest(req)) return true;
+  if (!DEV_TOKEN) return !oauthEnabled && process.env.NODE_ENV !== "production";
   const expected = "Bearer " + DEV_TOKEN;
   const actual = String(req.headers.authorization || "");
   const a = Buffer.from(actual);
@@ -494,14 +498,18 @@ function cors(res) {
 }
 
 export function start() {
+  const claudeAuth = createClaudeAuth();
   if (typeof process.getuid === "function" && process.getuid() === 0 && process.env.ZSSH_ALLOW_ROOT !== "1") {
     throw new Error("zSSH refuses to run as root; use a dedicated unprivileged service account");
   }
-  if (process.env.NODE_ENV === "production" && !DEV_TOKEN && !TRUST_LOCAL_TUNNEL) {
+  if (process.env.NODE_ENV === "production" && !DEV_TOKEN && !TRUST_LOCAL_TUNNEL && !claudeAuth) {
     throw new Error("production requires authentication; configure a bearer token or explicitly trust the loopback tunnel");
   }
 
-  const httpServer = createServer(async (req, res) => {
+  const app = express();
+  app.disable("x-powered-by");
+  if (claudeAuth) app.use(claudeAuth.router);
+  app.use(async (req, res) => {
     if (!req.url) return res.writeHead(400).end("Missing URL");
     const url = new URL(req.url, "http://" + (req.headers.host || "localhost"));
 
@@ -513,7 +521,14 @@ export function start() {
     cors(res);
 
     if (req.method === "OPTIONS") return res.writeHead(204).end();
-    if (!authorized(req)) return res.writeHead(401, { "content-type": "application/json" }).end(JSON.stringify({ error: "unauthorized" }));
+    if (!authorized(req, Boolean(claudeAuth))) {
+      if (!claudeAuth) return res.writeHead(401, { "content-type": "application/json" }).end(JSON.stringify({ error: "unauthorized" }));
+      const accepted = await new Promise(resolve => {
+        claudeAuth.authenticate(req, res, () => resolve(true));
+        res.once("finish", () => resolve(false));
+      });
+      if (!accepted) return;
+    }
 
     if (!["POST", "GET", "DELETE"].includes(req.method || "")) return res.writeHead(405).end("Method Not Allowed");
 
@@ -537,6 +552,7 @@ export function start() {
     }
   });
 
+  const httpServer = createServer(app);
   httpServer.listen(PORT, "127.0.0.1", () => {
     console.log("zSSH listening on http://127.0.0.1:" + PORT + "/mcp");
   });
