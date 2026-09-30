@@ -1,6 +1,6 @@
 {
   "name": "@zennay/zssh",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "Security-first remote MCP operations gateway for Linux targets.",
   "type": "module",
@@ -10,10 +10,14 @@
   "scripts": {
     "start": "node server.mjs",
     "test": "node --test",
-    "mcp:claude-canary": "node mcp-claude-canary.mjs"
+    "mcp:claude-canary": "node mcp-claude-canary.mjs",
+    "mcp:plugin-canary": "node plugin-canary.mjs"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.20.2",
+    "@modelcontextprotocol/sdk": "^1.31.0",
     "zod": "^3.25.76"
+  },
+  "bin": {
+    "zssh": "bin/zssh.mjs"
   }
 }
