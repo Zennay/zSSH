@@ -13,6 +13,11 @@ test("live installer keeps production raw shell fail-closed and secrets outside 
   assert.match(text, /ZSSH_EXEC_MODE=disabled/);
   assert.match(text, /ZSSH_API_KEY/);
   assert.match(text, /ZSSH_MCP_CAPABILITY_TOKEN/);
+  assert.match(text, /ZSSH_CLIENT_TOKENS_FILE/);
+  assert.match(text, /ZSSH_PROFILE=\$PROFILE/);
+  assert.match(text, /ZSSH_PROFILE=private/);
+  assert.match(text, /bin\/zssh\.mjs/);
+  assert.match(text, /INITIAL_CONNECTION_OUTPUT/);
   assert.match(text, /openssl rand -hex 32|randomBytes\(32\)/);
   assert.match(text, /gateway\.env/);
   assert.match(text, /chmod 600 "\$ENV_FILE"/);
@@ -92,12 +97,35 @@ test("Claude canary supports capability URL, static header, and bearer auth", as
   assert.match(text, /compatible: "claude-mcp"/);
 });
 
-test("hosted MCP auth avoids browser OAuth and accepts no-sign-in capability URLs", async () => {
+test("self-hosted auth accepts legacy credentials plus revocable client capability tokens", async () => {
   const server = await readFile(path.join(ROOT, "server.mjs"), "utf8");
+  const authStore = await readFile(path.join(ROOT, "auth-store.mjs"), "utf8");
+  const cli = await readFile(path.join(ROOT, "bin", "zssh.mjs"), "utf8");
   assert.match(server, /ZSSH_MCP_CAPABILITY_TOKEN/);
-  assert.match(server, /capabilityAuthorized/);
+  assert.match(server, /staticCapabilityAuthorized/);
+  assert.match(server, /verifyClientToken/);
   assert.match(server, /ZSSH_API_KEY/);
   assert.match(server, /x-zssh-key/);
   assert.match(server, /authorization/);
+  assert.match(authStore, /sha256/);
+  assert.match(authStore, /revokeClientToken/);
+  assert.match(cli, /zssh connect/);
   assert.doesNotMatch(server, /oauth\/approve|claude-auth\.mjs|mcpAuthRouter/);
+});
+
+test("plugin profile hides generic power tools and exposes bounded operations", async () => {
+  const server = await readFile(path.join(ROOT, "server.mjs"), "utf8");
+  const canary = await readFile(path.join(ROOT, "plugin-canary.mjs"), "utf8");
+  assert.match(server, /ZSSH_PROFILE/);
+  assert.match(server, /pluginMode/);
+  assert.match(server, /zssh_get_profile/);
+  assert.match(server, /"openai\/profile": true/);
+  assert.match(server, /zssh_git_status/);
+  assert.match(server, /zssh_git_pull/);
+  assert.match(server, /zssh_service_status/);
+  assert.match(server, /zssh_restart_service/);
+  assert.match(server, /if \(!pluginMode\)/);
+  assert.match(canary, /private-only MCP tool leaked into plugin profile/);
+  assert.match(canary, /zssh_exec/);
+  assert.match(canary, /zssh_write_file/);
 });
