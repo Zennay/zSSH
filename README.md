@@ -1,209 +1,266 @@
 # zSSH
 
-zSSH is a **standalone security-first remote operations project for general Linux targets**. It can run on a VPS, VM, home server, dedicated host, or development box. zCloud is an optional control-plane/dashboard integration, not its parent project.
+zSSH is a self-hosted, security-first MCP gateway for Linux targets. Install it on the Linux machine you want ChatGPT or another MCP client to operate. The runtime, filesystem access, service access, credentials, and audit log stay on that target.
 
-## Current milestone
+zCloud is an optional integration. It is not required to run zSSH.
 
-**M1 — Safe local execution proof.** M0 and the standalone repository migration are complete.
+## What runs where
 
-This branch proves the smallest safe foundation:
-
-- remote MCP endpoint at `/mcp`;
-- no-sign-in capability URLs for hosted MCP clients, optional static `x-zssh-key` auth, plus bearer authentication for CLI clients;
-- `zssh_server_info`, `zssh_run_safe`, `zssh_exec`, `zssh_read_file`, and `zssh_write_file`;
-- stable per-target identity through optional `ZSSH_TARGET_NAME`, so multiple installations are easy to distinguish;
-- non-root startup guard;
-- command timeout and output limits;
-- configured filesystem roots;
-- secret redaction in tool output and audit data;
-- JSONL audit trail;
-- raw shell disabled by default; command classification is audit/UX metadata, not the security boundary;
-- Node unit tests for classification, redaction, and path boundaries.
-
-## Project ownership
-
-**Canonical source:** `Zennay/zSSH`.
-
-zSSH has its own mission, roadmap, handoff, release lifecycle, security gates, and project identity. It is not a zCloud or HaxLab subproject.
-
-zCloud only:
-- registers zSSH as a first-class project in `projects.json`;
-- displays its status/progress;
-- may provide shared portfolio/control-plane infrastructure where useful.
-
-HaxLab has no zSSH source or deployment responsibility.
-
-## Architecture direction
-
-```
-ChatGPT plugin
-    |
-    v
-zSSH remote MCP gateway
-    |
-    v
-pairing / auth / policy
-    |
-    v
-paired target agent
-    |
-    +-- Linux user
-    +-- scoped sudo
-    +-- files / systemd / git
+```text
+ChatGPT / MCP client
+        |
+        | HTTPS + revocable zSSH client token
+        v
++----------------------------------+
+| User's own Linux server / VPS    |
+|                                  |
+|  zSSH MCP service                |
+|  - auth + policy                 |
+|  - allowed filesystem roots      |
+|  - explicit Git tools            |
+|  - allowlisted systemd services  |
+|  - local audit log               |
++----------------------------------+
 ```
 
-M0/M1 run the gateway and execution adapter together to keep the proof small: one zSSH installation represents one Linux target. That installation is no longer tied to a specific provider, username, project path, or zCloud host. M2 splits the target agent boundary and adds pairing/revocation for a true multi-target control plane. Production must not depend on storing users' SSH private keys in the gateway.
+The normal self-hosted path has no Zennay-operated relay, VPS, command queue, credential store, or execution backend. A user may choose their own reverse proxy, domain, VPN, or supported tunnel in front of the loopback-only service.
+
+zSSH does not need to SSH back into the machine it controls. It is already running on that machine as an unprivileged Linux user.
+
+## Current release direction
+
+Version 0.2 introduces the self-hosted product model:
+
+- provider-agnostic Linux installation;
+- one stable target identity per installation;
+- revocable client tokens stored as hashes on the target;
+- a local `zssh` CLI for connection-token lifecycle;
+- a bounded `plugin` profile for ChatGPT-style integrations;
+- the existing `private` profile for trusted owner-operated use;
+- filesystem root boundaries, output limits, timeouts, redaction, and JSONL audit logs;
+- backwards compatibility for the existing zCloud/VPS deployment.
+
+One zSSH installation currently represents one Linux target.
+
+## Profiles
+
+### `plugin` profile
+
+New installs default to `ZSSH_PROFILE=plugin`. This profile deliberately does **not** advertise the generic raw-shell, generic safe-runner, or arbitrary file-write tools.
+
+It exposes focused operations:
+
+- `zssh_get_profile`
+- `zssh_server_info`
+- `zssh_list_directory`
+- `zssh_read_file`
+- `zssh_git_status`
+- `zssh_git_pull` using `--ff-only`
+- `zssh_service_status` for allowlisted user services
+- `zssh_restart_service` for allowlisted user services
+
+Filesystem tools remain constrained by `ZSSH_ALLOWED_ROOTS`. Service tools remain constrained by `ZSSH_ALLOWED_SERVICES`.
+
+### `private` profile
+
+Existing installations default to `private` during migration so their current behavior does not silently change.
+
+Private profile additionally exposes:
+
+- `zssh_write_file`
+- `zssh_run_safe`
+- `zssh_exec`
+
+`zssh_exec` still refuses execution unless the operator explicitly sets `ZSSH_EXEC_MODE=full`.
+
+## Install on a Linux target
+
+Requires Node.js 20+, npm, Git, and user-level systemd.
+
+Run as the dedicated unprivileged target user, never as root:
+
+```bash
+curl --proto '=https' --tlsv1.2 -fsSL \
+  https://raw.githubusercontent.com/Zennay/zSSH/main/deploy/bootstrap-linux.sh | bash
+```
+
+A new install:
+
+1. clones the canonical repository;
+2. validates and installs an immutable release;
+3. creates a user-level `zssh.service`;
+4. creates a stable target ID;
+5. defaults to the bounded `plugin` profile;
+6. creates a local revocable ChatGPT client token;
+7. runs the matching MCP canary;
+8. prints the connection token once.
+
+If `ZSSH_PUBLIC_URL` is already configured, the installer prints a ready-to-paste MCP capability URL instead of only the token.
+
+Example with explicit target configuration:
+
+```bash
+ZSSH_TARGET_NAME=prod-eu-1 \
+ZSSH_PUBLIC_URL=https://server.example.com \
+ZSSH_ALLOWED_ROOTS=/srv/my-app \
+ZSSH_ALLOWED_SERVICES=my-app.service,worker.service \
+bash <(curl --proto '=https' --tlsv1.2 -fsSL \
+  https://raw.githubusercontent.com/Zennay/zSSH/main/deploy/bootstrap-linux.sh)
+```
+
+Do not add `/mcp` to `ZSSH_PUBLIC_URL`; the CLI appends the MCP path.
+
+## Connect ChatGPT or another MCP client
+
+zSSH client tokens are independent, revocable credentials. The plaintext token is shown only when it is created; the server stores only its SHA-256 hash.
+
+Create a new connection:
+
+```bash
+zssh connect chatgpt
+```
+
+With `ZSSH_PUBLIC_URL=https://server.example.com`, output includes a URL shaped like:
+
+```text
+https://server.example.com/mcp/zssh_<client-id>_<secret>
+```
+
+Treat the full URL as a credential.
+
+List active client identities without revealing secrets:
+
+```bash
+zssh token list
+```
+
+Revoke one connection:
+
+```bash
+zssh token revoke <client-id>
+```
+
+A revoked token stops authenticating immediately; other client tokens remain valid.
+
+Legacy capability URLs, `x-zssh-key`, and bearer authentication remain supported so existing installations do not break.
+
+## HTTPS exposure
+
+The zSSH Node service binds to `127.0.0.1` by default. Do not expose port 8788 directly to the internet.
+
+For a directly reachable self-hosted endpoint, terminate HTTPS in a reverse proxy such as Caddy and forward to `127.0.0.1:8788`. See `deploy/Caddyfile.example`.
+
+For private development, a supported MCP tunnel can be used instead. A tunnel is optional and does not change the execution model: commands still execute on the user's target.
+
+## ChatGPT plugin status
+
+The self-hosted MCP side is designed so each user can install zSSH on their own Linux target and connect directly to it.
+
+OpenAI's public Plugin Directory currently expects a stable public MCP endpoint for a submitted plugin. Template MCP URLs, where each customer supplies a different managed endpoint, are currently limited to trusted developers with an established relationship. That platform constraint means a single public directory listing cannot yet universally discover arbitrary user-owned zSSH domains without either template-URL access or a central routing service.
+
+zSSH intentionally does **not** add a central command relay just to work around that constraint. The direct self-hosted architecture remains the source of truth.
+
+The `plugin` profile exists so the tool surface is already bounded and review-oriented while the distribution path evolves.
+
+Useful OpenAI references:
+
+- https://developers.openai.com/plugins/build/mcp-server
+- https://developers.openai.com/plugins/deploy/app-review
+- https://developers.openai.com/plugins/build/auth
+
+## Target identity
+
+Each installation has:
+
+- `ZSSH_TARGET_ID`: stable opaque identity for the target;
+- `ZSSH_TARGET_NAME`: human-readable label.
+
+The `zssh_get_profile` tool is marked with `_meta["openai/profile"]: true` and returns the stable target identity so clients can distinguish connected servers.
+
+## Policy boundaries
+
+### Filesystem
+
+`ZSSH_ALLOWED_ROOTS` is a comma-separated set of roots that file and repository tools may access. Real paths are checked before operations to prevent simple path traversal and symlink escapes.
+
+### Services
+
+`ZSSH_ALLOWED_SERVICES` is a comma-separated allowlist of user-level systemd unit names. Empty means no service can be inspected or restarted through the service tools.
+
+Service operations use `systemctl --user`; plugin mode does not provide a generic system-service command surface.
+
+### Git
+
+Plugin mode provides explicit Git operations rather than arbitrary Git arguments:
+
+- status is read-only;
+- pull is fixed to `git pull --ff-only`.
+
+### Raw shell
+
+Raw shell belongs only to private profile. Even there, it is disabled unless `ZSSH_EXEC_MODE=full` is explicitly configured.
+
+## Credentials and storage
+
+Default target-local files:
+
+```text
+~/.config/zssh/gateway.env     runtime configuration + legacy credentials
+~/.config/zssh/clients.json    hashes + labels of revocable client tokens
+~/.local/state/zssh/audit.jsonl
+~/.local/share/zssh/current    active immutable release symlink
+~/.local/bin/zssh              local management CLI
+```
+
+`clients.json` is mode 0600. Raw revocable client tokens are not persisted there.
+
+## Backwards compatibility
+
+The existing working VPS path is intentionally preserved:
+
+- existing `gateway.env` is not regenerated;
+- old installs that lack `ZSSH_PROFILE` are migrated to `private`;
+- if a fresh legacy host already has `~/zennay-cloud`, that path remains the default allowed root;
+- `deploy/bootstrap-vps.sh` remains available;
+- legacy static capability/API/bearer credentials remain accepted;
+- zCloud-specific operational helpers remain optional files under `ops/`.
 
 ## Local development
-
-Requires Node 20+.
 
 ```bash
 git clone https://github.com/Zennay/zSSH.git
 cd zSSH
 npm install
 cp .env.example .env
-# export values from .env in your preferred way
 npm test
 npm start
 ```
 
-The server binds to `127.0.0.1` by default. Put TLS/reverse proxy or a development tunnel in front of it rather than binding the M0 process directly to the public internet.
+Available canaries:
 
-`node live-canary.mjs` checks authenticated MCP discovery, non-root execution,
-the safe runner, a temporary read/write roundtrip inside the first allowed root,
-rejection of an outside-root read, and rejection of raw shell. It deletes its
-temporary test directory on exit. The first allowed root must be writable by
-the zSSH service user for the file proof. CI runs this against a production-mode
-server with an isolated temporary root; a green CI result is not evidence that
-the same proof has passed on the target runtime.
+- `node live-canary.mjs` — private fail-closed profile proof;
+- `node plugin-canary.mjs` — bounded plugin profile proof;
+- `npm run mcp:claude-canary` — remote MCP compatibility proof.
 
-## Policy
+## Claude compatibility
 
-`ZSSH_EXEC_MODE=disabled` is the default for raw shell. Full raw shell remains an explicit trusted/disposable-target mode and command classification is never treated as an authorization boundary.
+zSSH uses MCP Streamable HTTP. Claude Code and other clients that can set an authorization header may connect to `/mcp` with a bearer token. Hosted clients that support a URL-only/no-sign-in model can use a revocable zSSH capability URL.
 
-For normal M1 inspection, `zssh_run_safe` uses a fixed read-only binary allowlist and `spawn(..., { shell: false })`, so user arguments are passed as argv instead of being interpreted by a shell. The default allowlist is `uptime`, `whoami`, `id`, `uname`, `pwd`, `df`, and `free`; operators may reduce it further with `ZSSH_SAFE_PROGRAMS`.
+`mcp-claude-canary.mjs` understands both private and plugin profiles and accepts revocable client tokens through `ZSSH_MCP_CLIENT_TOKEN`.
 
-Production hardening still requires a dedicated service account, scoped sudo/capabilities, stronger approval semantics, rate limiting, agent pairing, and review against current hosted-MCP requirements. The private single-owner deployment intentionally avoids a browser OAuth flow. Hosted clients can use a high-entropy capability URL over HTTPS; clients that support custom headers can instead use `x-zssh-key`.
+## Security model
 
-## ChatGPT integration status
+zSSH is intentionally an infrastructure-control component. Install it only on targets where you understand the permissions of the Linux user running the service.
 
-OpenAI's current plugin documentation uses remote MCP over streamable HTTP. Public submission requires a stable public HTTPS endpoint. Development bearer auth is temporary; OAuth-compatible user authentication, target pairing, and public submission remain later milestones. The loopback gateway is not yet a plugin that normal ChatGPT chats can select.
+The service refuses root startup by default. Filesystem, service, and command policy are enforced server-side; model instructions are never treated as the authorization boundary.
 
-## Claude MCP compatibility
-
-zSSH exposes the standard Streamable HTTP MCP transport at `/mcp`, so it can be
-used by Claude Code and by Claude's MCP connector. Claude Code requires the
-remote server to be declared as an HTTP server; a URL without `type: "http"`
-is interpreted as a local stdio server and will not connect.
-
-Claude Code setup:
-
-```bash
-claude mcp add --transport http zssh "$ZSSH_MCP_URL" \
-  --header "Authorization: Bearer $ZSSH_BEARER_TOKEN"
-claude mcp get zssh
-```
-
-Or copy `deploy/claude-code.example.json` into a Claude MCP configuration and
-replace the hostname and token. The equivalent JSON transport name
-`streamable-http` is also accepted by Claude Code.
-
-Before adding the server to Claude, verify the endpoint from the client
-machine:
-
-```bash
-ZSSH_MCP_URL=https://YOUR-ZSSH-DOMAIN.example/mcp \
-ZSSH_MCP_TOKEN="$ZSSH_BEARER_TOKEN" \
-npm run mcp:claude-canary
-```
-
-The endpoint must be reachable over public HTTPS for Claude's hosted MCP
-connector; local stdio servers cannot be used by that connector. For a remote Linux host,
-put Caddy or another TLS reverse proxy in front of the loopback-only zSSH
-service. `deploy/Caddyfile.example` contains the minimal reverse-proxy config.
-Do not expose port 8788 directly and do not commit the bearer token.
-
-For Claude's hosted connector, the most compatible private single-owner path
-uses **No sign-in** plus a high-entropy capability URL. This avoids the custom
-browser OAuth/DCR flow entirely and does not require Claude to support arbitrary
-request headers:
-
-```text
-Authentication: No sign-in
-MCP URL: https://YOUR-ZSSH-DOMAIN.example/mcp/<ZSSH_MCP_CAPABILITY_TOKEN>
-```
-
-Treat the entire capability URL as a credential: do not paste it into tickets,
-logs, screenshots, or source control. The installer stores the token only in
-`~/.config/zssh/gateway.env` with mode 0600.
-
-Clients that support custom request headers may instead use:
-
-```text
-MCP URL: https://YOUR-ZSSH-DOMAIN.example/mcp
-Request header: x-zssh-key: <ZSSH_API_KEY>
-```
-
-Existing bearer authentication remains available for Claude Code and other
-clients that can set an `Authorization: Bearer ...` header.
-
-## Easy Linux target installation
-
-Run this as the dedicated unprivileged user on any supported Linux target (never as root):
-
-```bash
-curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/Zennay/zSSH/main/deploy/bootstrap-linux.sh | bash
-```
-
-You can label a target and choose its accessible workspace before first install:
-
-```bash
-ZSSH_TARGET_NAME=prod-eu-1 \
-ZSSH_ALLOWED_ROOTS=/srv/my-app \
-bash <(curl --proto '=https' --tlsv1.2 -fsSL \
-  https://raw.githubusercontent.com/Zennay/zSSH/main/deploy/bootstrap-linux.sh)
-```
-
-For a reproducible install, pin the source revision:
-
-```bash
-ZSSH_REF=<commit-sha> \
-  bash <(curl --proto '=https' --tlsv1.2 -fsSL \
-  https://raw.githubusercontent.com/Zennay/zSSH/main/deploy/bootstrap-linux.sh)
-```
-
-The generic bootstrap clones the canonical repository, checks out the selected revision, runs the existing installation validation, creates a non-root user service, generates random credentials, and runs the live canary before declaring success. Raw shell remains disabled by default.
-
-Backwards compatibility is deliberate:
-
-- an existing `~/.config/zssh/gateway.env` is preserved rather than regenerated;
-- if no config exists but `~/zennay-cloud` exists, the original allowed-root default is preserved for legacy zCloud hosts;
-- otherwise a new installation uses `~/zssh-workspace` as its initial allowed root;
-- `deploy/bootstrap-vps.sh` remains supported, so existing install commands do not break;
-- zCloud-specific scripts stay under `ops/` as optional integration tooling, while `ops/diagnose.sh` is the provider-agnostic diagnostic entrypoint.
-
-## Connect as a ChatGPT MCP app
-
-For a private Linux target, install OpenAI's `tunnel-client` and create a tunnel in Platform settings. Then run:
-
-```bash
-cd ~/.local/src/zssh
-bash deploy/configure-tunnel.sh
-```
-
-The helper asks for the tunnel ID and runtime key, stores the key with mode 0600, configures the loopback-only MCP route, enables `zssh-tunnel.service`, and runs the tunnel doctor check. In ChatGPT web, enable Developer mode, choose Apps → Create → Tunnel, select the tunnel, scan the tools, and create the app. See OpenAI's Secure MCP Tunnel documentation for current plan and workspace requirements.
-
-The helper sets `ZSSH_TRUST_LOCAL_TUNNEL=1` only for the loopback tunnel path. It never enables raw shell. To enable full shell on a disposable/trusted target, change `ZSSH_EXEC_MODE=full` explicitly in `~/.config/zssh/gateway.env`, restart `zssh.service`, and review the audit log first.
-
-For a private target where `zssh_exec` must be able to call `sudo`, the user service intentionally runs with `NoNewPrivileges=false`. This only permits privilege escalation; it does not grant it by itself. The operating-system sudoers policy remains the authorization boundary, so only configure `NOPASSWD` privileges you deliberately want zSSH to have.
+See `SECURITY.md` for the threat model and `PRIVACY.md` for the default self-hosted data-flow statement.
 
 ## Canonical project docs
 
 - Project HQ: https://app.notion.com/p/3e89e19ac955811a9008d420e3e2a634
 - Handoff: https://app.notion.com/p/3e89e19ac95581639bdcdc9daeb37ae8
 
+## Repository history
 
-## Repository migration
-
-The original bootstrap lived temporarily under `Zennay/zCloud/zssh/`. The standalone repository is now authoritative. Temporary HaxLab runner transport scripts were migrated into `ops/archive/` for traceability; HaxLab itself is no longer part of zSSH's source or deployment ownership. zCloud registration and the old VPS-specific diagnostic remain optional compatibility tooling, not assumptions in the core zSSH install path.
+The original bootstrap lived temporarily under `Zennay/zCloud/zssh/`. The standalone `Zennay/zSSH` repository is authoritative. Historical HaxLab transport artifacts remain only under `ops/archive/` for traceability.
