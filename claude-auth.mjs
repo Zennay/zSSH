@@ -20,7 +20,7 @@ export function validatePublicUrl(value) {
 // Single-owner private VPS authorization. State is deliberately in memory:
 // restarting the service revokes every grant and requires clients to reconnect.
 export class OwnerOAuthProvider {
-  constructor({ publicUrl, ownerPassword, now = Date.now }) {
+  constructor({ publicUrl, ownerPassword, now = Date.now, log = entry => console.info(JSON.stringify(entry)) }) {
     this.issuer = validatePublicUrl(publicUrl);
     if (typeof ownerPassword !== "string" || ownerPassword.length < 32 || ownerPassword.length > 512) {
       throw new Error("ZSSH_OWNER_PASSWORD must contain 32 to 512 characters; generate a random owner connection code");
@@ -28,6 +28,7 @@ export class OwnerOAuthProvider {
     this.ownerHash = hash(ownerPassword);
     this.resource = new URL("/mcp", this.issuer).href;
     this.now = now;
+    this.log = log;
     this.clients = new Map();
     this.pending = new Map();
     this.codes = new Map();
@@ -83,7 +84,8 @@ export class OwnerOAuthProvider {
     this.checkScopes(params.scopes);
     this.reserve(this.pending, 256);
     const id = random();
-    this.pending.set(id, { clientId: client.client_id, params, expires: this.now() + 300000, failures: 0 });
+    this.pending.set(id, { clientId: client.client_id, params, expires: this.now() + 900000, failures: 0 });
+    this.log({ event: "zssh_consent_created", request_ref: hash(id).slice(0, 12), pid: process.pid, at: new Date(this.now()).toISOString(), valid_seconds: 900 });
     res.set({
       "Cache-Control": "no-store",
       // no-referrer turns a browser form POST's Origin into null (notably Safari).
@@ -104,9 +106,15 @@ export class OwnerOAuthProvider {
     if (req.headers.origin !== this.issuer.origin) return res.status(403).send("Open het verbindingsscherm opnieuw.");
     if (this.now() - this.loginWindow.start >= 60000) this.loginWindow = { start: this.now(), attempts: 0 };
     if (++this.loginWindow.attempts > 10) return res.status(429).send("Te veel pogingen. Probeer over een minuut opnieuw.");
+    const id = req.body?.request;
+    const pending = typeof id === "string" ? this.pending.get(id) : undefined;
+    const reason = typeof id !== "string" ? "missing_form_request" : !pending ? "request_not_found" : pending.expires <= this.now() ? "expired" : "valid";
+    this.log({ event: "zssh_consent_submitted", request_ref: typeof id === "string" ? hash(id).slice(0, 12) : null, pid: process.pid, at: new Date(this.now()).toISOString(), reason });
     this.prune();
-    const request = this.pending.get(req.body?.request);
-    if (!request) return res.status(400).send("Dit verbindingsverzoek is verlopen. Verbind opnieuw vanuit Claude.");
+    const request = this.pending.get(id);
+    if (!request) return res.status(400).send(reason === "expired"
+      ? "Dit verbindingsverzoek is verlopen na 15 minuten. Verbind opnieuw vanuit Claude."
+      : "Dit verbindingsverzoek is niet meer beschikbaar. Start een nieuwe verbinding vanuit Claude; teruggaan naar een oud formulier herstelt het verzoek niet.");
     const supplied = req.body?.password;
     const correct = typeof supplied === "string" && supplied.length <= 512 && crypto.timingSafeEqual(Buffer.from(hash(supplied)), Buffer.from(this.ownerHash));
     if (!correct) {

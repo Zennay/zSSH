@@ -164,3 +164,27 @@ test("login attempts are limited", async t => {
   for (let i = 0; i < 10; i++) await f.approve(id, "wrong");
   assert.equal((await f.approve(id)).status, 429);
 });
+
+test("consent lasts 15 minutes and diagnostics distinguish expired and missing requests without secrets", async () => {
+  let time = Date.now();
+  const entries = [];
+  const provider = new OwnerOAuthProvider({ publicUrl: origin, ownerPassword, now: () => time, log: entry => entries.push(entry) });
+  const client = provider.registerClient({ redirect_uris: [callback] });
+  const res = { statusCode: 200, set() { return this; }, type() { return this; }, send(body) { this.body = body; return this; }, status(code) { this.statusCode = code; return this; } };
+  await provider.authorize(client, { redirectUri: callback, codeChallenge: challenge }, res);
+  const id = res.body.match(/name="request" value="([^"]+)"/)[1];
+  time += 300001;
+  provider.approve({ headers: { origin }, body: { request: id, password: "wrong" } }, res);
+  assert.equal(entries.at(-1).reason, "valid", "fresh request remains valid beyond the old five-minute limit");
+  time += 600000;
+  provider.approve({ headers: { origin }, body: { request: id, password: ownerPassword } }, res);
+  assert.equal(entries.at(-1).reason, "expired");
+  assert.equal(res.statusCode, 400);
+  provider.approve({ headers: { origin }, body: {} }, res);
+  assert.equal(entries.at(-1).reason, "missing_form_request");
+  provider.approve({ headers: { origin }, body: { request: id } }, res);
+  assert.equal(entries.at(-1).reason, "request_not_found");
+  assert.ok(!JSON.stringify(entries).includes(ownerPassword));
+  assert.ok(!JSON.stringify(entries).includes(id));
+  assert.equal(provider.codes.size, 0);
+});
