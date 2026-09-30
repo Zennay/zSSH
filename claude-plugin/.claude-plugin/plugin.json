@@ -1,0 +1,15 @@
+{
+  "name": "zssh",
+  "version": "0.1.0",
+  "description": "Connect Claude to your own zSSH VPS gateway.",
+  "author": { "name": "Zennay" },
+  "repository": "https://github.com/Zennay/zSSH",
+  "userConfig": {
+    "mcp_url": {
+      "type": "string",
+      "title": "zSSH server URL",
+      "description": "Your public HTTPS endpoint, for example https://zssh.your-domain.nl/mcp",
+      "required": true
+    }
+  }
+}

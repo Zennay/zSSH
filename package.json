@@ -10,10 +10,12 @@
   "scripts": {
     "start": "node server.mjs",
     "test": "node --test",
-    "mcp:claude-canary": "node mcp-claude-canary.mjs"
+    "mcp:claude-canary": "node mcp-claude-canary.mjs",
+    "plugin:pack": "node scripts/package-claude.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.20.2",
-    "zod": "^3.25.76"
+    "zod": "^3.25.76",
+    "express": "^5.1.0"
   }
 }
