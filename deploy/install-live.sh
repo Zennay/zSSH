@@ -75,131 +75,7 @@ random_hex_32() {
 if [[ ! -f "$ENV_FILE" ]]; then
   ALLOWED_ROOTS="${ZSSH_ALLOWED_ROOTS:-$HOME/zennay-cloud}"
   AUDIT_PATH="${ZSSH_AUDIT_LOG:-$HOME/.local/state/zssh/audit.jsonl}"
-  if [[ "$ALLOWED_ROOTS" == *
-
-sed "s|@NODE_BIN@|$NODE_BIN|g" "$SOURCE/deploy/zssh.service.in" > "$UNIT"
-chmod 600 "$UNIT"
-
-PREVIOUS=""
-if [[ -L "$CURRENT" ]]; then
-  PREVIOUS="$(readlink -f "$CURRENT" || true)"
-fi
-TMP_LINK="$BASE/.current.$$"
-ln -s "$RELEASE" "$TMP_LINK"
-mv -Tf "$TMP_LINK" "$CURRENT"
-
-export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
-export DBUS_SESSION_BUS_ADDRESS="${DBUS_SESSION_BUS_ADDRESS:-unix:path=$XDG_RUNTIME_DIR/bus}"
-
-rollback_release() {
-  echo "zSSH live validation failed; restoring previous release" >&2
-  if [[ -n "$PREVIOUS" && -d "$PREVIOUS" ]]; then
-    local rollback_link="$BASE/.rollback.$$"
-    ln -s "$PREVIOUS" "$rollback_link"
-    mv -Tf "$rollback_link" "$CURRENT"
-    systemctl --user daemon-reload || true
-    systemctl --user restart zssh.service || true
-  else
-    systemctl --user disable --now zssh.service || true
-    rm -f "$CURRENT"
-  fi
-}
-
-systemctl --user daemon-reload
-systemctl --user enable zssh.service >/dev/null
-if ! systemctl --user restart zssh.service; then
-  rollback_release
-  exit 2
-fi
-
-HEALTH_OK=0
-for _ in $(seq 1 20); do
-  if curl --fail --silent --show-error "http://127.0.0.1:8788/health" >/dev/null; then
-    HEALTH_OK=1
-    break
-  fi
-  sleep 1
-done
-if [[ "$HEALTH_OK" != "1" ]]; then
-  systemctl --user status zssh.service --no-pager || true
-  rollback_release
-  exit 2
-fi
-
-set -a
-# shellcheck disable=SC1090
-source "$ENV_FILE"
-set +a
-if ! "$NODE_BIN" "$RELEASE/live-canary.mjs"; then
-  rollback_release
-  exit 2
-fi
-
-systemctl --user is-active --quiet zssh.service
-printf 'ZSSH_INSTALL_GREEN sha=%s release=%s\n' "$REPO_SHA" "$RELEASE"
-\n'* || "$AUDIT_PATH" == *
-
-sed "s|@NODE_BIN@|$NODE_BIN|g" "$SOURCE/deploy/zssh.service.in" > "$UNIT"
-chmod 600 "$UNIT"
-
-PREVIOUS=""
-if [[ -L "$CURRENT" ]]; then
-  PREVIOUS="$(readlink -f "$CURRENT" || true)"
-fi
-TMP_LINK="$BASE/.current.$$"
-ln -s "$RELEASE" "$TMP_LINK"
-mv -Tf "$TMP_LINK" "$CURRENT"
-
-export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
-export DBUS_SESSION_BUS_ADDRESS="${DBUS_SESSION_BUS_ADDRESS:-unix:path=$XDG_RUNTIME_DIR/bus}"
-
-rollback_release() {
-  echo "zSSH live validation failed; restoring previous release" >&2
-  if [[ -n "$PREVIOUS" && -d "$PREVIOUS" ]]; then
-    local rollback_link="$BASE/.rollback.$$"
-    ln -s "$PREVIOUS" "$rollback_link"
-    mv -Tf "$rollback_link" "$CURRENT"
-    systemctl --user daemon-reload || true
-    systemctl --user restart zssh.service || true
-  else
-    systemctl --user disable --now zssh.service || true
-    rm -f "$CURRENT"
-  fi
-}
-
-systemctl --user daemon-reload
-systemctl --user enable zssh.service >/dev/null
-if ! systemctl --user restart zssh.service; then
-  rollback_release
-  exit 2
-fi
-
-HEALTH_OK=0
-for _ in $(seq 1 20); do
-  if curl --fail --silent --show-error "http://127.0.0.1:8788/health" >/dev/null; then
-    HEALTH_OK=1
-    break
-  fi
-  sleep 1
-done
-if [[ "$HEALTH_OK" != "1" ]]; then
-  systemctl --user status zssh.service --no-pager || true
-  rollback_release
-  exit 2
-fi
-
-set -a
-# shellcheck disable=SC1090
-source "$ENV_FILE"
-set +a
-if ! "$NODE_BIN" "$RELEASE/live-canary.mjs"; then
-  rollback_release
-  exit 2
-fi
-
-systemctl --user is-active --quiet zssh.service
-printf 'ZSSH_INSTALL_GREEN sha=%s release=%s\n' "$REPO_SHA" "$RELEASE"
-\n'* ]]; then
+  if [[ "$ALLOWED_ROOTS" == *$'\n'* || "$AUDIT_PATH" == *$'\n'* ]]; then
     echo "zSSH paths may not contain newlines" >&2
     exit 2
   fi
@@ -221,8 +97,7 @@ ZSSH_MAX_FILE_BYTES=131072
 ZSSH_AUDIT_LOG=$AUDIT_PATH
 EOF
 elif ! grep -q '^ZSSH_API_KEY=' "$ENV_FILE"; then
-  # Migrate existing installations from the browser-OAuth/bearer-only setup.
-  # The key stays only in the mode-0600 gateway env file.
+  # Migrate existing installs without reusing the browser OAuth consent flow.
   printf '\nZSSH_API_KEY=%s\n' "$(random_hex_32)" >> "$ENV_FILE"
 fi
 chmod 600 "$ENV_FILE"
