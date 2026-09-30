@@ -68,6 +68,7 @@ test("Claude canary supports capability URL, static header, and bearer auth", as
   assert.match(text, /StreamableHTTPClientTransport/);
   assert.match(text, /ZSSH_MCP_CAPABILITY_TOKEN/);
   assert.match(text, /capability-url/);
+  assert.match(text, /\/mcp\/\[REDACTED\]/);
   assert.match(text, /x-zssh-key/);
   assert.match(text, /Authorization/);
   assert.match(text, /zssh_server_info/);
