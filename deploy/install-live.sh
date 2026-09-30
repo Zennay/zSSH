@@ -73,10 +73,325 @@ random_hex_32() {
 }
 
 if [[ ! -f "$ENV_FILE" ]]; then
-  ALLOWED_ROOTS="${ZSSH_ALLOWED_ROOTS:-$HOME/zennay-cloud}"
+  if [[ -n "${ZSSH_ALLOWED_ROOTS:-}" ]]; then
+    ALLOWED_ROOTS="$ZSSH_ALLOWED_ROOTS"
+  elif [[ -d "$HOME/zennay-cloud" ]]; then
+    # Preserve the original single-VPS default for existing zCloud hosts.
+    ALLOWED_ROOTS="$HOME/zennay-cloud"
+  else
+    # New generic installs get a dedicated, least-surprise workspace.
+    ALLOWED_ROOTS="$HOME/zssh-workspace"
+    mkdir -p "$ALLOWED_ROOTS"
+  fi
+  TARGET_NAME="${ZSSH_TARGET_NAME:-$(hostname 2>/dev/null || uname -n)}"
   AUDIT_PATH="${ZSSH_AUDIT_LOG:-$HOME/.local/state/zssh/audit.jsonl}"
-  if [[ "$ALLOWED_ROOTS" == *$'\n'* || "$AUDIT_PATH" == *$'\n'* ]]; then
-    echo "zSSH paths may not contain newlines" >&2
+  if [[ "$ALLOWED_ROOTS" == *
+  TOKEN="$(random_hex_32)"
+  API_KEY="$(random_hex_32)"
+  CAPABILITY_TOKEN="$(random_hex_32)"
+  cat > "$ENV_FILE" <<EOF
+NODE_ENV=production
+PORT=8788
+ZSSH_DEV_BEARER_TOKEN=$TOKEN
+ZSSH_API_KEY=$API_KEY
+ZSSH_MCP_CAPABILITY_TOKEN=$CAPABILITY_TOKEN
+ZSSH_TRUST_LOCAL_TUNNEL=0
+ZSSH_TARGET_NAME=$TARGET_NAME
+ZSSH_ALLOWED_ROOTS=$ALLOWED_ROOTS
+ZSSH_EXEC_MODE=disabled
+ZSSH_SAFE_PROGRAMS=uptime,whoami,id,uname,pwd,df,free
+ZSSH_COMMAND_TIMEOUT_SECONDS=30
+ZSSH_MAX_OUTPUT_BYTES=131072
+ZSSH_MAX_FILE_BYTES=131072
+ZSSH_AUDIT_LOG=$AUDIT_PATH
+EOF
+fi
+
+if ! grep -q '^ZSSH_API_KEY=' "$ENV_FILE"; then
+  printf '\nZSSH_API_KEY=%s\n' "$(random_hex_32)" >> "$ENV_FILE"
+fi
+if ! grep -q '^ZSSH_MCP_CAPABILITY_TOKEN=' "$ENV_FILE"; then
+  printf '\nZSSH_MCP_CAPABILITY_TOKEN=%s\n' "$(random_hex_32)" >> "$ENV_FILE"
+fi
+chmod 600 "$ENV_FILE"
+
+sed "s|@NODE_BIN@|$NODE_BIN|g" "$SOURCE/deploy/zssh.service.in" > "$UNIT"
+chmod 600 "$UNIT"
+
+PREVIOUS=""
+if [[ -L "$CURRENT" ]]; then
+  PREVIOUS="$(readlink -f "$CURRENT" || true)"
+fi
+TMP_LINK="$BASE/.current.$$"
+ln -s "$RELEASE" "$TMP_LINK"
+mv -Tf "$TMP_LINK" "$CURRENT"
+
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+export DBUS_SESSION_BUS_ADDRESS="${DBUS_SESSION_BUS_ADDRESS:-unix:path=$XDG_RUNTIME_DIR/bus}"
+
+rollback_release() {
+  echo "zSSH live validation failed; restoring previous release" >&2
+  if [[ -n "$PREVIOUS" && -d "$PREVIOUS" ]]; then
+    local rollback_link="$BASE/.rollback.$$"
+    ln -s "$PREVIOUS" "$rollback_link"
+    mv -Tf "$rollback_link" "$CURRENT"
+    systemctl --user daemon-reload || true
+    systemctl --user restart zssh.service || true
+  else
+    systemctl --user disable --now zssh.service || true
+    rm -f "$CURRENT"
+  fi
+}
+
+systemctl --user daemon-reload
+systemctl --user enable zssh.service >/dev/null
+if ! systemctl --user restart zssh.service; then
+  rollback_release
+  exit 2
+fi
+
+HEALTH_OK=0
+for _ in $(seq 1 20); do
+  if curl --fail --silent --show-error "http://127.0.0.1:8788/health" >/dev/null; then
+    HEALTH_OK=1
+    break
+  fi
+  sleep 1
+done
+if [[ "$HEALTH_OK" != "1" ]]; then
+  systemctl --user status zssh.service --no-pager || true
+  rollback_release
+  exit 2
+fi
+
+set -a
+# shellcheck disable=SC1090
+source "$ENV_FILE"
+set +a
+if [[ "${ZSSH_EXEC_MODE:-disabled}" == "full" ]]; then
+  if ! ZSSH_MCP_URL="http://127.0.0.1:8788/mcp" \
+       ZSSH_MCP_TOKEN="$ZSSH_DEV_BEARER_TOKEN" \
+       ZSSH_MCP_API_KEY="" \
+       ZSSH_MCP_CAPABILITY_TOKEN="" \
+       "$NODE_BIN" "$RELEASE/mcp-claude-canary.mjs"; then
+    rollback_release
+    exit 2
+  fi
+else
+  if ! "$NODE_BIN" "$RELEASE/live-canary.mjs"; then
+    rollback_release
+    exit 2
+  fi
+fi
+
+systemctl --user is-active --quiet zssh.service
+printf 'ZSSH_INSTALL_GREEN sha=%s release=%s\n' "$REPO_SHA" "$RELEASE"
+\n'* || "$AUDIT_PATH" == *
+  TOKEN="$(random_hex_32)"
+  API_KEY="$(random_hex_32)"
+  CAPABILITY_TOKEN="$(random_hex_32)"
+  cat > "$ENV_FILE" <<EOF
+NODE_ENV=production
+PORT=8788
+ZSSH_DEV_BEARER_TOKEN=$TOKEN
+ZSSH_API_KEY=$API_KEY
+ZSSH_MCP_CAPABILITY_TOKEN=$CAPABILITY_TOKEN
+ZSSH_TRUST_LOCAL_TUNNEL=0
+ZSSH_ALLOWED_ROOTS=$ALLOWED_ROOTS
+ZSSH_EXEC_MODE=disabled
+ZSSH_SAFE_PROGRAMS=uptime,whoami,id,uname,pwd,df,free
+ZSSH_COMMAND_TIMEOUT_SECONDS=30
+ZSSH_MAX_OUTPUT_BYTES=131072
+ZSSH_MAX_FILE_BYTES=131072
+ZSSH_AUDIT_LOG=$AUDIT_PATH
+EOF
+fi
+
+if ! grep -q '^ZSSH_API_KEY=' "$ENV_FILE"; then
+  printf '\nZSSH_API_KEY=%s\n' "$(random_hex_32)" >> "$ENV_FILE"
+fi
+if ! grep -q '^ZSSH_MCP_CAPABILITY_TOKEN=' "$ENV_FILE"; then
+  printf '\nZSSH_MCP_CAPABILITY_TOKEN=%s\n' "$(random_hex_32)" >> "$ENV_FILE"
+fi
+chmod 600 "$ENV_FILE"
+
+sed "s|@NODE_BIN@|$NODE_BIN|g" "$SOURCE/deploy/zssh.service.in" > "$UNIT"
+chmod 600 "$UNIT"
+
+PREVIOUS=""
+if [[ -L "$CURRENT" ]]; then
+  PREVIOUS="$(readlink -f "$CURRENT" || true)"
+fi
+TMP_LINK="$BASE/.current.$$"
+ln -s "$RELEASE" "$TMP_LINK"
+mv -Tf "$TMP_LINK" "$CURRENT"
+
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+export DBUS_SESSION_BUS_ADDRESS="${DBUS_SESSION_BUS_ADDRESS:-unix:path=$XDG_RUNTIME_DIR/bus}"
+
+rollback_release() {
+  echo "zSSH live validation failed; restoring previous release" >&2
+  if [[ -n "$PREVIOUS" && -d "$PREVIOUS" ]]; then
+    local rollback_link="$BASE/.rollback.$$"
+    ln -s "$PREVIOUS" "$rollback_link"
+    mv -Tf "$rollback_link" "$CURRENT"
+    systemctl --user daemon-reload || true
+    systemctl --user restart zssh.service || true
+  else
+    systemctl --user disable --now zssh.service || true
+    rm -f "$CURRENT"
+  fi
+}
+
+systemctl --user daemon-reload
+systemctl --user enable zssh.service >/dev/null
+if ! systemctl --user restart zssh.service; then
+  rollback_release
+  exit 2
+fi
+
+HEALTH_OK=0
+for _ in $(seq 1 20); do
+  if curl --fail --silent --show-error "http://127.0.0.1:8788/health" >/dev/null; then
+    HEALTH_OK=1
+    break
+  fi
+  sleep 1
+done
+if [[ "$HEALTH_OK" != "1" ]]; then
+  systemctl --user status zssh.service --no-pager || true
+  rollback_release
+  exit 2
+fi
+
+set -a
+# shellcheck disable=SC1090
+source "$ENV_FILE"
+set +a
+if [[ "${ZSSH_EXEC_MODE:-disabled}" == "full" ]]; then
+  if ! ZSSH_MCP_URL="http://127.0.0.1:8788/mcp" \
+       ZSSH_MCP_TOKEN="$ZSSH_DEV_BEARER_TOKEN" \
+       ZSSH_MCP_API_KEY="" \
+       ZSSH_MCP_CAPABILITY_TOKEN="" \
+       "$NODE_BIN" "$RELEASE/mcp-claude-canary.mjs"; then
+    rollback_release
+    exit 2
+  fi
+else
+  if ! "$NODE_BIN" "$RELEASE/live-canary.mjs"; then
+    rollback_release
+    exit 2
+  fi
+fi
+
+systemctl --user is-active --quiet zssh.service
+printf 'ZSSH_INSTALL_GREEN sha=%s release=%s\n' "$REPO_SHA" "$RELEASE"
+\n'* || "$TARGET_NAME" == *
+  TOKEN="$(random_hex_32)"
+  API_KEY="$(random_hex_32)"
+  CAPABILITY_TOKEN="$(random_hex_32)"
+  cat > "$ENV_FILE" <<EOF
+NODE_ENV=production
+PORT=8788
+ZSSH_DEV_BEARER_TOKEN=$TOKEN
+ZSSH_API_KEY=$API_KEY
+ZSSH_MCP_CAPABILITY_TOKEN=$CAPABILITY_TOKEN
+ZSSH_TRUST_LOCAL_TUNNEL=0
+ZSSH_ALLOWED_ROOTS=$ALLOWED_ROOTS
+ZSSH_EXEC_MODE=disabled
+ZSSH_SAFE_PROGRAMS=uptime,whoami,id,uname,pwd,df,free
+ZSSH_COMMAND_TIMEOUT_SECONDS=30
+ZSSH_MAX_OUTPUT_BYTES=131072
+ZSSH_MAX_FILE_BYTES=131072
+ZSSH_AUDIT_LOG=$AUDIT_PATH
+EOF
+fi
+
+if ! grep -q '^ZSSH_API_KEY=' "$ENV_FILE"; then
+  printf '\nZSSH_API_KEY=%s\n' "$(random_hex_32)" >> "$ENV_FILE"
+fi
+if ! grep -q '^ZSSH_MCP_CAPABILITY_TOKEN=' "$ENV_FILE"; then
+  printf '\nZSSH_MCP_CAPABILITY_TOKEN=%s\n' "$(random_hex_32)" >> "$ENV_FILE"
+fi
+chmod 600 "$ENV_FILE"
+
+sed "s|@NODE_BIN@|$NODE_BIN|g" "$SOURCE/deploy/zssh.service.in" > "$UNIT"
+chmod 600 "$UNIT"
+
+PREVIOUS=""
+if [[ -L "$CURRENT" ]]; then
+  PREVIOUS="$(readlink -f "$CURRENT" || true)"
+fi
+TMP_LINK="$BASE/.current.$$"
+ln -s "$RELEASE" "$TMP_LINK"
+mv -Tf "$TMP_LINK" "$CURRENT"
+
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+export DBUS_SESSION_BUS_ADDRESS="${DBUS_SESSION_BUS_ADDRESS:-unix:path=$XDG_RUNTIME_DIR/bus}"
+
+rollback_release() {
+  echo "zSSH live validation failed; restoring previous release" >&2
+  if [[ -n "$PREVIOUS" && -d "$PREVIOUS" ]]; then
+    local rollback_link="$BASE/.rollback.$$"
+    ln -s "$PREVIOUS" "$rollback_link"
+    mv -Tf "$rollback_link" "$CURRENT"
+    systemctl --user daemon-reload || true
+    systemctl --user restart zssh.service || true
+  else
+    systemctl --user disable --now zssh.service || true
+    rm -f "$CURRENT"
+  fi
+}
+
+systemctl --user daemon-reload
+systemctl --user enable zssh.service >/dev/null
+if ! systemctl --user restart zssh.service; then
+  rollback_release
+  exit 2
+fi
+
+HEALTH_OK=0
+for _ in $(seq 1 20); do
+  if curl --fail --silent --show-error "http://127.0.0.1:8788/health" >/dev/null; then
+    HEALTH_OK=1
+    break
+  fi
+  sleep 1
+done
+if [[ "$HEALTH_OK" != "1" ]]; then
+  systemctl --user status zssh.service --no-pager || true
+  rollback_release
+  exit 2
+fi
+
+set -a
+# shellcheck disable=SC1090
+source "$ENV_FILE"
+set +a
+if [[ "${ZSSH_EXEC_MODE:-disabled}" == "full" ]]; then
+  if ! ZSSH_MCP_URL="http://127.0.0.1:8788/mcp" \
+       ZSSH_MCP_TOKEN="$ZSSH_DEV_BEARER_TOKEN" \
+       ZSSH_MCP_API_KEY="" \
+       ZSSH_MCP_CAPABILITY_TOKEN="" \
+       "$NODE_BIN" "$RELEASE/mcp-claude-canary.mjs"; then
+    rollback_release
+    exit 2
+  fi
+else
+  if ! "$NODE_BIN" "$RELEASE/live-canary.mjs"; then
+    rollback_release
+    exit 2
+  fi
+fi
+
+systemctl --user is-active --quiet zssh.service
+printf 'ZSSH_INSTALL_GREEN sha=%s release=%s\n' "$REPO_SHA" "$RELEASE"
+\n'* ]]; then
+    echo "zSSH configuration values may not contain newlines" >&2
+    exit 2
+  fi
+  if [[ ! "$TARGET_NAME" =~ ^[A-Za-z0-9._:-]{1,128}$ ]]; then
+    echo "ZSSH_TARGET_NAME must use only letters, numbers, dots, underscores, colons, or dashes" >&2
     exit 2
   fi
   umask 077
