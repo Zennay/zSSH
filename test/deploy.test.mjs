@@ -11,6 +11,7 @@ test("live installer keeps production raw shell fail-closed and secrets outside 
   const text = await readFile(path.join(ROOT, "deploy", "install-live.sh"), "utf8");
   assert.match(text, /NODE_ENV=production/);
   assert.match(text, /ZSSH_EXEC_MODE=disabled/);
+  assert.match(text, /ZSSH_API_KEY/);
   assert.match(text, /openssl rand -hex 32|randomBytes\(32\)/);
   assert.match(text, /gateway\.env/);
   assert.match(text, /chmod 600 "\$ENV_FILE"/);
@@ -61,10 +62,19 @@ test("Claude configuration uses remote HTTP with explicit auth", async () => {
   assert.match(config, /Bearer YOUR_ZSSH_BEARER_TOKEN/);
 });
 
-test("Claude canary uses Streamable HTTP and bearer auth", async () => {
+test("Claude canary supports static header and bearer auth", async () => {
   const text = await readFile(path.join(ROOT, "mcp-claude-canary.mjs"), "utf8");
   assert.match(text, /StreamableHTTPClientTransport/);
+  assert.match(text, /x-zssh-key/);
   assert.match(text, /Authorization/);
   assert.match(text, /zssh_server_info/);
   assert.match(text, /compatible: "claude-mcp"/);
+});
+
+test("hosted MCP auth avoids browser OAuth and accepts x-zssh-key", async () => {
+  const server = await readFile(path.join(ROOT, "server.mjs"), "utf8");
+  assert.match(server, /ZSSH_API_KEY/);
+  assert.match(server, /x-zssh-key/);
+  assert.match(server, /authorization/);
+  assert.doesNotMatch(server, /oauth\/approve|claude-auth\.mjs|mcpAuthRouter/);
 });
