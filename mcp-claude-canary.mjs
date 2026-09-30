@@ -2,18 +2,22 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 
 const url = process.env.ZSSH_MCP_URL || `http://127.0.0.1:${process.env.PORT || 8788}/mcp`;
+const apiKey = process.env.ZSSH_MCP_API_KEY || process.env.ZSSH_API_KEY || "";
 const token = process.env.ZSSH_MCP_TOKEN || process.env.ZSSH_DEV_BEARER_TOKEN || "";
 
-if (!token) throw new Error("ZSSH_MCP_TOKEN or ZSSH_DEV_BEARER_TOKEN is required");
+if (!apiKey && !token) {
+  throw new Error("ZSSH_MCP_API_KEY/ZSSH_API_KEY or ZSSH_MCP_TOKEN/ZSSH_DEV_BEARER_TOKEN is required");
+}
+
+const headers = {
+  Accept: "application/json, text/event-stream",
+};
+if (apiKey) headers["x-zssh-key"] = apiKey;
+else headers.Authorization = `Bearer ${token}`;
 
 const client = new Client({ name: "zssh-claude-compat", version: "1.0.0" });
 const transport = new StreamableHTTPClientTransport(new URL(url), {
-  requestInit: {
-    headers: {
-      Authorization: `Bearer ${token}`,
-      Accept: "application/json, text/event-stream",
-    },
-  },
+  requestInit: { headers },
 });
 
 try {
@@ -38,6 +42,7 @@ try {
   console.log(JSON.stringify({
     ok: true,
     compatible: "claude-mcp",
+    auth: apiKey ? "x-zssh-key" : "bearer",
     endpoint: url,
     tool_count: names.size,
     tools: [...names].sort(),
