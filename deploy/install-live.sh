@@ -161,9 +161,20 @@ set -a
 # shellcheck disable=SC1090
 source "$ENV_FILE"
 set +a
-if ! "$NODE_BIN" "$RELEASE/live-canary.mjs"; then
-  rollback_release
-  exit 2
+if [[ "${ZSSH_EXEC_MODE:-disabled}" == "full" ]]; then
+  if ! ZSSH_MCP_URL="http://127.0.0.1:8788/mcp" \
+       ZSSH_MCP_TOKEN="$ZSSH_DEV_BEARER_TOKEN" \
+       ZSSH_MCP_API_KEY="" \
+       ZSSH_MCP_CAPABILITY_TOKEN="" \
+       "$NODE_BIN" "$RELEASE/mcp-claude-canary.mjs"; then
+    rollback_release
+    exit 2
+  fi
+else
+  if ! "$NODE_BIN" "$RELEASE/live-canary.mjs"; then
+    rollback_release
+    exit 2
+  fi
 fi
 
 systemctl --user is-active --quiet zssh.service
