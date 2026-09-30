@@ -86,7 +86,9 @@ export class OwnerOAuthProvider {
     this.pending.set(id, { clientId: client.client_id, params, expires: this.now() + 300000, failures: 0 });
     res.set({
       "Cache-Control": "no-store",
-      "Referrer-Policy": "no-referrer",
+      // no-referrer turns a browser form POST's Origin into null (notably Safari).
+      // same-origin keeps consent POSTs verifiable without leaking URLs off-site.
+      "Referrer-Policy": "same-origin",
       "Content-Security-Policy": "default-src 'none'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'",
       "X-Content-Type-Options": "nosniff"
     });

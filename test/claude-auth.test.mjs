@@ -35,6 +35,7 @@ async function fixture(t) {
     const response = await request("/authorize?" + query);
     const html = await response.text();
     assert.equal(response.status, 200, html);
+    assert.equal(response.headers.get("referrer-policy"), "same-origin", "browser consent POST must retain its Origin");
     return { id: html.match(/name="request" value="([^"]+)"/)[1], html };
   };
   const approve = (id, password = ownerPassword, originHeader = origin) => request("/oauth/approve", {
@@ -89,6 +90,7 @@ test("wrong owner code and cross-origin consent cannot issue authorization codes
   assert.ok(!html.includes(ownerPassword));
   assert.equal((await f.approve(id, "wrong")).status, 403);
   assert.equal((await f.approve(id, ownerPassword, "https://attacker.example")).status, 403);
+  assert.equal((await f.approve(id, ownerPassword, "null")).status, 403);
   assert.equal((await f.approve("invented")).status, 400);
   assert.equal((await f.approve(id)).status, 302);
   assert.equal((await f.approve(id)).status, 400, "consent request is single use");
