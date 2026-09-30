@@ -1,6 +1,6 @@
 # zSSH
 
-zSSH is a **standalone security-first remote operations project**. zCloud is its control-plane/dashboard integration, not its parent project.
+zSSH is a **standalone security-first remote operations project for general Linux targets**. It can run on a VPS, VM, home server, dedicated host, or development box. zCloud is an optional control-plane/dashboard integration, not its parent project.
 
 ## Current milestone
 
@@ -11,6 +11,7 @@ This branch proves the smallest safe foundation:
 - remote MCP endpoint at `/mcp`;
 - no-sign-in capability URLs for hosted MCP clients, optional static `x-zssh-key` auth, plus bearer authentication for CLI clients;
 - `zssh_server_info`, `zssh_run_safe`, `zssh_exec`, `zssh_read_file`, and `zssh_write_file`;
+- stable per-target identity through optional `ZSSH_TARGET_NAME`, so multiple installations are easy to distinguish;
 - non-root startup guard;
 - command timeout and output limits;
 - configured filesystem roots;
@@ -51,7 +52,7 @@ paired target agent
     +-- files / systemd / git
 ```
 
-M0 runs the gateway and execution adapter together to keep the proof small. M2 splits the target agent boundary and adds pairing/revocation. Production must not depend on storing users' SSH private keys in the gateway.
+M0/M1 run the gateway and execution adapter together to keep the proof small: one zSSH installation represents one Linux target. That installation is no longer tied to a specific provider, username, project path, or zCloud host. M2 splits the target agent boundary and adds pairing/revocation for a true multi-target control plane. Production must not depend on storing users' SSH private keys in the gateway.
 
 ## Local development
 
@@ -75,7 +76,7 @@ rejection of an outside-root read, and rejection of raw shell. It deletes its
 temporary test directory on exit. The first allowed root must be writable by
 the zSSH service user for the file proof. CI runs this against a production-mode
 server with an isolated temporary root; a green CI result is not evidence that
-the same proof has passed on the OVH runtime.
+the same proof has passed on the target runtime.
 
 ## Policy
 
@@ -118,7 +119,7 @@ npm run mcp:claude-canary
 ```
 
 The endpoint must be reachable over public HTTPS for Claude's hosted MCP
-connector; local stdio servers cannot be used by that connector. For a VPS,
+connector; local stdio servers cannot be used by that connector. For a remote Linux host,
 put Caddy or another TLS reverse proxy in front of the loopback-only zSSH
 service. `deploy/Caddyfile.example` contains the minimal reverse-proxy config.
 Do not expose port 8788 directly and do not commit the bearer token.
@@ -147,27 +148,44 @@ Request header: x-zssh-key: <ZSSH_API_KEY>
 Existing bearer authentication remains available for Claude Code and other
 clients that can set an `Authorization: Bearer ...` header.
 
-## Easy VPS installation
+## Easy Linux target installation
 
-Run this as the dedicated unprivileged VPS user (never as root):
+Run this as the dedicated unprivileged user on any supported Linux target (never as root):
 
 ```bash
-curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/Zennay/zSSH/main/deploy/bootstrap-vps.sh | bash
+curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/Zennay/zSSH/main/deploy/bootstrap-linux.sh | bash
+```
+
+You can label a target and choose its accessible workspace before first install:
+
+```bash
+ZSSH_TARGET_NAME=prod-eu-1 \
+ZSSH_ALLOWED_ROOTS=/srv/my-app \
+bash <(curl --proto '=https' --tlsv1.2 -fsSL \
+  https://raw.githubusercontent.com/Zennay/zSSH/main/deploy/bootstrap-linux.sh)
 ```
 
 For a reproducible install, pin the source revision:
 
 ```bash
-ZSSH_REF=193c287a49afa94314019254b5b30520b9ee9844 \
+ZSSH_REF=<commit-sha> \
   bash <(curl --proto '=https' --tlsv1.2 -fsSL \
-  https://raw.githubusercontent.com/Zennay/zSSH/193c287a49afa94314019254b5b30520b9ee9844/deploy/bootstrap-vps.sh)
+  https://raw.githubusercontent.com/Zennay/zSSH/main/deploy/bootstrap-linux.sh)
 ```
 
-The bootstrap clones the canonical repository, checks out the selected revision, runs the tests, creates a non-root user service, generates a random local bearer token, and runs the live canary before declaring success. Raw shell remains disabled.
+The generic bootstrap clones the canonical repository, checks out the selected revision, runs the existing installation validation, creates a non-root user service, generates random credentials, and runs the live canary before declaring success. Raw shell remains disabled by default.
+
+Backwards compatibility is deliberate:
+
+- an existing `~/.config/zssh/gateway.env` is preserved rather than regenerated;
+- if no config exists but `~/zennay-cloud` exists, the original allowed-root default is preserved for legacy zCloud hosts;
+- otherwise a new installation uses `~/zssh-workspace` as its initial allowed root;
+- `deploy/bootstrap-vps.sh` remains supported, so existing install commands do not break;
+- zCloud-specific scripts stay under `ops/` as optional integration tooling, while `ops/diagnose.sh` is the provider-agnostic diagnostic entrypoint.
 
 ## Connect as a ChatGPT MCP app
 
-For a private VPS, install OpenAI's `tunnel-client` and create a tunnel in Platform settings. Then run:
+For a private Linux target, install OpenAI's `tunnel-client` and create a tunnel in Platform settings. Then run:
 
 ```bash
 cd ~/.local/src/zssh
@@ -188,4 +206,4 @@ For a private target where `zssh_exec` must be able to call `sudo`, the user ser
 
 ## Repository migration
 
-The original bootstrap lived temporarily under `Zennay/zCloud/zssh/`. The standalone repository is now authoritative. Temporary HaxLab runner transport scripts were migrated into `ops/` for traceability; HaxLab itself is no longer part of zSSH's source or deployment ownership.
+The original bootstrap lived temporarily under `Zennay/zCloud/zssh/`. The standalone repository is now authoritative. Temporary HaxLab runner transport scripts were migrated into `ops/archive/` for traceability; HaxLab itself is no longer part of zSSH's source or deployment ownership. zCloud registration and the old VPS-specific diagnostic remain optional compatibility tooling, not assumptions in the core zSSH install path.
