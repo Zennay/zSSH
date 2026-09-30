@@ -17,6 +17,7 @@ const MAX_OUTPUT_BYTES = clampInt(process.env.ZSSH_MAX_OUTPUT_BYTES, 4096, 10485
 const MAX_FILE_BYTES = clampInt(process.env.ZSSH_MAX_FILE_BYTES, 1024, 1048576, 131072);
 const DEV_TOKEN = process.env.ZSSH_DEV_BEARER_TOKEN || "";
 const API_KEY = process.env.ZSSH_API_KEY || "";
+const CAPABILITY_TOKEN = process.env.ZSSH_MCP_CAPABILITY_TOKEN || "";
 const TRUST_LOCAL_TUNNEL = process.env.ZSSH_TRUST_LOCAL_TUNNEL === "1";
 const AUDIT_LOG = path.resolve(process.env.ZSSH_AUDIT_LOG || "./data/audit.jsonl");
 const SAFE_PROGRAM_PATHS = Object.freeze({
@@ -484,6 +485,10 @@ function secureEqual(actual, expected) {
   return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
 
+function capabilityAuthorized(pathname) {
+  return Boolean(CAPABILITY_TOKEN) && secureEqual(pathname, "/mcp/" + CAPABILITY_TOKEN);
+}
+
 function authorized(req) {
   if (TRUST_LOCAL_TUNNEL && isLoopbackRequest(req)) return true;
 
@@ -506,8 +511,8 @@ export function start() {
   if (typeof process.getuid === "function" && process.getuid() === 0 && process.env.ZSSH_ALLOW_ROOT !== "1") {
     throw new Error("zSSH refuses to run as root; use a dedicated unprivileged service account");
   }
-  if (process.env.NODE_ENV === "production" && !API_KEY && !DEV_TOKEN && !TRUST_LOCAL_TUNNEL) {
-    throw new Error("production requires authentication; configure ZSSH_API_KEY, a bearer token, or explicitly trust the loopback tunnel");
+  if (process.env.NODE_ENV === "production" && !CAPABILITY_TOKEN && !API_KEY && !DEV_TOKEN && !TRUST_LOCAL_TUNNEL) {
+    throw new Error("production requires authentication; configure a capability token, ZSSH_API_KEY, a bearer token, or explicitly trust the loopback tunnel");
   }
 
   const httpServer = createServer(async (req, res) => {
@@ -518,11 +523,14 @@ export function start() {
       return res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ ok: true, service: "zssh", version: VERSION }));
     }
 
-    if (url.pathname !== "/mcp") return res.writeHead(404).end("Not Found");
+    const capabilityAuth = capabilityAuthorized(url.pathname);
+    if (url.pathname !== "/mcp" && !capabilityAuth) return res.writeHead(404).end("Not Found");
     cors(res);
 
     if (req.method === "OPTIONS") return res.writeHead(204).end();
-    if (!authorized(req)) return res.writeHead(401, { "content-type": "application/json" }).end(JSON.stringify({ error: "unauthorized" }));
+    if (!capabilityAuth && !authorized(req)) {
+      return res.writeHead(401, { "content-type": "application/json" }).end(JSON.stringify({ error: "unauthorized" }));
+    }
 
     if (!["POST", "GET", "DELETE"].includes(req.method || "")) return res.writeHead(405).end("Method Not Allowed");
 

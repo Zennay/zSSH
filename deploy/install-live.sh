@@ -82,11 +82,13 @@ if [[ ! -f "$ENV_FILE" ]]; then
   umask 077
   TOKEN="$(random_hex_32)"
   API_KEY="$(random_hex_32)"
+  CAPABILITY_TOKEN="$(random_hex_32)"
   cat > "$ENV_FILE" <<EOF
 NODE_ENV=production
 PORT=8788
 ZSSH_DEV_BEARER_TOKEN=$TOKEN
 ZSSH_API_KEY=$API_KEY
+ZSSH_MCP_CAPABILITY_TOKEN=$CAPABILITY_TOKEN
 ZSSH_TRUST_LOCAL_TUNNEL=0
 ZSSH_ALLOWED_ROOTS=$ALLOWED_ROOTS
 ZSSH_EXEC_MODE=disabled
@@ -96,9 +98,13 @@ ZSSH_MAX_OUTPUT_BYTES=131072
 ZSSH_MAX_FILE_BYTES=131072
 ZSSH_AUDIT_LOG=$AUDIT_PATH
 EOF
-elif ! grep -q '^ZSSH_API_KEY=' "$ENV_FILE"; then
-  # Migrate existing installs without reusing the browser OAuth consent flow.
+fi
+
+if ! grep -q '^ZSSH_API_KEY=' "$ENV_FILE"; then
   printf '\nZSSH_API_KEY=%s\n' "$(random_hex_32)" >> "$ENV_FILE"
+fi
+if ! grep -q '^ZSSH_MCP_CAPABILITY_TOKEN=' "$ENV_FILE"; then
+  printf '\nZSSH_MCP_CAPABILITY_TOKEN=%s\n' "$(random_hex_32)" >> "$ENV_FILE"
 fi
 chmod 600 "$ENV_FILE"
 
