@@ -39,10 +39,17 @@ HTTPS capability URL.
 }
 
 function capabilityUrl(token) {
-  const base = String(process.env.ZSSH_PUBLIC_URL || "").trim().replace(/\/+$/, "");
-  if (!base) return null;
-  if (!/^https:\/\//i.test(base)) throw new Error("ZSSH_PUBLIC_URL must use https://");
-  return base + "/mcp/" + token;
+  const raw = String(process.env.ZSSH_PUBLIC_URL || "").trim();
+  if (!raw) return null;
+  const base = new URL(raw);
+  if (base.protocol !== "https:") throw new Error("ZSSH_PUBLIC_URL must use https://");
+  if (base.username || base.password || base.search || base.hash) {
+    throw new Error("ZSSH_PUBLIC_URL must not include credentials, query parameters, or a fragment");
+  }
+  if (base.pathname !== "/" && base.pathname !== "") {
+    throw new Error("ZSSH_PUBLIC_URL must be an origin only; do not include /mcp");
+  }
+  return base.origin + "/mcp/" + token;
 }
 
 loadEnvFile();
