@@ -31,8 +31,14 @@ jobs:
           bash -n ops/diagnose.sh
           bash -n ops/diagnose-vps.sh
           bash -n ops/register-zcloud.sh
-      - name: Validate server syntax
-        run: node --check server.mjs
+      - name: Validate Node entrypoint syntax
+        run: |
+          node --check server.mjs
+          node --check auth-store.mjs
+          node --check bin/zssh.mjs
+          node --check live-canary.mjs
+          node --check plugin-canary.mjs
+          node --check mcp-claude-canary.mjs
       - name: Exercise authenticated MCP file roundtrip and policy canary
         shell: bash
         run: |
