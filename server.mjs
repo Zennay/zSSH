@@ -19,6 +19,7 @@ const DEV_TOKEN = process.env.ZSSH_DEV_BEARER_TOKEN || "";
 const API_KEY = process.env.ZSSH_API_KEY || "";
 const CAPABILITY_TOKEN = process.env.ZSSH_MCP_CAPABILITY_TOKEN || "";
 const TRUST_LOCAL_TUNNEL = process.env.ZSSH_TRUST_LOCAL_TUNNEL === "1";
+const TARGET_NAME = (process.env.ZSSH_TARGET_NAME || os.hostname()).trim().slice(0, 128) || os.hostname();
 const AUDIT_LOG = path.resolve(process.env.ZSSH_AUDIT_LOG || "./data/audit.jsonl");
 const SAFE_PROGRAM_PATHS = Object.freeze({
   uptime: "/usr/bin/uptime",
@@ -375,6 +376,7 @@ function createMcpServer() {
     },
     async () => result({
       version: VERSION,
+      target_name: TARGET_NAME,
       hostname: os.hostname(),
       platform: process.platform,
       arch: process.arch,
