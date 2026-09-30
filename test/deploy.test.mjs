@@ -55,6 +55,23 @@ test("onboarding scripts preserve secure defaults and loopback-only tunnel setup
   assert.match(server, /httpServer\.listen\(PORT, "127\.0\.0\.1"/);
 });
 
+test("generic Linux onboarding avoids account-specific assumptions and preserves legacy installs", async () => {
+  const bootstrap = await readFile(path.join(ROOT, "deploy", "bootstrap-linux.sh"), "utf8");
+  const diagnose = await readFile(path.join(ROOT, "ops", "diagnose.sh"), "utf8");
+  const installer = await readFile(path.join(ROOT, "deploy", "install-live.sh"), "utf8");
+  const env = await readFile(path.join(ROOT, ".env.example"), "utf8");
+  const server = await readFile(path.join(ROOT, "server.mjs"), "utf8");
+
+  assert.doesNotMatch(bootstrap, /\/home\/ubuntu|zennay-cloud/);
+  assert.doesNotMatch(diagnose, /\/home\/ubuntu|zennay-cloud/);
+  assert.match(installer, /\$HOME\/zennay-cloud/);
+  assert.match(installer, /\$HOME\/zssh-workspace/);
+  assert.match(installer, /ZSSH_TARGET_NAME/);
+  assert.match(env, /ZSSH_TARGET_NAME=my-linux-target/);
+  assert.doesNotMatch(env, /\/home\/ubuntu/);
+  assert.match(server, /target_name: TARGET_NAME/);
+});
+
 test("Claude configuration uses remote HTTP with explicit auth", async () => {
   const config = await readFile(path.join(ROOT, "deploy", "claude-code.example.json"), "utf8");
   assert.match(config, /"type": "http"/);
