@@ -64,6 +64,14 @@ if [[ ! -d "$RELEASE" ]]; then
   mv "$STAGE" "$RELEASE"
 fi
 
+random_hex_32() {
+  if command -v openssl >/dev/null 2>&1; then
+    openssl rand -hex 32
+  else
+    "$NODE_BIN" -e 'console.log(require("crypto").randomBytes(32).toString("hex"))'
+  fi
+}
+
 if [[ ! -f "$ENV_FILE" ]]; then
   ALLOWED_ROOTS="${ZSSH_ALLOWED_ROOTS:-$HOME/zennay-cloud}"
   AUDIT_PATH="${ZSSH_AUDIT_LOG:-$HOME/.local/state/zssh/audit.jsonl}"
@@ -72,15 +80,13 @@ if [[ ! -f "$ENV_FILE" ]]; then
     exit 2
   fi
   umask 077
-  if command -v openssl >/dev/null 2>&1; then
-    TOKEN="$(openssl rand -hex 32)"
-  else
-    TOKEN="$("$NODE_BIN" -e 'console.log(require("crypto").randomBytes(32).toString("hex"))')"
-  fi
+  TOKEN="$(random_hex_32)"
+  API_KEY="$(random_hex_32)"
   cat > "$ENV_FILE" <<EOF
 NODE_ENV=production
 PORT=8788
 ZSSH_DEV_BEARER_TOKEN=$TOKEN
+ZSSH_API_KEY=$API_KEY
 ZSSH_TRUST_LOCAL_TUNNEL=0
 ZSSH_ALLOWED_ROOTS=$ALLOWED_ROOTS
 ZSSH_EXEC_MODE=disabled
@@ -90,6 +96,9 @@ ZSSH_MAX_OUTPUT_BYTES=131072
 ZSSH_MAX_FILE_BYTES=131072
 ZSSH_AUDIT_LOG=$AUDIT_PATH
 EOF
+elif ! grep -q '^ZSSH_API_KEY=' "$ENV_FILE"; then
+  # Migrate existing installs without reusing the browser OAuth consent flow.
+  printf '\nZSSH_API_KEY=%s\n' "$(random_hex_32)" >> "$ENV_FILE"
 fi
 chmod 600 "$ENV_FILE"
 

@@ -16,6 +16,7 @@ const COMMAND_TIMEOUT_SECONDS = clampInt(process.env.ZSSH_COMMAND_TIMEOUT_SECOND
 const MAX_OUTPUT_BYTES = clampInt(process.env.ZSSH_MAX_OUTPUT_BYTES, 4096, 1048576, 131072);
 const MAX_FILE_BYTES = clampInt(process.env.ZSSH_MAX_FILE_BYTES, 1024, 1048576, 131072);
 const DEV_TOKEN = process.env.ZSSH_DEV_BEARER_TOKEN || "";
+const API_KEY = process.env.ZSSH_API_KEY || "";
 const TRUST_LOCAL_TUNNEL = process.env.ZSSH_TRUST_LOCAL_TUNNEL === "1";
 const AUDIT_LOG = path.resolve(process.env.ZSSH_AUDIT_LOG || "./data/audit.jsonl");
 const SAFE_PROGRAM_PATHS = Object.freeze({
@@ -476,20 +477,28 @@ function isLoopbackRequest(req) {
   return address === "127.0.0.1" || address === "::1" || address === "::ffff:127.0.0.1";
 }
 
+function secureEqual(actual, expected) {
+  if (!expected) return false;
+  const a = Buffer.from(String(actual || ""));
+  const b = Buffer.from(String(expected));
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+
 function authorized(req) {
   if (TRUST_LOCAL_TUNNEL && isLoopbackRequest(req)) return true;
-  if (!DEV_TOKEN) return process.env.NODE_ENV !== "production";
-  const expected = "Bearer " + DEV_TOKEN;
-  const actual = String(req.headers.authorization || "");
-  const a = Buffer.from(actual);
-  const b = Buffer.from(expected);
-  return a.length === b.length && crypto.timingSafeEqual(a, b);
+
+  // Hosted clients such as Claude can use a static custom header without an
+  // OAuth browser flow. Keep bearer auth for Claude Code and existing clients.
+  if (secureEqual(req.headers["x-zssh-key"], API_KEY)) return true;
+  if (secureEqual(req.headers.authorization, DEV_TOKEN ? "Bearer " + DEV_TOKEN : "")) return true;
+
+  return !API_KEY && !DEV_TOKEN && process.env.NODE_ENV !== "production";
 }
 
 function cors(res) {
   res.setHeader("Access-Control-Allow-Origin", process.env.ZSSH_ALLOWED_ORIGIN || "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, GET, DELETE, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "content-type, authorization, mcp-session-id");
+  res.setHeader("Access-Control-Allow-Headers", "content-type, authorization, x-zssh-key, mcp-session-id");
   res.setHeader("Access-Control-Expose-Headers", "Mcp-Session-Id");
 }
 
@@ -497,8 +506,8 @@ export function start() {
   if (typeof process.getuid === "function" && process.getuid() === 0 && process.env.ZSSH_ALLOW_ROOT !== "1") {
     throw new Error("zSSH refuses to run as root; use a dedicated unprivileged service account");
   }
-  if (process.env.NODE_ENV === "production" && !DEV_TOKEN && !TRUST_LOCAL_TUNNEL) {
-    throw new Error("production requires authentication; configure a bearer token or explicitly trust the loopback tunnel");
+  if (process.env.NODE_ENV === "production" && !API_KEY && !DEV_TOKEN && !TRUST_LOCAL_TUNNEL) {
+    throw new Error("production requires authentication; configure ZSSH_API_KEY, a bearer token, or explicitly trust the loopback tunnel");
   }
 
   const httpServer = createServer(async (req, res) => {
