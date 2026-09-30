@@ -1,19 +1,28 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 
-const url = process.env.ZSSH_MCP_URL || `http://127.0.0.1:${process.env.PORT || 8788}/mcp`;
+const baseUrl = process.env.ZSSH_MCP_URL || `http://127.0.0.1:${process.env.PORT || 8788}/mcp`;
+const capabilityToken = process.env.ZSSH_MCP_CAPABILITY_TOKEN || "";
 const apiKey = process.env.ZSSH_MCP_API_KEY || process.env.ZSSH_API_KEY || "";
 const token = process.env.ZSSH_MCP_TOKEN || process.env.ZSSH_DEV_BEARER_TOKEN || "";
 
-if (!apiKey && !token) {
-  throw new Error("ZSSH_MCP_API_KEY/ZSSH_API_KEY or ZSSH_MCP_TOKEN/ZSSH_DEV_BEARER_TOKEN is required");
+if (!capabilityToken && !apiKey && !token) {
+  throw new Error("A capability token, API key, or bearer token is required");
+}
+
+let url = baseUrl;
+if (capabilityToken) {
+  const parsed = new URL(baseUrl);
+  const basePath = parsed.pathname.replace(/\/+$/, "");
+  if (basePath === "/mcp") parsed.pathname = "/mcp/" + capabilityToken;
+  url = parsed.href;
 }
 
 const headers = {
   Accept: "application/json, text/event-stream",
 };
-if (apiKey) headers["x-zssh-key"] = apiKey;
-else headers.Authorization = `Bearer ${token}`;
+if (!capabilityToken && apiKey) headers["x-zssh-key"] = apiKey;
+else if (!capabilityToken) headers.Authorization = `Bearer ${token}`;
 
 const client = new Client({ name: "zssh-claude-compat", version: "1.0.0" });
 const transport = new StreamableHTTPClientTransport(new URL(url), {
@@ -42,7 +51,7 @@ try {
   console.log(JSON.stringify({
     ok: true,
     compatible: "claude-mcp",
-    auth: apiKey ? "x-zssh-key" : "bearer",
+    auth: capabilityToken ? "capability-url" : apiKey ? "x-zssh-key" : "bearer",
     endpoint: url,
     tool_count: names.size,
     tools: [...names].sort(),
