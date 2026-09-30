@@ -178,6 +178,8 @@ The helper asks for the tunnel ID and runtime key, stores the key with mode 0600
 
 The helper sets `ZSSH_TRUST_LOCAL_TUNNEL=1` only for the loopback tunnel path. It never enables raw shell. To enable full shell on a disposable/trusted target, change `ZSSH_EXEC_MODE=full` explicitly in `~/.config/zssh/gateway.env`, restart `zssh.service`, and review the audit log first.
 
+For a private target where `zssh_exec` must be able to call `sudo`, the user service intentionally runs with `NoNewPrivileges=false`. This only permits privilege escalation; it does not grant it by itself. The operating-system sudoers policy remains the authorization boundary, so only configure `NOPASSWD` privileges you deliberately want zSSH to have.
+
 ## Canonical project docs
 
 - Project HQ: https://app.notion.com/p/3e89e19ac955811a9008d420e3e2a634
