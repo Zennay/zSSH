@@ -29,6 +29,16 @@ const transport = new StreamableHTTPClientTransport(new URL(url), {
   requestInit: { headers },
 });
 
+const displayEndpoint = capabilityToken
+  ? (() => {
+      const parsed = new URL(baseUrl);
+      parsed.pathname = "/mcp/[REDACTED]";
+      parsed.search = "";
+      parsed.hash = "";
+      return parsed.href;
+    })()
+  : url;
+
 try {
   await client.connect(transport);
   const listed = await client.listTools();
@@ -52,7 +62,7 @@ try {
     ok: true,
     compatible: "claude-mcp",
     auth: capabilityToken ? "capability-url" : apiKey ? "x-zssh-key" : "bearer",
-    endpoint: url,
+    endpoint: displayEndpoint,
     tool_count: names.size,
     tools: [...names].sort(),
     uid: info.uid,
