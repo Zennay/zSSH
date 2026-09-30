@@ -16,7 +16,7 @@ if [[ -z "$TUNNEL_BIN" || ! -x "$TUNNEL_BIN" ]]; then
 fi
 if [[ ! -f "$GATEWAY_ENV" ]]; then
   echo "zSSH gateway config not found: $GATEWAY_ENV" >&2
-  echo "Run deploy/bootstrap-vps.sh first." >&2
+  echo "Run deploy/bootstrap-linux.sh first (bootstrap-vps.sh remains compatible)." >&2
   exit 2
 fi
 if ! command -v systemctl >/dev/null 2>&1; then
