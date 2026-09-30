@@ -9,7 +9,7 @@ zSSH is a **standalone security-first remote operations project**. zCloud is its
 This branch proves the smallest safe foundation:
 
 - remote MCP endpoint at `/mcp`;
-- static `x-zssh-key` authentication for hosted MCP clients, plus bearer authentication for CLI clients;
+- no-sign-in capability URLs for hosted MCP clients, optional static `x-zssh-key` auth, plus bearer authentication for CLI clients;
 - `zssh_server_info`, `zssh_run_safe`, `zssh_exec`, `zssh_read_file`, and `zssh_write_file`;
 - non-root startup guard;
 - command timeout and output limits;
@@ -83,7 +83,7 @@ the same proof has passed on the OVH runtime.
 
 For normal M1 inspection, `zssh_run_safe` uses a fixed read-only binary allowlist and `spawn(..., { shell: false })`, so user arguments are passed as argv instead of being interpreted by a shell. The default allowlist is `uptime`, `whoami`, `id`, `uname`, `pwd`, `df`, and `free`; operators may reduce it further with `ZSSH_SAFE_PROGRAMS`.
 
-Production hardening still requires a dedicated service account, scoped sudo/capabilities, stronger approval semantics, rate limiting, agent pairing, and review against current hosted-MCP requirements. The private single-owner deployment intentionally avoids a browser OAuth flow and instead uses a high-entropy static request header over HTTPS.
+Production hardening still requires a dedicated service account, scoped sudo/capabilities, stronger approval semantics, rate limiting, agent pairing, and review against current hosted-MCP requirements. The private single-owner deployment intentionally avoids a browser OAuth flow. Hosted clients can use a high-entropy capability URL over HTTPS; clients that support custom headers can instead use `x-zssh-key`.
 
 ## ChatGPT integration status
 
@@ -123,19 +123,29 @@ put Caddy or another TLS reverse proxy in front of the loopback-only zSSH
 service. `deploy/Caddyfile.example` contains the minimal reverse-proxy config.
 Do not expose port 8788 directly and do not commit the bearer token.
 
-For Claude's hosted connector, prefer the static header path so there is no
-browser OAuth/DCR consent flow to fail or rate-limit:
+For Claude's hosted connector, the most compatible private single-owner path
+uses **No sign-in** plus a high-entropy capability URL. This avoids the custom
+browser OAuth/DCR flow entirely and does not require Claude to support arbitrary
+request headers:
 
 ```text
 Authentication: No sign-in
-Request header: x-zssh-key: <ZSSH_API_KEY>
-MCP URL: https://YOUR-ZSSH-DOMAIN.example/mcp
+MCP URL: https://YOUR-ZSSH-DOMAIN.example/mcp/<ZSSH_MCP_CAPABILITY_TOKEN>
 ```
 
-The installer stores `ZSSH_API_KEY` only in
-`~/.config/zssh/gateway.env` with mode 0600. Existing bearer authentication
-remains available for Claude Code and other clients that can set an
-`Authorization: Bearer ...` header. Do not commit either secret.
+Treat the entire capability URL as a credential: do not paste it into tickets,
+logs, screenshots, or source control. The installer stores the token only in
+`~/.config/zssh/gateway.env` with mode 0600.
+
+Clients that support custom request headers may instead use:
+
+```text
+MCP URL: https://YOUR-ZSSH-DOMAIN.example/mcp
+Request header: x-zssh-key: <ZSSH_API_KEY>
+```
+
+Existing bearer authentication remains available for Claude Code and other
+clients that can set an `Authorization: Bearer ...` header.
 
 ## Easy VPS installation
 
