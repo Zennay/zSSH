@@ -19,11 +19,13 @@ test("classifies mutation and destructive commands", () => {
 });
 
 test("redacts common secrets", () => {
-  const value = redactSecrets("token=abc123 Authorization: Bearer eyJ.secret password=hunter2");
+  const clientToken = "zssh_0123456789abcdef_abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOP";
+  const value = redactSecrets("token=abc123 Authorization: Bearer eyJ.secret password=hunter2 raw=" + clientToken);
   assert.match(value, /token=\[REDACTED\]/);
   assert.match(value, /Bearer \[REDACTED\]/);
   assert.match(value, /password=\[REDACTED\]/);
-  assert.doesNotMatch(value, /abc123|hunter2|eyJ\.secret/);
+  assert.match(value, /\[REDACTED_ZSSH_TOKEN\]/);
+  assert.doesNotMatch(value, /abc123|hunter2|eyJ\.secret|0123456789abcdef/);
 });
 
 test("allowed path gate accepts inside root and rejects outside root", async () => {
