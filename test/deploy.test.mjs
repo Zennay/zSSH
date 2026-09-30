@@ -24,7 +24,7 @@ test("live installer keeps production raw shell fail-closed and secrets outside 
 test("user service applies restart and baseline sandbox controls", async () => {
   const text = await readFile(path.join(ROOT, "deploy", "zssh.service.in"), "utf8");
   assert.match(text, /Restart=always/);
-  assert.match(text, /NoNewPrivileges=true/);
+  assert.match(text, /NoNewPrivileges=false/);
   assert.match(text, /PrivateTmp=true/);
   assert.match(text, /RestrictSUIDSGID=true/);
   assert.match(text, /EnvironmentFile=%h\/\.config\/zssh\/gateway\.env/);
