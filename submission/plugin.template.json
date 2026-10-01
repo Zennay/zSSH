@@ -20,7 +20,7 @@
       "interface": {
         "displayName": "zSSH",
         "shortDescription": "Secure Linux operations",
-        "longDescription": "Connect ChatGPT to a Linux target you explicitly pair. Inspect uptime, identity, kernel, disk, and memory; read text files within operator-configured roots; and write text files when requested. A compact connection card shows target and pairing state. OAuth identifies the caller, while approval and revocation stay local to the Linux target. Generic shell execution is not exposed in the public plugin.",
+        "longDescription": "Connect ChatGPT to a Linux target you explicitly pair. Inspect uptime, identity, kernel, disk, and memory; read and write non-secret text files within dedicated public roots; and view connection state in a compact card. OAuth identifies the caller, while approval and revocation stay local to the Linux target. The public plugin rejects common credential paths and secret-like file content, and it does not expose generic shell execution.",
         "developerName": "Zennay",
         "category": "Developer Tools",
         "capabilities": [
@@ -95,7 +95,7 @@
         "commerce_description": "zSSH does not sell products or process payments."
       },
       "publication": {
-        "release_notes": "Initial public-plugin candidate with scoped Linux inspection, bounded file access, OAuth resource-server enforcement, local target pairing and revocation, plus a compact connection-status UI with no external origins."
+        "release_notes": "Initial public-plugin candidate with scoped Linux inspection, dedicated non-secret public file roots, OAuth resource-server enforcement, local target pairing and revocation, and a compact connection-status UI with no external origins."
       }
     }
   }
