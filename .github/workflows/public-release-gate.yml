@@ -116,6 +116,9 @@ jobs:
           if (!/^[a-f0-9]{64}$/.test(String(probe.tool_scan_sha256 || ""))) {
             throw new Error("production probe did not emit a valid tool scan fingerprint");
           }
+          if (probe.oauth_authorization_server_metadata_validated !== true || probe.oauth_pkce_s256_validated !== true) {
+            throw new Error("production probe did not prove OAuth authorization-server metadata + PKCE S256");
+          }
           if (!/^[a-f0-9]{64}$/.test(String(bundle.zip_sha256 || ""))) {
             throw new Error("submission bundle did not emit a valid SHA-256");
           }
@@ -135,6 +138,9 @@ jobs:
             submission_bundle_sha256: bundle.zip_sha256,
             redirect_policy: "manual-fail-closed",
             resource_metadata_challenge: "exact-same-origin",
+            oauth_authorization_server_metadata_validated: true,
+            oauth_pkce_s256_validated: true,
+            oauth_authorization_servers: probe.oauth_authorization_servers,
             verified_at: new Date().toISOString()
           };
           writeFileSync(process.env.EVIDENCE_PATH, JSON.stringify(evidence, null, 2) + "\n");
