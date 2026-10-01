@@ -27,6 +27,7 @@ try {
   const required = [
     "zssh_server_info",
     "get_profile",
+    "get_pairing_status",
     "zssh_read_file",
     "zssh_write_file",
     "get_system_uptime",
