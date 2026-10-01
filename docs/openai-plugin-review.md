@@ -37,19 +37,27 @@ The private profile keeps the existing trusted-operator tools, including the saf
 
 ## Still required before public directory submission
 
-### 1. OAuth 2.1 for public user authentication
+### 1. OAuth 2.1 authorization server / identity provider
 
-OpenAI's published MCP authentication guidance expects OAuth 2.1 for servers that expose private user data or take actions. zSSH's current capability URL, static key, and development bearer-token modes are appropriate for private/test deployments, not the intended public-directory authentication path.
+The zSSH **resource-server half is implemented**:
 
-The public path needs:
-- MCP protected-resource metadata;
-- authorization-server metadata;
-- Authorization Code + PKCE (S256);
-- access-token verification including issuer, audience, expiry, and scopes;
-- OpenID/email support if workspace domain restrictions are required;
-- a reviewer account that works without inaccessible MFA or magic-link steps.
+- `/.well-known/oauth-protected-resource` returns RFC 9728 metadata;
+- unauthenticated MCP requests return `WWW-Authenticate` with `resource_metadata`;
+- access tokens are verified cryptographically against configured JWKS;
+- issuer, audience, expiration, and scopes are enforced;
+- public tools advertise OAuth security schemes;
+- `zssh:read` and `zssh:write` are enforced separately;
+- production public mode requires HTTPS OAuth configuration and fails closed when it is missing.
 
-Do not remove the current private authentication modes while adding this.
+The remaining OAuth work is the external authorization-server / IdP side:
+- publish OAuth authorization-server metadata;
+- support Authorization Code + PKCE (S256);
+- support ChatGPT client identification through CIMD, DCR, or a predefined client;
+- echo the exact `resource` value through authorization and token exchange;
+- mint access tokens whose audience is the configured zSSH resource;
+- provide a reviewer login that does not require inaccessible MFA or magic-link steps.
+
+zSSH should use an established OAuth/OIDC provider rather than implementing password authentication itself. The current capability URL, static key, and development bearer-token modes remain available only for private/test deployments.
 
 ### 2. Production endpoint model
 
@@ -97,3 +105,21 @@ node public-plugin-canary.mjs
 ```
 
 The public canary must fail if the generic raw-shell/program tools appear in the scan or if required annotations are missing.
+
+## OAuth resource-server configuration
+
+For a public production deployment:
+
+```bash
+NODE_ENV=production \
+ZSSH_PLUGIN_PROFILE=public \
+ZSSH_PUBLIC_AUTH_MODE=oauth \
+ZSSH_PUBLIC_BASE_URL='https://mcp.example.com' \
+ZSSH_OAUTH_ISSUER='https://auth.example.com' \
+ZSSH_OAUTH_JWKS_URI='https://auth.example.com/.well-known/jwks.json' \
+ZSSH_OAUTH_SCOPES='zssh:read zssh:write' \
+ZSSH_EXEC_MODE=disabled \
+node server.mjs
+```
+
+The MCP resource server rejects startup if the required OAuth URLs are missing or non-HTTPS in production.
