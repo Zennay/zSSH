@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 function fail(message) {
   throw new Error(message);
 }
@@ -81,4 +83,32 @@ export async function fetchNoRedirect(input, init = {}, label = "request") {
     throw new Error(`${label} must not redirect${location ? `: ${location}` : ""}`);
   }
   return response;
+}
+
+function canonicalize(value) {
+  if (Array.isArray(value)) return value.map(canonicalize);
+  if (!value || typeof value !== "object") return value;
+  return Object.fromEntries(
+    Object.entries(value)
+      .filter(([, child]) => child !== undefined)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([key, child]) => [key, canonicalize(child)])
+  );
+}
+
+export function publicToolContractFingerprint(tools) {
+  const normalized = [...(tools || [])]
+    .map(tool => ({
+      name: tool?.name,
+      title: tool?.title,
+      description: tool?.description,
+      inputSchema: tool?.inputSchema,
+      outputSchema: tool?.outputSchema,
+      securitySchemes: tool?.securitySchemes,
+      annotations: tool?.annotations,
+      _meta: tool?._meta,
+    }))
+    .sort((a, b) => String(a.name || "").localeCompare(String(b.name || "")));
+  const canonical = JSON.stringify(canonicalize(normalized));
+  return createHash("sha256").update(canonical, "utf8").digest("hex");
 }
