@@ -22,10 +22,11 @@ export function isNonPublicHostname(hostname) {
   return [".local", ".localhost", ".test", ".example", ".invalid"].some(suffix => host.endsWith(suffix));
 }
 
-export function validatePublicMcpUrl(raw, {
-  name = "MCP URL",
+function validatePublicHttpsUrl(raw, {
+  name = "URL",
   allowHttp = false,
   requirePublicHostname = true,
+  allowQuery = true,
 } = {}) {
   let url;
   try {
@@ -39,10 +40,25 @@ export function validatePublicMcpUrl(raw, {
     fail(`${name} must use ${allowHttp ? "http or https" : "https"}`);
   }
   if (url.username || url.password) fail(`${name} must not contain URL credentials`);
-  if (url.search || url.hash) fail(`${name} must not contain query parameters or fragments`);
+  if (!allowQuery && (url.search || url.hash)) fail(`${name} must not contain query parameters or fragments`);
+  if (url.hash) fail(`${name} must not contain a fragment`);
   if (requirePublicHostname && isNonPublicHostname(url.hostname)) {
     fail(`${name} must use a public hostname`);
   }
+  return url;
+}
+
+export function validatePublicMcpUrl(raw, {
+  name = "MCP URL",
+  allowHttp = false,
+  requirePublicHostname = true,
+} = {}) {
+  const url = validatePublicHttpsUrl(raw, {
+    name,
+    allowHttp,
+    requirePublicHostname,
+    allowQuery: false,
+  });
 
   const normalizedPath = url.pathname.replace(/\/+$/, "") || "/";
   if (normalizedPath !== "/mcp") fail(`${name} must point to the /mcp endpoint`);
@@ -53,6 +69,132 @@ export function validatePublicMcpUrl(raw, {
 export function protectedResourceMetadataUrl(mcpUrl) {
   const url = mcpUrl instanceof URL ? mcpUrl : new URL(mcpUrl);
   return new URL("/.well-known/oauth-protected-resource", url.origin);
+}
+
+export function authorizationServerMetadataUrls(rawIssuer, {
+  allowHttp = false,
+  requirePublicHostname = true,
+} = {}) {
+  const issuer = validatePublicHttpsUrl(rawIssuer, {
+    name: "OAuth authorization server issuer",
+    allowHttp,
+    requirePublicHostname,
+    allowQuery: false,
+  });
+  const path = issuer.pathname.replace(/\/+$/, "");
+  const oauth = new URL(`/.well-known/oauth-authorization-server${path}`, issuer.origin);
+  const oidc = new URL(`${path}/.well-known/openid-configuration`, issuer.origin);
+  return [...new Map([oauth, oidc].map(url => [url.href, url])).values()];
+}
+
+function normalizeIssuer(raw, options) {
+  const url = validatePublicHttpsUrl(raw, {
+    name: "OAuth authorization server issuer",
+    ...options,
+    allowQuery: false,
+  });
+  return url.href.replace(/\/$/, "");
+}
+
+function validateMetadataEndpoint(raw, field, options) {
+  return validatePublicHttpsUrl(raw, {
+    name: `OAuth metadata ${field}`,
+    ...options,
+    allowQuery: true,
+  }).href;
+}
+
+export function validateAuthorizationServerMetadata(metadata, expectedIssuer, {
+  allowHttp = false,
+  requirePublicHostname = true,
+} = {}) {
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) {
+    fail("OAuth authorization server metadata must be a JSON object");
+  }
+
+  const urlOptions = { allowHttp, requirePublicHostname };
+  const expected = normalizeIssuer(expectedIssuer, urlOptions);
+  const actual = normalizeIssuer(metadata.issuer, urlOptions);
+  if (actual !== expected) {
+    fail(`OAuth authorization server issuer mismatch: expected ${expected}, got ${actual}`);
+  }
+
+  const authorizationEndpoint = validateMetadataEndpoint(
+    metadata.authorization_endpoint,
+    "authorization_endpoint",
+    urlOptions
+  );
+  const tokenEndpoint = validateMetadataEndpoint(
+    metadata.token_endpoint,
+    "token_endpoint",
+    urlOptions
+  );
+
+  if (!Array.isArray(metadata.response_types_supported) || !metadata.response_types_supported.includes("code")) {
+    fail("OAuth authorization server metadata must advertise authorization-code response type");
+  }
+  if (!Array.isArray(metadata.code_challenge_methods_supported) || !metadata.code_challenge_methods_supported.includes("S256")) {
+    fail("OAuth authorization server metadata must advertise PKCE S256");
+  }
+  if (!Array.isArray(metadata.token_endpoint_auth_methods_supported) || metadata.token_endpoint_auth_methods_supported.length < 1) {
+    fail("OAuth authorization server metadata must publish token_endpoint_auth_methods_supported");
+  }
+
+  const registrationEndpoint = metadata.registration_endpoint
+    ? validateMetadataEndpoint(metadata.registration_endpoint, "registration_endpoint", urlOptions)
+    : null;
+
+  return {
+    issuer: actual,
+    authorization_endpoint: authorizationEndpoint,
+    token_endpoint: tokenEndpoint,
+    registration_endpoint: registrationEndpoint,
+    pkce_s256: true,
+    authorization_code: true,
+    token_endpoint_auth_methods: [...new Set(metadata.token_endpoint_auth_methods_supported.map(String))],
+  };
+}
+
+export async function fetchAuthorizationServerMetadata(rawIssuer, {
+  allowHttp = false,
+  requirePublicHostname = true,
+  fetchImpl = fetch,
+} = {}) {
+  const candidates = authorizationServerMetadataUrls(rawIssuer, { allowHttp, requirePublicHostname });
+  let lastStatus = null;
+
+  for (const candidate of candidates) {
+    const response = await fetchImpl(candidate, { redirect: "manual", headers: { accept: "application/json" } });
+    if (response.status >= 300 && response.status < 400) {
+      const location = response.headers.get("location");
+      fail(`OAuth authorization server metadata must not redirect${location ? `: ${location}` : ""}`);
+    }
+    if (response.status === 404) {
+      lastStatus = response.status;
+      continue;
+    }
+    if (!response.ok) {
+      fail(`OAuth authorization server metadata failed: HTTP ${response.status}`);
+    }
+
+    let metadata;
+    try {
+      metadata = await response.json();
+    } catch {
+      fail("OAuth authorization server metadata is not valid JSON");
+    }
+    const validated = validateAuthorizationServerMetadata(metadata, rawIssuer, {
+      allowHttp,
+      requirePublicHostname,
+    });
+    return {
+      url: candidate.href,
+      metadata,
+      validated,
+    };
+  }
+
+  fail(`OAuth authorization server metadata was not found${lastStatus ? ` (last HTTP ${lastStatus})` : ""}`);
 }
 
 export function assertExactBearerResourceMetadata(headerValue, expectedUrl) {
