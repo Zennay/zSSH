@@ -3,10 +3,13 @@ import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import {
   assertExactBearerResourceMetadata,
+  authorizationServerMetadataUrls,
+  fetchAuthorizationServerMetadata,
   fetchNoRedirect,
   isNonPublicHostname,
   protectedResourceMetadataUrl,
   publicToolContractFingerprint,
+  validateAuthorizationServerMetadata,
   validatePublicMcpUrl,
 } from "../release-contract.mjs";
 
@@ -43,6 +46,78 @@ test("OAuth protected-resource challenge must match the exact submitted origin",
     /mismatch/
   );
   assert.throws(() => assertExactBearerResourceMetadata("Bearer", expected), /missing resource_metadata/);
+});
+
+test("OAuth authorization-server discovery supports RFC 8414 and OIDC issuer paths", () => {
+  assert.deepEqual(
+    authorizationServerMetadataUrls("https://auth.zssh.dev/tenant").map(url => url.href),
+    [
+      "https://auth.zssh.dev/.well-known/oauth-authorization-server/tenant",
+      "https://auth.zssh.dev/tenant/.well-known/openid-configuration",
+    ]
+  );
+});
+
+test("OAuth authorization-server metadata must prove authorization code and PKCE S256", () => {
+  const good = {
+    issuer: "https://auth.zssh.dev/tenant",
+    authorization_endpoint: "https://auth.zssh.dev/tenant/authorize",
+    token_endpoint: "https://auth.zssh.dev/tenant/token",
+    registration_endpoint: "https://auth.zssh.dev/tenant/register",
+    response_types_supported: ["code"],
+    code_challenge_methods_supported: ["S256"],
+    token_endpoint_auth_methods_supported: ["none", "client_secret_post"],
+  };
+  const validated = validateAuthorizationServerMetadata(good, good.issuer);
+  assert.equal(validated.pkce_s256, true);
+  assert.equal(validated.authorization_code, true);
+  assert.equal(validated.registration_endpoint, good.registration_endpoint);
+
+  assert.throws(
+    () => validateAuthorizationServerMetadata({ ...good, issuer: "https://other.zssh.dev" }, good.issuer),
+    /issuer mismatch/
+  );
+  assert.throws(
+    () => validateAuthorizationServerMetadata({ ...good, code_challenge_methods_supported: ["plain"] }, good.issuer),
+    /PKCE S256/
+  );
+  assert.throws(
+    () => validateAuthorizationServerMetadata({ ...good, response_types_supported: ["token"] }, good.issuer),
+    /authorization-code/
+  );
+  assert.throws(
+    () => validateAuthorizationServerMetadata({ ...good, token_endpoint_auth_methods_supported: [] }, good.issuer),
+    /token_endpoint_auth_methods_supported/
+  );
+});
+
+test("OAuth authorization-server discovery falls back from RFC 8414 to OIDC metadata", async () => {
+  const calls = [];
+  const metadata = {
+    issuer: "http://127.0.0.1:8080/tenant",
+    authorization_endpoint: "http://127.0.0.1:8080/tenant/authorize",
+    token_endpoint: "http://127.0.0.1:8080/tenant/token",
+    response_types_supported: ["code"],
+    code_challenge_methods_supported: ["S256"],
+    token_endpoint_auth_methods_supported: ["none"],
+  };
+  const fetchImpl = async input => {
+    calls.push(String(input));
+    if (calls.length === 1) return new Response("", { status: 404 });
+    return new Response(JSON.stringify(metadata), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+  };
+
+  const discovered = await fetchAuthorizationServerMetadata(metadata.issuer, {
+    allowHttp: true,
+    requirePublicHostname: false,
+    fetchImpl,
+  });
+  assert.equal(calls.length, 2);
+  assert.match(discovered.url, /openid-configuration$/);
+  assert.equal(discovered.validated.pkce_s256, true);
 });
 
 test("release probe helper fails closed instead of following redirects", async () => {
