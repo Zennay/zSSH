@@ -26,6 +26,7 @@ const OPENAI_APPS_CHALLENGE_TOKEN = process.env.OPENAI_APPS_CHALLENGE_TOKEN || "
 const PUBLIC_AUTH_MODE = process.env.ZSSH_PUBLIC_AUTH_MODE === "legacy" ? "legacy" : "oauth";
 const OAUTH_CONFIG = oauthConfigFromEnv();
 const PAIRING_REQUIRED = PLUGIN_PROFILE === "public" && process.env.ZSSH_PAIRING_REQUIRED !== "0";
+const TARGET_LABEL = String(process.env.ZSSH_TARGET_LABEL || "Linux target").trim().slice(0, 80) || "Linux target";
 const AUDIT_LOG = path.resolve(process.env.ZSSH_AUDIT_LOG || "./data/audit.jsonl");
 const SAFE_PROGRAM_PATHS = Object.freeze({
   uptime: "/usr/bin/uptime",
@@ -384,7 +385,7 @@ function publicProfileFromAuth(extra) {
   return {
     id: profileIdFromAuth(authInfo, OAUTH_CONFIG?.resource || ""),
     name: "zSSH",
-    nickname: os.hostname(),
+    nickname: TARGET_LABEL,
   };
 }
 
@@ -464,21 +465,33 @@ function createMcpServer() {
     async (_args, extra) => {
       const authError = await publicToolAuthorizationError(extra, OAUTH_CONFIG?.readScope || "zssh:read");
       if (authError) return authError;
+      if (PLUGIN_PROFILE === "public") {
+        return result({
+          version: VERSION,
+          target_label: TARGET_LABEL,
+          platform: process.platform,
+          arch: process.arch,
+          exec_mode: EXEC_MODE,
+          plugin_profile: PLUGIN_PROFILE,
+          auth_mode: PUBLIC_AUTH_MODE,
+          pairing_required: PAIRING_REQUIRED
+        });
+      }
       return result({
-      version: VERSION,
-      hostname: os.hostname(),
-      platform: process.platform,
-      arch: process.arch,
-      uid: typeof process.getuid === "function" ? process.getuid() : null,
-      exec_mode: EXEC_MODE,
-      plugin_profile: PLUGIN_PROFILE,
-      safe_programs: getEnabledSafePrograms(),
-      allowed_roots: getAllowedRoots(),
-      timeout_seconds: COMMAND_TIMEOUT_SECONDS,
-      max_output_bytes: MAX_OUTPUT_BYTES,
-      auth_mode: PLUGIN_PROFILE === "public" ? PUBLIC_AUTH_MODE : "private",
-      pairing_required: PAIRING_REQUIRED
-    });
+        version: VERSION,
+        hostname: os.hostname(),
+        platform: process.platform,
+        arch: process.arch,
+        uid: typeof process.getuid === "function" ? process.getuid() : null,
+        exec_mode: EXEC_MODE,
+        plugin_profile: PLUGIN_PROFILE,
+        safe_programs: getEnabledSafePrograms(),
+        allowed_roots: getAllowedRoots(),
+        timeout_seconds: COMMAND_TIMEOUT_SECONDS,
+        max_output_bytes: MAX_OUTPUT_BYTES,
+        auth_mode: "private",
+        pairing_required: false
+      });
     }
   );
 
