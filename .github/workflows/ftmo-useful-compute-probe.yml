@@ -7,7 +7,7 @@ on:
       - ".github/workflows/ftmo-useful-compute-probe.yml"
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: ftmo-useful-compute-proof-zssh
@@ -22,7 +22,14 @@ jobs:
     env:
       FTMO_ROOT: /opt/ftmo-autonomous
     steps:
+      - name: Check out proof repository
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: main
+          fetch-depth: 0
+
       - name: Restore and prove FTMO compute
+        continue-on-error: true
         shell: bash
         run: |
           set -euo pipefail
@@ -164,7 +171,12 @@ jobs:
           controller=status.get("research_controller") or {}
           loop=controller.get("generation_loop") or {}
           receipt={
+              "schema_version":1,
               "scope":"ftmo-zssh-useful-compute-proof",
+              "workflow_run_id":os.environ.get("GITHUB_RUN_ID"),
+              "workflow_run_attempt":os.environ.get("GITHUB_RUN_ATTEMPT"),
+              "zssh_source_sha":os.environ.get("GITHUB_SHA"),
+              "ftmo_runtime_revision":status.get("runtime_revision"),
               "sample_seconds":round(t1-t0,6),
               "logical_cpus":os.cpu_count() or 1,
               "host_busy_cpu_seconds":round(host,6),
@@ -199,6 +211,8 @@ jobs:
               "broker_order_submission_allowed":status.get("broker_order_submission_allowed"),
               "live_trading_allowed":status.get("live_trading_allowed"),
           }
+          proof_path=Path("/tmp/ftmo-useful-compute-proof.json")
+          proof_path.write_text(json.dumps(receipt,sort_keys=True,indent=2)+"\n",encoding="utf-8")
           print("FTMO_ZSSH_RECEIPT="+json.dumps(receipt,sort_keys=True))
           if receipt["service"]["active_state"] != "active":
               raise SystemExit("FTMO marathon inactive")
@@ -215,3 +229,45 @@ jobs:
           ps -eo pid,ppid,user,cgroup,comm,%cpu,%mem,etime --sort=-%cpu | head -n 40
           echo "=== TOP CGROUPS ==="
           systemd-cgtop -b -n 1 --depth=5 --order=cpu 2>/dev/null | head -n 80 || true
+
+
+      - name: Persist FTMO useful-compute proof receipt
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f /tmp/ftmo-useful-compute-proof.json
+          git fetch origin main
+          git reset --hard origin/main
+          mkdir -p artifacts/ops
+          cp /tmp/ftmo-useful-compute-proof.json artifacts/ops/ftmo-useful-compute-proof.json
+          git config user.name "zssh-automation"
+          git config user.email "zssh-automation@users.noreply.github.com"
+          git add artifacts/ops/ftmo-useful-compute-proof.json
+          if git diff --cached --quiet; then
+            echo "Proof receipt unchanged"
+          else
+            git commit -m "Record FTMO useful-compute proof"
+            git push origin HEAD:main
+          fi
+
+      - name: Enforce persisted FTMO useful-compute gate
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          receipt=json.loads(Path("artifacts/ops/ftmo-useful-compute-proof.json").read_text())
+          if receipt.get("service",{}).get("active_state") != "active":
+              raise SystemExit("FTMO marathon inactive")
+          if receipt.get("broker_order_submission_allowed") is not False:
+              raise SystemExit("broker order boundary changed")
+          if receipt.get("live_trading_allowed") is not False:
+              raise SystemExit("live trading boundary changed")
+          compute=(receipt.get("controller_receipt",{}).get("controller_compute") or {})
+          if compute.get("ok") is not True:
+              raise SystemExit("advanced controller compute receipt missing")
+          if receipt.get("ftmo_primary_attributed_compute") is not True:
+              raise SystemExit("FTMO not primary useful CPU consumer")
+          print("FTMO_USEFUL_COMPUTE_PROOF_GREEN",json.dumps(receipt,sort_keys=True))
+          PY
