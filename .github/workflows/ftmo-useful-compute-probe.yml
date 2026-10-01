@@ -15,7 +15,9 @@ concurrency:
 
 jobs:
   prove:
-    runs-on: self-hosted
+    runs-on:
+      - self-hosted
+      - haxlab
     timeout-minutes: 8
     env:
       FTMO_ROOT: /opt/ftmo-autonomous
