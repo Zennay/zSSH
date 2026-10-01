@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
 
 function fail(message) {
   throw new Error(message);
@@ -238,18 +239,9 @@ function canonicalize(value) {
   );
 }
 
-export const PUBLIC_TOOL_SCOPE_CONTRACT = Object.freeze({
-  get_profile: "zssh:read",
-  get_pairing_status: "zssh:read",
-  zssh_server_info: "zssh:read",
-  get_system_uptime: "zssh:read",
-  get_system_identity: "zssh:read",
-  get_kernel_info: "zssh:read",
-  get_disk_usage: "zssh:read",
-  get_memory_usage: "zssh:read",
-  zssh_read_file: "zssh:read",
-  zssh_write_file: "zssh:write",
-});
+export const PUBLIC_TOOL_SCOPE_CONTRACT = Object.freeze(
+  JSON.parse(readFileSync(new URL("./submission/public-tool-contract.json", import.meta.url), "utf8"))
+);
 
 function assertExactOAuthScheme(tool, location, schemes, expectedScope) {
   if (!Array.isArray(schemes)) {
