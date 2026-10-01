@@ -19,6 +19,8 @@ const DEV_TOKEN = process.env.ZSSH_DEV_BEARER_TOKEN || "";
 const API_KEY = process.env.ZSSH_API_KEY || "";
 const CAPABILITY_TOKEN = process.env.ZSSH_MCP_CAPABILITY_TOKEN || "";
 const TRUST_LOCAL_TUNNEL = process.env.ZSSH_TRUST_LOCAL_TUNNEL === "1";
+const PLUGIN_PROFILE = process.env.ZSSH_PLUGIN_PROFILE === "public" ? "public" : "private";
+const OPENAI_APPS_CHALLENGE_TOKEN = process.env.OPENAI_APPS_CHALLENGE_TOKEN || "";
 const AUDIT_LOG = path.resolve(process.env.ZSSH_AUDIT_LOG || "./data/audit.jsonl");
 const SAFE_PROGRAM_PATHS = Object.freeze({
   uptime: "/usr/bin/uptime",
@@ -361,7 +363,9 @@ function createMcpServer() {
     { name: "zssh", version: VERSION },
     {
       instructions:
-        "zSSH operates a private Linux target. Prefer read-only inspection first. Destructive commands are blocked in safe mode. Never request or echo credentials, private keys, tokens, or passwords."
+        PLUGIN_PROFILE === "public"
+          ? "zSSH connects to one user-authorized Linux target. Use only the narrowly scoped tools exposed by this public profile. Prefer read-only inspection first, make file writes only when the user asked for them, and never request or echo credentials, private keys, tokens, or passwords."
+          : "zSSH operates a private Linux target. Prefer read-only inspection first. Destructive commands are blocked in safe mode. Never request or echo credentials, private keys, tokens, or passwords."
     }
   );
 
@@ -380,6 +384,7 @@ function createMcpServer() {
       arch: process.arch,
       uid: typeof process.getuid === "function" ? process.getuid() : null,
       exec_mode: EXEC_MODE,
+      plugin_profile: PLUGIN_PROFILE,
       safe_programs: getEnabledSafePrograms(),
       allowed_roots: getAllowedRoots(),
       timeout_seconds: COMMAND_TIMEOUT_SECONDS,
@@ -425,50 +430,106 @@ function createMcpServer() {
   );
 
 
-  server.registerTool(
-    "zssh_run_safe",
-    {
-      title: "Run safe program",
-      description: "Run one hard-allowlisted read-only Linux program without a shell. Arguments are passed directly as argv and are never shell-interpreted.",
-      inputSchema: {
-        program: z.enum(SAFE_PROGRAM_NAMES),
-        args: z.array(z.string().max(512)).max(32).optional(),
-        cwd: z.string().min(1).optional(),
-        timeout_seconds: z.number().int().min(1).max(300).optional()
-      },
-      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }
-    },
-    async ({ program, args, cwd, timeout_seconds }) => {
-      try {
-        const value = await runSafeProgram(program, args || [], cwd, timeout_seconds);
-        return result(value, !value.ok);
-      } catch (err) {
-        return result({ ok: false, error: String(err?.message || err) }, true);
-      }
-    }
-  );
+  if (PLUGIN_PROFILE === "public") {
+    const registerReadOnlyProgramTool = (name, title, description, program, args = []) => {
+      server.registerTool(
+        name,
+        {
+          title,
+          description,
+          inputSchema: {},
+          annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }
+        },
+        async () => {
+          try {
+            const value = await runSafeProgram(program, args);
+            return result(value, !value.ok);
+          } catch (err) {
+            return result({ ok: false, error: String(err?.message || err) }, true);
+          }
+        }
+      );
+    };
 
-  server.registerTool(
-    "zssh_exec",
-    {
-      title: "Execute command",
-      description: "Run one bounded shell command on the connected Linux target. Raw shell is disabled by default and must be explicitly enabled for a trusted/disposable target.",
-      inputSchema: {
-        command: z.string().min(1).max(4096),
-        cwd: z.string().min(1).optional(),
-        timeout_seconds: z.number().int().min(1).max(300).optional()
+    registerReadOnlyProgramTool(
+      "get_system_uptime",
+      "Get system uptime",
+      "Read the connected Linux target's current uptime and load averages. This does not modify the target.",
+      "uptime"
+    );
+    registerReadOnlyProgramTool(
+      "get_system_identity",
+      "Get system identity",
+      "Read the effective Linux user and group identity used by zSSH on the connected target. This does not modify the target.",
+      "id"
+    );
+    registerReadOnlyProgramTool(
+      "get_kernel_info",
+      "Get kernel info",
+      "Read the connected Linux target's kernel, hostname, architecture, and operating-system information. This does not modify the target.",
+      "uname",
+      ["-a"]
+    );
+    registerReadOnlyProgramTool(
+      "get_disk_usage",
+      "Get disk usage",
+      "Read filesystem capacity and free-space information for mounted filesystems on the connected Linux target. This does not modify the target.",
+      "df",
+      ["-h"]
+    );
+    registerReadOnlyProgramTool(
+      "get_memory_usage",
+      "Get memory usage",
+      "Read current memory and swap usage on the connected Linux target. This does not modify the target.",
+      "free",
+      ["-h"]
+    );
+  } else {
+    server.registerTool(
+      "zssh_run_safe",
+      {
+        title: "Run safe program",
+        description: "Run one hard-allowlisted read-only Linux program without a shell. Arguments are passed directly as argv and are never shell-interpreted.",
+        inputSchema: {
+          program: z.enum(SAFE_PROGRAM_NAMES),
+          args: z.array(z.string().max(512)).max(32).optional(),
+          cwd: z.string().min(1).optional(),
+          timeout_seconds: z.number().int().min(1).max(300).optional()
+        },
+        annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }
       },
-      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false }
-    },
-    async ({ command, cwd, timeout_seconds }) => {
-      try {
-        const value = await execute(command, cwd, timeout_seconds);
-        return result(value, !value.ok);
-      } catch (err) {
-        return result({ ok: false, error: String(err?.message || err) }, true);
+      async ({ program, args, cwd, timeout_seconds }) => {
+        try {
+          const value = await runSafeProgram(program, args || [], cwd, timeout_seconds);
+          return result(value, !value.ok);
+        } catch (err) {
+          return result({ ok: false, error: String(err?.message || err) }, true);
+        }
       }
-    }
-  );
+    );
+
+    server.registerTool(
+      "zssh_exec",
+      {
+        title: "Execute command",
+        description: "Run one bounded shell command on the connected Linux target. Raw shell is disabled by default and must be explicitly enabled for a trusted/disposable target.",
+        inputSchema: {
+          command: z.string().min(1).max(4096),
+          cwd: z.string().min(1).optional(),
+          timeout_seconds: z.number().int().min(1).max(300).optional()
+        },
+        annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false }
+      },
+      async ({ command, cwd, timeout_seconds }) => {
+        try {
+          const value = await execute(command, cwd, timeout_seconds);
+          return result(value, !value.ok);
+        } catch (err) {
+          return result({ ok: false, error: String(err?.message || err) }, true);
+        }
+      }
+    );
+  }
 
   return server;
 }
@@ -511,6 +572,9 @@ export function start() {
   if (typeof process.getuid === "function" && process.getuid() === 0 && process.env.ZSSH_ALLOW_ROOT !== "1") {
     throw new Error("zSSH refuses to run as root; use a dedicated unprivileged service account");
   }
+  if (PLUGIN_PROFILE === "public" && EXEC_MODE === "full") {
+    throw new Error("public plugin profile refuses ZSSH_EXEC_MODE=full; raw shell must stay disabled");
+  }
   if (process.env.NODE_ENV === "production" && !CAPABILITY_TOKEN && !API_KEY && !DEV_TOKEN && !TRUST_LOCAL_TUNNEL) {
     throw new Error("production requires authentication; configure a capability token, ZSSH_API_KEY, a bearer token, or explicitly trust the loopback tunnel");
   }
@@ -518,6 +582,11 @@ export function start() {
   const httpServer = createServer(async (req, res) => {
     if (!req.url) return res.writeHead(400).end("Missing URL");
     const url = new URL(req.url, "http://" + (req.headers.host || "localhost"));
+
+    if (req.method === "GET" && url.pathname === "/.well-known/openai-apps-challenge") {
+      if (!OPENAI_APPS_CHALLENGE_TOKEN) return res.writeHead(404).end("Not Found");
+      return res.writeHead(200, { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" }).end(OPENAI_APPS_CHALLENGE_TOKEN);
+    }
 
     if (req.method === "GET" && url.pathname === "/health") {
       return res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ ok: true, service: "zssh", version: VERSION }));
