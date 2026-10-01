@@ -9,6 +9,8 @@ This checklist tracks the production path from the current review-ready MCP prof
 - [ ] Stable public HTTPS MCP endpoint configured
 - [ ] Production OAuth authorization server configured with PKCE support
 - [ ] Resource-server metadata points to the production MCP resource
+- [ ] Health, OAuth metadata, challenge, and unauthenticated MCP checks do not redirect away from the submitted origin
+- [ ] `WWW-Authenticate` advertises the exact same-origin `/.well-known/oauth-protected-resource` URL
 - [ ] Domain verification challenge is live
 - [ ] Reviewer account exists without private user data
 - [ ] Dedicated paired target fixture is available
@@ -28,14 +30,15 @@ Verify:
 - read-only annotations remain correct;
 - sensitive paths are rejected;
 - reviewer file fixture remains bounded to the configured public root;
-- tokens and credentials are never printed.
+- tokens and credentials are never printed;
+- release checks fail closed on redirects or mismatched OAuth resource-metadata challenge URLs.
 
 ## Submission evidence
 
 Record:
 
 - production endpoint version/revision;
-- CI run result;
+- CI run result, including the self-hosted VPS release rehearsal for the exact commit;
 - reviewer walkthrough result;
 - portal scan findings and resolutions.
 
