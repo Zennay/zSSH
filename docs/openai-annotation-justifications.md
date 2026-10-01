@@ -12,8 +12,8 @@ These justifications correspond to the public `ZSSH_PLUGIN_PROFILE=public` tool 
 | `get_kernel_info` | true | Executes fixed `uname -a` without a shell. | false | It cannot modify target state. | false | It reads only the paired Linux target. |
 | `get_disk_usage` | true | Executes fixed `df -h` without a shell. | false | It cannot modify target state. | false | It reads only the paired Linux target. |
 | `get_memory_usage` | true | Executes fixed `free -h` without a shell. | false | It cannot modify target state. | false | It reads only the paired Linux target. |
-| `zssh_read_file` | true | Reads one UTF-8 file only after the path resolves inside an operator-configured allowed root. | false | It does not create, replace, delete, or send files. | false | It is bounded to configured private filesystem roots on the paired target. |
-| `zssh_write_file` | false | Creates or atomically replaces a UTF-8 file inside an allowed root. | true | Replacing an existing file can overwrite prior user data, so the action is potentially destructive and must receive write-action friction. | false | It writes only inside configured private filesystem roots on the paired target. |
+| `zssh_read_file` | true | Reads one UTF-8 file only after the path resolves inside an explicit public allowed root; credential-like paths and content are rejected. | false | It does not create, replace, delete, or send files. | false | It is bounded to the dedicated public filesystem roots on the paired target and refuses common secret locations. |
+| `zssh_write_file` | false | Creates or atomically replaces a UTF-8 file inside an explicit public allowed root; credential-like paths and content are rejected. | true | Replacing an existing file can overwrite prior user data, so the action is potentially destructive and must receive write-action friction. | false | It writes only inside dedicated public filesystem roots on the paired target and refuses common secret locations. |
 
 ## Review notes
 
