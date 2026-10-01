@@ -109,6 +109,25 @@ try {
     if (!value.ok || !String(value.stdout || "").trim()) throw new Error(`${name} failed`);
   }
 
+  const publicRoot = String(process.env.ZSSH_PUBLIC_ALLOWED_ROOTS || "").trim();
+  if (!publicRoot) throw new Error("public plugin canary requires ZSSH_PUBLIC_ALLOWED_ROOTS");
+
+  const deniedSecretPath = await client.callTool({
+    name: "zssh_read_file",
+    arguments: { path: publicRoot + "/.env" },
+  });
+  if (!deniedSecretPath.isError || !String(deniedSecretPath.content?.[0]?.text || "").includes("refuses secret or credential file paths")) {
+    throw new Error("public read tool did not reject a credential-like file path");
+  }
+
+  const deniedSecretWrite = await client.callTool({
+    name: "zssh_write_file",
+    arguments: { path: publicRoot + "/notes.txt", content: "api_key=review-secret" },
+  });
+  if (!deniedSecretWrite.isError || !String(deniedSecretWrite.content?.[0]?.text || "").includes("refuses content")) {
+    throw new Error("public write tool did not reject credential-like content");
+  }
+
   const challenge = process.env.OPENAI_APPS_CHALLENGE_TOKEN || "";
   if (challenge) {
     const response = await fetch(`http://127.0.0.1:${port}/.well-known/openai-apps-challenge`);
@@ -123,6 +142,7 @@ try {
     annotations_validated: true,
     oauth_security_schemes_validated: true,
     connection_ui_validated: true,
+    restricted_credential_data_rejected: true,
     domain_challenge_validated: Boolean(challenge),
     tool_count: names.size,
   }));
