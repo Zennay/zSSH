@@ -117,3 +117,35 @@ jobs:
 
       - name: Exercise OAuth target pairing and revocation
         run: node pairing-canary.mjs
+
+      - name: Validate OpenAI submission package builder
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          icon="$RUNNER_TEMP/zssh-test-icon.svg"
+          cat >"$icon" <<'SVG'
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+            <rect width="64" height="64" rx="12"/>
+            <path d="M16 22l12 10-12 10M34 42h14" fill="none" stroke="white" stroke-width="5"/>
+          </svg>
+          SVG
+          python3 scripts/build-openai-plugin.py \
+            --mcp-url "https://mcp.review.example/mcp" \
+            --demo-url "https://review.example/zssh-demo" \
+            --icon "$icon"
+          test -f dist/zssh-openai-plugin.zip
+          python3 - <<'PY'
+          import json, zipfile
+          from pathlib import Path
+          package = Path("dist/zssh-openai-plugin.zip")
+          with zipfile.ZipFile(package) as z:
+              names = set(z.namelist())
+              assert {"plugin.json", "mcp.json", "assets/icon.svg"} <= names
+              plugin = json.loads(z.read("plugin.json"))
+              mcp = json.loads(z.read("mcp.json"))
+          review = plugin["extensions"]["com.openai"]["review"]["test_cases"]
+          assert len(review["positive"]) == 5
+          assert len(review["negative"]) == 3
+          assert mcp["mcpServers"]["zssh"]["url"] == "https://mcp.review.example/mcp"
+          print("OPENAI_PLUGIN_PACKAGE_GREEN")
+          PY
