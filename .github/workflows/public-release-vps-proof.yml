@@ -1,0 +1,39 @@
+name: zSSH public release VPS proof
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/public-release-vps-proof.yml"
+      - "release-contract.mjs"
+      - "production-submission-probe.mjs"
+      - "public-plugin-canary.mjs"
+      - "test/release-contract.test.mjs"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: zssh-public-release-vps-proof-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  prove:
+    name: Public release contract on vps-bb300bba
+    runs-on:
+      - self-hosted
+      - haxlab
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prove release contract on VPS runner
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          echo "runner_host=$(hostname)"
+          node --version
+          node --test test/release-contract.test.mjs
+          node --check release-contract.mjs
+          node --check production-submission-probe.mjs
+          node --check public-plugin-canary.mjs
+          echo "ZSSH_PUBLIC_RELEASE_VPS_CONTRACT_GREEN"
