@@ -9,6 +9,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { z } from "zod";
 import { bearerChallenge, oauthConfigFromEnv, protectedResourceMetadata, requireScopes, verifyOAuthAuthorizationHeader } from "./oauth.mjs";
+import { getPairingStatus, profileIdFromAuth } from "./pairing.mjs";
 
 const VERSION = "0.1.0";
 const PORT = Number(process.env.PORT || 8788);
@@ -24,6 +25,7 @@ const PLUGIN_PROFILE = process.env.ZSSH_PLUGIN_PROFILE === "public" ? "public" :
 const OPENAI_APPS_CHALLENGE_TOKEN = process.env.OPENAI_APPS_CHALLENGE_TOKEN || "";
 const PUBLIC_AUTH_MODE = process.env.ZSSH_PUBLIC_AUTH_MODE === "legacy" ? "legacy" : "oauth";
 const OAUTH_CONFIG = oauthConfigFromEnv();
+const PAIRING_REQUIRED = PLUGIN_PROFILE === "public" && process.env.ZSSH_PAIRING_REQUIRED !== "0";
 const AUDIT_LOG = path.resolve(process.env.ZSSH_AUDIT_LOG || "./data/audit.jsonl");
 const SAFE_PROGRAM_PATHS = Object.freeze({
   uptime: "/usr/bin/uptime",
@@ -379,26 +381,14 @@ function publicSecurity(scope, extraMeta = {}) {
 
 function publicProfileFromAuth(extra) {
   const authInfo = authInfoFromExtra(extra);
-  const subject = String(authInfo?.extra?.sub || authInfo?.clientId || "").trim();
-  if (!subject) {
-    const error = new Error("authenticated profile has no stable subject");
-    error.code = "invalid_token";
-    throw error;
-  }
-  const issuer = String(authInfo?.extra?.issuer || OAUTH_CONFIG?.issuer || "");
-  const resource = String(OAUTH_CONFIG?.resource || "");
-  const opaqueId = crypto.createHash("sha256")
-    .update(issuer + "\u0000" + subject + "\u0000" + resource)
-    .digest("hex")
-    .slice(0, 32);
   return {
-    id: "zssh_" + opaqueId,
+    id: profileIdFromAuth(authInfo, OAUTH_CONFIG?.resource || ""),
     name: "zSSH",
     nickname: os.hostname(),
   };
 }
 
-function toolScopeError(extra, scope) {
+function oauthToolError(extra, scope) {
   if (PLUGIN_PROFILE !== "public" || PUBLIC_AUTH_MODE !== "oauth") return null;
   try {
     requireScopes(authInfoFromExtra(extra), [scope]);
@@ -424,6 +414,33 @@ function toolScopeError(extra, scope) {
   }
 }
 
+async function publicToolAuthorizationError(extra, scope, { requirePairing = true } = {}) {
+  const oauthError = oauthToolError(extra, scope);
+  if (oauthError) return oauthError;
+  if (PLUGIN_PROFILE !== "public" || PUBLIC_AUTH_MODE !== "oauth" || !PAIRING_REQUIRED || !requirePairing) return null;
+
+  const pairing = await getPairingStatus(authInfoFromExtra(extra), {
+    resource: OAUTH_CONFIG?.resource || "",
+    createRequest: true,
+  });
+  if (pairing.paired) return null;
+
+  const message = pairing.pending
+    ? "This OAuth profile is not paired to the Linux target yet. Approve pairing request " + pairing.request_id + " locally on the target."
+    : "This OAuth profile is not paired to the Linux target.";
+  return {
+    content: [{ type: "text", text: message }],
+    structuredContent: {
+      paired: false,
+      pending: Boolean(pairing.pending),
+      profile_id: pairing.profile_id,
+      request_id: pairing.request_id || null,
+      expires_at: pairing.expires_at || null,
+    },
+    isError: true,
+  };
+}
+
 function createMcpServer() {
   const server = new McpServer(
     { name: "zssh", version: VERSION },
@@ -445,7 +462,7 @@ function createMcpServer() {
       ...publicSecurity(OAUTH_CONFIG?.readScope || "zssh:read")
     },
     async (_args, extra) => {
-      const authError = toolScopeError(extra, OAUTH_CONFIG?.readScope || "zssh:read");
+      const authError = await publicToolAuthorizationError(extra, OAUTH_CONFIG?.readScope || "zssh:read");
       if (authError) return authError;
       return result({
       version: VERSION,
@@ -459,7 +476,8 @@ function createMcpServer() {
       allowed_roots: getAllowedRoots(),
       timeout_seconds: COMMAND_TIMEOUT_SECONDS,
       max_output_bytes: MAX_OUTPUT_BYTES,
-      auth_mode: PLUGIN_PROFILE === "public" ? PUBLIC_AUTH_MODE : "private"
+      auth_mode: PLUGIN_PROFILE === "public" ? PUBLIC_AUTH_MODE : "private",
+      pairing_required: PAIRING_REQUIRED
     });
     }
   );
@@ -474,7 +492,7 @@ function createMcpServer() {
       ...publicSecurity(OAUTH_CONFIG?.readScope || "zssh:read")
     },
     async ({ path: filePath }, extra) => {
-      const authError = toolScopeError(extra, OAUTH_CONFIG?.readScope || "zssh:read");
+      const authError = await publicToolAuthorizationError(extra, OAUTH_CONFIG?.readScope || "zssh:read");
       if (authError) return authError;
       try {
         return result(await readTextFile(filePath));
@@ -497,7 +515,7 @@ function createMcpServer() {
       ...publicSecurity(OAUTH_CONFIG?.writeScope || "zssh:write")
     },
     async ({ path: filePath, content }, extra) => {
-      const authError = toolScopeError(extra, OAUTH_CONFIG?.writeScope || "zssh:write");
+      const authError = await publicToolAuthorizationError(extra, OAUTH_CONFIG?.writeScope || "zssh:write");
       if (authError) return authError;
       try {
         return result({ ok: true, ...(await writeTextFile(filePath, content)) });
@@ -524,7 +542,7 @@ function createMcpServer() {
         ...publicSecurity(OAUTH_CONFIG?.readScope || "zssh:read", { "openai/profile": true })
       },
       async (_args, extra) => {
-        const authError = toolScopeError(extra, OAUTH_CONFIG?.readScope || "zssh:read");
+        const authError = await publicToolAuthorizationError(extra, OAUTH_CONFIG?.readScope || "zssh:read", { requirePairing: false });
         if (authError) return authError;
         try {
           const profile = publicProfileFromAuth(extra);
@@ -551,6 +569,48 @@ function createMcpServer() {
       }
     );
 
+    server.registerTool(
+      "get_pairing_status",
+      {
+        title: "Get target pairing status",
+        description: "Check whether the current authenticated profile is approved to use this Linux target. If approval is needed, create or return a short-lived local pairing request.",
+        inputSchema: {},
+        outputSchema: {
+          paired: z.boolean(),
+          pending: z.boolean(),
+          profile_id: z.string().min(1),
+          request_id: z.string().nullable().optional(),
+          expires_at: z.string().nullable().optional(),
+        },
+        annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+        ...publicSecurity(OAUTH_CONFIG?.readScope || "zssh:read")
+      },
+      async (_args, extra) => {
+        const authError = await publicToolAuthorizationError(extra, OAUTH_CONFIG?.readScope || "zssh:read", { requirePairing: false });
+        if (authError) return authError;
+        try {
+          const pairing = await getPairingStatus(authInfoFromExtra(extra), {
+            resource: OAUTH_CONFIG?.resource || "",
+            createRequest: true,
+          });
+          const value = {
+            paired: Boolean(pairing.paired),
+            pending: Boolean(pairing.pending),
+            profile_id: pairing.profile_id,
+            request_id: pairing.request_id || null,
+            expires_at: pairing.expires_at || null,
+          };
+          return {
+            content: [{ type: "text", text: JSON.stringify(value) }],
+            structuredContent: value,
+            isError: false,
+          };
+        } catch (err) {
+          return result({ ok: false, error: String(err?.message || err) }, true);
+        }
+      }
+    );
+
     const registerReadOnlyProgramTool = (name, title, description, program, args = []) => {
       server.registerTool(
         name,
@@ -562,7 +622,7 @@ function createMcpServer() {
           ...publicSecurity(OAUTH_CONFIG?.readScope || "zssh:read")
         },
         async (_args, extra) => {
-          const authError = toolScopeError(extra, OAUTH_CONFIG?.readScope || "zssh:read");
+          const authError = await publicToolAuthorizationError(extra, OAUTH_CONFIG?.readScope || "zssh:read");
           if (authError) return authError;
           try {
             const value = await runSafeProgram(program, args);
@@ -728,6 +788,9 @@ export function start() {
   }
   if (PLUGIN_PROFILE === "public" && PUBLIC_AUTH_MODE === "legacy" && process.env.NODE_ENV === "production" && process.env.ZSSH_ALLOW_LEGACY_PUBLIC_AUTH !== "1") {
     throw new Error("production public profile requires OAuth; legacy auth is allowed only with explicit ZSSH_ALLOW_LEGACY_PUBLIC_AUTH=1");
+  }
+  if (PLUGIN_PROFILE === "public" && !PAIRING_REQUIRED && process.env.NODE_ENV === "production" && process.env.ZSSH_ALLOW_UNPAIRED_PUBLIC !== "1") {
+    throw new Error("production public profile requires target pairing; disabling it requires explicit ZSSH_ALLOW_UNPAIRED_PUBLIC=1");
   }
   if (process.env.NODE_ENV === "production" && !(PLUGIN_PROFILE === "public" && PUBLIC_AUTH_MODE === "oauth") && !CAPABILITY_TOKEN && !API_KEY && !DEV_TOKEN && !TRUST_LOCAL_TUNNEL) {
     throw new Error("production requires authentication; configure a capability token, ZSSH_API_KEY, a bearer token, or explicitly trust the loopback tunnel");
