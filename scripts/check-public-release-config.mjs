@@ -5,6 +5,27 @@ import { validatePublicMcpUrl } from "../release-contract.mjs";
 
 const argv = new Set(process.argv.slice(2));
 
+const REQUIRED_RELEASE_CONFIG = [
+  "ZSSH_PLUGIN_MCP_URL",
+  "ZSSH_PLUGIN_DEMO_RECORDING_URL",
+  "ZSSH_REVIEW_ACCESS_TOKEN",
+  "OPENAI_APPS_CHALLENGE_TOKEN",
+  "ZSSH_REVIEW_FILE",
+  "ZSSH_REVIEW_WRITE_FILE",
+];
+
+export function publicReleaseConfigPresence(env = process.env) {
+  const configured = Object.fromEntries(
+    REQUIRED_RELEASE_CONFIG.map(name => [name, String(env[name] || "").trim().length > 0])
+  );
+  const missing = REQUIRED_RELEASE_CONFIG.filter(name => !configured[name]);
+  return {
+    ok: missing.length === 0,
+    configured,
+    missing,
+  };
+}
+
 function fail(message) {
   throw new Error(message);
 }
@@ -83,6 +104,13 @@ export function runSelfTest() {
   const result = validatePublicReleaseConfig(good);
   if (!result.ok || result.endpoint_path !== "/mcp") fail("self-test valid configuration failed");
 
+  const presence = publicReleaseConfigPresence(good);
+  if (!presence.ok || presence.missing.length !== 0) fail("self-test valid configuration presence failed");
+  const missingPresence = publicReleaseConfigPresence({ ...good, OPENAI_APPS_CHALLENGE_TOKEN: "" });
+  if (missingPresence.ok || !missingPresence.missing.includes("OPENAI_APPS_CHALLENGE_TOKEN")) {
+    fail("self-test missing configuration presence failed");
+  }
+
   assertThrows(() => validatePublicReleaseConfig({ ...good, ZSSH_PLUGIN_MCP_URL: "http://mcp.zssh.dev/mcp" }), /https/);
   assertThrows(() => validatePublicReleaseConfig({ ...good, ZSSH_PLUGIN_MCP_URL: "https://127.0.0.1/mcp" }), /public hostname/);
   assertThrows(() => validatePublicReleaseConfig({ ...good, ZSSH_PLUGIN_MCP_URL: "https://mcp.zssh.dev/other" }), /\/mcp endpoint/);
@@ -96,6 +124,8 @@ export function runSelfTest() {
 
 if (argv.has("--self-test")) {
   runSelfTest();
+} else if (argv.has("--presence-json")) {
+  console.log(JSON.stringify(publicReleaseConfigPresence(process.env), null, 2));
 } else {
   const result = validatePublicReleaseConfig(process.env);
   if (argv.has("--json")) console.log(JSON.stringify(result));
