@@ -1,0 +1,25 @@
+[Unit]
+Description=zSSH public OAuth MCP service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/.local/share/zssh/current
+EnvironmentFile=%h/.config/zssh/public.env
+ExecStart=/usr/bin/node %h/.local/share/zssh/current/server.mjs
+Restart=always
+RestartSec=3
+UMask=0077
+
+# Public profile never needs sudo/raw-shell privilege escalation.
+NoNewPrivileges=true
+PrivateTmp=true
+RestrictSUIDSGID=true
+LockPersonality=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+
+[Install]
+WantedBy=default.target
