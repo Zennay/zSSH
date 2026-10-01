@@ -120,36 +120,41 @@ jobs:
       - name: Exercise OAuth target pairing and revocation
         run: node pairing-canary.mjs
 
-      - name: Validate OpenAI submission package builder
+      - name: Validate reproducible OpenAI submission bundle
         shell: bash
         run: |
           set -Eeuo pipefail
-          icon="$RUNNER_TEMP/zssh-test-icon.svg"
-          cat >"$icon" <<'SVG'
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-            <rect width="64" height="64" rx="12"/>
-            <path d="M16 22l12 10-12 10M34 42h14" fill="none" stroke="white" stroke-width="5"/>
-          </svg>
-          SVG
+          build_a="$GITHUB_WORKSPACE/dist/repro-a"
+          build_b="$GITHUB_WORKSPACE/dist/repro-b"
           python3 scripts/build-openai-plugin.py \
             --mcp-url "https://mcp.review.example/mcp" \
             --demo-url "https://review.example/zssh-demo" \
-            --icon "$icon"
-          test -f dist/zssh-openai-plugin.zip
-          python3 - <<'PY'
-          import json, zipfile
+            --out-dir "$build_a/openai-plugin" > "$RUNNER_TEMP/zssh-build-a.json"
+          python3 scripts/build-openai-plugin.py \
+            --mcp-url "https://mcp.review.example/mcp" \
+            --demo-url "https://review.example/zssh-demo" \
+            --out-dir "$build_b/openai-plugin" > "$RUNNER_TEMP/zssh-build-b.json"
+          python3 - "$RUNNER_TEMP/zssh-build-a.json" "$RUNNER_TEMP/zssh-build-b.json" <<'PY'
+          import hashlib, json, sys, zipfile
           from pathlib import Path
-          package = Path("dist/zssh-openai-plugin.zip")
+
+          first = json.loads(Path(sys.argv[1]).read_text())
+          second = json.loads(Path(sys.argv[2]).read_text())
+          assert first["version"] == second["version"] == "0.1.1"
+          assert first["zip_sha256"] == second["zip_sha256"]
+          package = Path(first["zip"])
+          assert hashlib.sha256(package.read_bytes()).hexdigest() == first["zip_sha256"]
           with zipfile.ZipFile(package) as z:
               names = set(z.namelist())
               assert {"plugin.json", "mcp.json", "assets/icon.svg"} <= names
               plugin = json.loads(z.read("plugin.json"))
               mcp = json.loads(z.read("mcp.json"))
+          assert plugin["version"] == "0.1.1"
           review = plugin["extensions"]["com.openai"]["review"]["test_cases"]
           assert len(review["positive"]) == 5
           assert len(review["negative"]) == 3
           assert mcp["mcpServers"]["zssh"]["url"] == "https://mcp.review.example/mcp"
-          print("OPENAI_PLUGIN_PACKAGE_GREEN")
+          print("OPENAI_PLUGIN_REPRODUCIBLE_BUNDLE_GREEN", first["zip_sha256"])
           PY
 
       - name: Validate reviewer target fixture

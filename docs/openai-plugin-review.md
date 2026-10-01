@@ -26,6 +26,7 @@ The public profile currently has:
 - exact OpenAI domain-challenge handling at `/.well-known/openai-apps-challenge`;
 - a deterministic reviewer fixture and an end-to-end production submission probe;
 - a machine-validated Agent Plugins ZIP with five positive and three negative review cases;
+- a committed production icon plus deterministic ZIP construction, so the same inputs produce the same submission-bundle SHA-256;
 - privacy, terms, support, and annotation-justification documents.
 
 ## Connector UI
@@ -102,7 +103,8 @@ Before pressing Submit:
 - scan the latest tools in the submission portal and resolve every required finding;
 - record the required reviewer walkthrough;
 - check the compact connection card on both ChatGPT desktop and mobile;
-- build the final ZIP and submit the current five positive and three negative cases.
+- run the protected production release gate, then use the uploaded `zssh-openai-plugin.zip` whose SHA-256 is recorded in the paired evidence JSON;
+- submit the current five positive and three negative cases.
 
 ## Production probe
 

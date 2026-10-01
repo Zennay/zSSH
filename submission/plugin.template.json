@@ -1,7 +1,7 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "zssh",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Securely inspect and edit a Linux target that the operator explicitly paired with the authenticated user.",
   "author": {
     "name": "Zennay",

@@ -7,6 +7,8 @@ on:
       - ".github/workflows/public-release-gate.yml"
       - "release-contract.mjs"
       - "scripts/check-public-release-config.mjs"
+      - "scripts/build-openai-plugin.py"
+      - "package.json"
       - "production-submission-probe.mjs"
       - "production-submission-probe-canary.mjs"
       - "test/release-contract.test.mjs"
@@ -18,6 +20,8 @@ on:
       - ".github/workflows/public-release-gate.yml"
       - "release-contract.mjs"
       - "scripts/check-public-release-config.mjs"
+      - "scripts/build-openai-plugin.py"
+      - "package.json"
       - "production-submission-probe.mjs"
       - "production-submission-probe-canary.mjs"
       - "test/release-contract.test.mjs"
@@ -52,6 +56,7 @@ jobs:
           node --check scripts/check-public-release-config.mjs
           node --check production-submission-probe.mjs
           node --check production-submission-probe-canary.mjs
+          python3 -m py_compile scripts/build-openai-plugin.py
 
 
   production:
@@ -64,6 +69,7 @@ jobs:
     env:
       ZSSH_PLUGIN_MCP_URL: ${{ vars.ZSSH_PLUGIN_MCP_URL }}
       ZSSH_REVIEW_FILE: ${{ vars.ZSSH_REVIEW_FILE }}
+      ZSSH_PLUGIN_DEMO_RECORDING_URL: ${{ vars.ZSSH_PLUGIN_DEMO_RECORDING_URL }}
       ZSSH_REVIEW_WRITE_FILE: ${{ vars.ZSSH_REVIEW_WRITE_FILE }}
       ZSSH_REVIEW_ACCESS_TOKEN: ${{ secrets.ZSSH_REVIEW_ACCESS_TOKEN }}
       OPENAI_APPS_CHALLENGE_TOKEN: ${{ secrets.OPENAI_APPS_CHALLENGE_TOKEN }}
@@ -76,10 +82,21 @@ jobs:
         run: npm install --ignore-scripts --no-audit --no-fund
       - name: Fail closed on incomplete or non-public release configuration
         run: node scripts/check-public-release-config.mjs
+      - name: Build exact OpenAI submission bundle
+        shell: bash
+        env:
+          BUNDLE_REPORT_PATH: ${{ runner.temp }}/zssh-openai-bundle.json
+        run: |
+          set -Eeuo pipefail
+          python3 scripts/build-openai-plugin.py \
+            --mcp-url "$ZSSH_PLUGIN_MCP_URL" \
+            --demo-url "$ZSSH_PLUGIN_DEMO_RECORDING_URL" \
+            | tee "$BUNDLE_REPORT_PATH"
       - name: Run end-to-end OpenAI submission probe
         shell: bash
         env:
           PROBE_REPORT_PATH: ${{ runner.temp }}/zssh-openai-production-probe.json
+          BUNDLE_REPORT_PATH: ${{ runner.temp }}/zssh-openai-bundle.json
         run: |
           set -Eeuo pipefail
           node production-submission-probe.mjs | tee "$PROBE_REPORT_PATH"
@@ -88,14 +105,22 @@ jobs:
         env:
           EVIDENCE_PATH: ${{ runner.temp }}/zssh-openai-release-evidence.json
           PROBE_REPORT_PATH: ${{ runner.temp }}/zssh-openai-production-probe.json
+          BUNDLE_REPORT_PATH: ${{ runner.temp }}/zssh-openai-bundle.json
         run: |
           set -Eeuo pipefail
           node --input-type=module <<'NODE'
           import { readFileSync, writeFileSync } from "node:fs";
           const endpoint = new URL(process.env.ZSSH_PLUGIN_MCP_URL);
           const probe = JSON.parse(readFileSync(process.env.PROBE_REPORT_PATH, "utf8"));
+          const bundle = JSON.parse(readFileSync(process.env.BUNDLE_REPORT_PATH, "utf8"));
           if (!/^[a-f0-9]{64}$/.test(String(probe.tool_scan_sha256 || ""))) {
             throw new Error("production probe did not emit a valid tool scan fingerprint");
+          }
+          if (!/^[a-f0-9]{64}$/.test(String(bundle.zip_sha256 || ""))) {
+            throw new Error("submission bundle did not emit a valid SHA-256");
+          }
+          if (bundle.version !== "0.1.1") {
+            throw new Error("submission bundle version is not 0.1.1");
           }
           const evidence = {
             ok: true,
@@ -106,6 +131,8 @@ jobs:
             endpoint_origin: endpoint.origin,
             endpoint_path: endpoint.pathname,
             tool_scan_sha256: probe.tool_scan_sha256,
+            plugin_version: bundle.version,
+            submission_bundle_sha256: bundle.zip_sha256,
             redirect_policy: "manual-fail-closed",
             resource_metadata_challenge: "exact-same-origin",
             verified_at: new Date().toISOString()
@@ -113,10 +140,12 @@ jobs:
           writeFileSync(process.env.EVIDENCE_PATH, JSON.stringify(evidence, null, 2) + "\n");
           console.log("OPENAI_PUBLIC_RELEASE_GATE_GREEN");
           NODE
-      - name: Upload release evidence
+      - name: Upload release bundle and evidence
         uses: actions/upload-artifact@v4
         with:
-          name: zssh-openai-release-evidence-${{ github.run_id }}
-          path: ${{ runner.temp }}/zssh-openai-release-evidence.json
+          name: zssh-openai-release-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/zssh-openai-release-evidence.json
+            dist/zssh-openai-plugin.zip
           if-no-files-found: error
           retention-days: 30

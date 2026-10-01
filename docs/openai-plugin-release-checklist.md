@@ -33,6 +33,10 @@ Verify:
 - tokens and credentials are never printed;
 - release checks fail closed on redirects or mismatched OAuth resource-metadata challenge URLs.
 
+## Reproducible submission bundle
+
+The release bundle is built from the committed `submission/assets/icon.svg`, the protected production MCP URL, and the protected demo-recording URL. CI builds the ZIP twice and requires an identical SHA-256. The production release gate uploads the exact ZIP together with a non-secret evidence JSON so a portal upload can be tied back to one commit and one tool scan.
+
 ## Submission evidence
 
 Record:
@@ -41,6 +45,8 @@ Record:
 - CI run result for the exact commit;
 - VPS rollout proof from the dedicated `Zennay/zCloud` `zSSH standalone VPS release` workflow, pinned to the exact canonical zSSH commit;
 - SHA-256 fingerprint of the exact public tool metadata returned by the production scan;
+- SHA-256 of the exact `zssh-openai-plugin.zip` uploaded by the production release gate;
+- plugin version, currently `0.1.1`, matching `package.json` and `submission/plugin.template.json`;
 - reviewer walkthrough result;
 - portal scan findings and resolutions.
 
