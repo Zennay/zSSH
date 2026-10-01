@@ -59,6 +59,7 @@ jobs:
           trap 'kill "$server_pid" 2>/dev/null || true; rm -rf "$test_root"' EXIT
           export NODE_ENV=production
           export PORT=18789
+          export ZSSH_PUBLIC_ALLOWED_ROOTS="$test_root"
           export ZSSH_ALLOWED_ROOTS="$test_root"
           export ZSSH_AUDIT_LOG="$test_root/audit.jsonl"
           export ZSSH_DEV_BEARER_TOKEN="$(openssl rand -hex 32)"
@@ -86,6 +87,7 @@ jobs:
           trap 'kill "$server_pid" 2>/dev/null || true; rm -rf "$test_root"' EXIT
           export NODE_ENV=production
           export PORT=18790
+          export ZSSH_PUBLIC_ALLOWED_ROOTS="$test_root"
           export ZSSH_ALLOWED_ROOTS="$test_root"
           export ZSSH_AUDIT_LOG="$test_root/audit.jsonl"
           export ZSSH_PLUGIN_PROFILE=public
