@@ -34,3 +34,18 @@ The annotation explanations to paste into review are maintained in `docs/openai-
 The review cases assume the dedicated review target has `/srv/zssh-review` inside `ZSSH_ALLOWED_ROOTS`, with a UTF-8 file at `/srv/zssh-review/sample.txt`. The reviewer OAuth account must be explicitly paired to that target before target operations are expected to succeed.
 
 The final directory submission also needs a verified developer identity, successful domain verification, a current production tool scan, and reviewer-accessible OAuth credentials.
+
+## Production readiness probe
+
+After the public OAuth endpoint, reviewer account, pairing, review fixture, and OpenAI domain challenge are configured, run:
+
+```bash
+ZSSH_PLUGIN_MCP_URL=https://mcp.example.com/mcp \
+ZSSH_REVIEW_ACCESS_TOKEN='<short-lived reviewer access token>' \
+ZSSH_REVIEW_FILE=/srv/zssh-review/sample.txt \
+ZSSH_REVIEW_WRITE_FILE=/srv/zssh-review/output.txt \
+OPENAI_APPS_CHALLENGE_TOKEN='<current dashboard challenge token>' \
+npm run submission:probe
+```
+
+The probe verifies the live health endpoint, RFC 9728 resource metadata, unauthenticated 401/WWW-Authenticate behavior, public tool scan, required annotations and OAuth schemes, absence of generic executors, profile and pairing state, minimized public metadata, read-only system tools, and the reviewer file read/write roundtrip. It never prints the access token.
