@@ -20,6 +20,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SUBMISSION = ROOT / "submission"
 DEFAULT_OUT = ROOT / "dist" / "openai-plugin"
 DEFAULT_ICON = SUBMISSION / "assets" / "icon.svg"
+PUBLIC_TOOL_CONTRACT = SUBMISSION / "public-tool-contract.json"
 
 
 def fail(message: str) -> None:
@@ -79,6 +80,28 @@ def validate_icon(path: Path) -> str:
     return suffix
 
 
+def parse_tools_triggered(value: str) -> list[str]:
+    tools = [item.strip() for item in str(value or "").split(",") if item.strip()]
+    if not tools:
+        fail("positive review tools_triggered must name at least one public tool")
+    if len(tools) != len(set(tools)):
+        fail("positive review tools_triggered must not contain duplicate tool names")
+    return tools
+
+
+def validate_mcp_config(mcp: dict, expected_url: str) -> None:
+    if mcp.get("$schema") != "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json":
+        fail("mcp.json uses the wrong Agent Plugins schema")
+    servers = mcp.get("mcpServers")
+    if not isinstance(servers, dict) or set(servers) != {"zssh"}:
+        fail("zSSH submission must declare exactly one MCP server named zssh")
+    server = servers["zssh"]
+    if server.get("type") != "streamable-http":
+        fail("zSSH MCP server must use streamable-http")
+    if server.get("url") != expected_url:
+        fail("zSSH MCP server URL must match the validated public MCP URL")
+
+
 def validate_plugin(plugin: dict) -> None:
     if plugin.get("$schema") != "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json":
         fail("plugin.json uses the wrong Agent Plugins schema")
@@ -128,15 +151,38 @@ def validate_plugin(plugin: dict) -> None:
         normalized.add(key)
 
     review = ext.get("review", {})
+    for forbidden in ("test_credentials", "reviewer_instructions"):
+        if forbidden in review:
+            fail(f"review.{forbidden} must stay out of the public plugin ZIP")
+
+    public_tools = read_json(PUBLIC_TOOL_CONTRACT)
+    if not isinstance(public_tools, dict) or not public_tools:
+        fail("public tool contract must be a non-empty object")
+    if any(scope not in {"zssh:read", "zssh:write"} for scope in public_tools.values()):
+        fail("public tool contract contains an unsupported OAuth scope")
+
     cases = review.get("test_cases", {})
     positive = cases.get("positive", [])
     negative = cases.get("negative", [])
     if len(positive) != 5 or len(negative) != 3:
         fail("initial MCP review requires exactly five positive and three negative cases")
+    reviewed_tools = set()
     for index, case in enumerate(positive, 1):
         for field in ("description", "prompt", "tools_triggered", "expected_behavior"):
             if not isinstance(case.get(field), str) or not case[field].strip():
                 fail(f"positive review case {index} is missing {field}")
+        triggered = parse_tools_triggered(case["tools_triggered"])
+        unknown = sorted(set(triggered) - set(public_tools))
+        if unknown:
+            fail(f"positive review case {index} references unreviewed tools: {', '.join(unknown)}")
+        reviewed_tools.update(triggered)
+
+    uncovered_writes = sorted(
+        name for name, scope in public_tools.items()
+        if scope == "zssh:write" and name not in reviewed_tools
+    )
+    if uncovered_writes:
+        fail("positive review cases must exercise every public write tool: " + ", ".join(uncovered_writes))
     for index, case in enumerate(negative, 1):
         for field in ("description", "prompt"):
             if not isinstance(case.get(field), str) or not case[field].strip():
@@ -145,6 +191,11 @@ def validate_plugin(plugin: dict) -> None:
     https_url(str(review.get("demo_recording_url", "")), "review.demo_recording_url")
     if review.get("commerce") is not False:
         fail("zSSH review metadata must declare commerce=false")
+
+    publication = ext.get("publication", {})
+    release_notes = publication.get("release_notes")
+    if not isinstance(release_notes, str) or not release_notes.strip():
+        fail("publication.release_notes is required for the review-ready package")
 
 
 def main() -> None:
@@ -177,6 +228,7 @@ def main() -> None:
     interface["logo"] = icon_ref
     mcp["mcpServers"]["zssh"]["url"] = mcp_url
 
+    validate_mcp_config(mcp, mcp_url)
     validate_plugin(plugin)
 
     out_dir = Path(args.out_dir).resolve()
@@ -212,6 +264,7 @@ def main() -> None:
         "mcp_url": mcp_url,
         "positive_cases": 5,
         "negative_cases": 3,
+        "reviewed_public_tools": len(read_json(PUBLIC_TOOL_CONTRACT)),
         "icon": icon_ref,
     }, sort_keys=True))
 
