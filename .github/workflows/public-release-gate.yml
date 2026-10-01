@@ -5,16 +5,31 @@ on:
     branches: [main]
     paths:
       - ".github/workflows/public-release-gate.yml"
+      - "release-contract.mjs"
       - "scripts/check-public-release-config.mjs"
       - "production-submission-probe.mjs"
+      - "production-submission-probe-canary.mjs"
+      - "test/release-contract.test.mjs"
       - "submission/**"
+      - "docs/openai-plugin-*.md"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/public-release-gate.yml"
+      - "release-contract.mjs"
+      - "scripts/check-public-release-config.mjs"
+      - "production-submission-probe.mjs"
+      - "production-submission-probe-canary.mjs"
+      - "test/release-contract.test.mjs"
+      - "submission/**"
+      - "docs/openai-plugin-*.md"
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: zssh-openai-public-release
+  group: zssh-openai-public-release-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -29,16 +44,21 @@ jobs:
           node-version: 20
       - name: Self-test release configuration guard
         run: node scripts/check-public-release-config.mjs --self-test
+      - name: Exercise release origin contract
+        run: node --test test/release-contract.test.mjs
       - name: Validate release scripts
         run: |
+          node --check release-contract.mjs
           node --check scripts/check-public-release-config.mjs
           node --check production-submission-probe.mjs
+          node --check production-submission-probe-canary.mjs
+
 
   production:
     name: Production submission probe
     if: github.event_name == 'workflow_dispatch'
     needs: contract
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     timeout-minutes: 15
     environment: openai-production
     env:
@@ -57,16 +77,26 @@ jobs:
       - name: Fail closed on incomplete or non-public release configuration
         run: node scripts/check-public-release-config.mjs
       - name: Run end-to-end OpenAI submission probe
-        run: node production-submission-probe.mjs
+        shell: bash
+        env:
+          PROBE_REPORT_PATH: ${{ runner.temp }}/zssh-openai-production-probe.json
+        run: |
+          set -Eeuo pipefail
+          node production-submission-probe.mjs | tee "$PROBE_REPORT_PATH"
       - name: Record non-secret release evidence
         shell: bash
         env:
           EVIDENCE_PATH: ${{ runner.temp }}/zssh-openai-release-evidence.json
+          PROBE_REPORT_PATH: ${{ runner.temp }}/zssh-openai-production-probe.json
         run: |
           set -Eeuo pipefail
           node --input-type=module <<'NODE'
-          import { writeFileSync } from "node:fs";
+          import { readFileSync, writeFileSync } from "node:fs";
           const endpoint = new URL(process.env.ZSSH_PLUGIN_MCP_URL);
+          const probe = JSON.parse(readFileSync(process.env.PROBE_REPORT_PATH, "utf8"));
+          if (!/^[a-f0-9]{64}$/.test(String(probe.tool_scan_sha256 || ""))) {
+            throw new Error("production probe did not emit a valid tool scan fingerprint");
+          }
           const evidence = {
             ok: true,
             repository: process.env.GITHUB_REPOSITORY,
@@ -75,6 +105,9 @@ jobs:
             workflow_run_attempt: process.env.GITHUB_RUN_ATTEMPT,
             endpoint_origin: endpoint.origin,
             endpoint_path: endpoint.pathname,
+            tool_scan_sha256: probe.tool_scan_sha256,
+            redirect_policy: "manual-fail-closed",
+            resource_metadata_challenge: "exact-same-origin",
             verified_at: new Date().toISOString()
           };
           writeFileSync(process.env.EVIDENCE_PATH, JSON.stringify(evidence, null, 2) + "\n");

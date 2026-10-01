@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import path from "node:path";
 import process from "node:process";
+import { validatePublicMcpUrl } from "../release-contract.mjs";
 
 const argv = new Set(process.argv.slice(2));
 
@@ -14,40 +15,11 @@ function requireValue(env, name, { minLength = 1 } = {}) {
   return value;
 }
 
-function isPrivateIpv4(hostname) {
-  const parts = hostname.split(".").map(Number);
-  if (parts.length !== 4 || parts.some(n => !Number.isInteger(n) || n < 0 || n > 255)) return false;
-  return parts[0] === 10 ||
-    parts[0] === 127 ||
-    (parts[0] === 169 && parts[1] === 254) ||
-    (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) ||
-    (parts[0] === 192 && parts[1] === 168);
-}
-
-function isNonPublicHostname(hostname) {
-  const host = hostname.toLowerCase().replace(/^\[|\]$/g, "");
-  if (host === "localhost" || host === "::1" || host === "0.0.0.0") return true;
-  if (isPrivateIpv4(host)) return true;
-  if (/^(?:fc|fd)[0-9a-f]{2}:/i.test(host) || /^fe[89ab][0-9a-f]:/i.test(host)) return true;
-  return [".local", ".localhost", ".test", ".example", ".invalid"].some(suffix => host.endsWith(suffix));
-}
-
-function validateHttpsUrl(raw, name) {
-  let url;
-  try {
-    url = new URL(raw);
-  } catch {
-    fail(`${name} must be a valid URL`);
-  }
-  if (url.protocol !== "https:") fail(`${name} must use https`);
-  if (url.username || url.password) fail(`${name} must not contain URL credentials`);
-  if (url.search || url.hash) fail(`${name} must not contain query parameters or fragments`);
-  if (isNonPublicHostname(url.hostname)) fail(`${name} must use a public hostname`);
-  return url;
-}
-
 export function validatePublicReleaseConfig(env = process.env) {
-  const mcpUrl = validateHttpsUrl(requireValue(env, "ZSSH_PLUGIN_MCP_URL"), "ZSSH_PLUGIN_MCP_URL");
+  const mcpUrl = validatePublicMcpUrl(
+    requireValue(env, "ZSSH_PLUGIN_MCP_URL"),
+    { name: "ZSSH_PLUGIN_MCP_URL" }
+  );
   const accessToken = requireValue(env, "ZSSH_REVIEW_ACCESS_TOKEN", { minLength: 20 });
   const challengeToken = requireValue(env, "OPENAI_APPS_CHALLENGE_TOKEN", { minLength: 16 });
   const reviewFile = requireValue(env, "ZSSH_REVIEW_FILE");
@@ -97,6 +69,8 @@ export function runSelfTest() {
 
   assertThrows(() => validatePublicReleaseConfig({ ...good, ZSSH_PLUGIN_MCP_URL: "http://mcp.zssh.dev/mcp" }), /https/);
   assertThrows(() => validatePublicReleaseConfig({ ...good, ZSSH_PLUGIN_MCP_URL: "https://127.0.0.1/mcp" }), /public hostname/);
+  assertThrows(() => validatePublicReleaseConfig({ ...good, ZSSH_PLUGIN_MCP_URL: "https://mcp.zssh.dev/other" }), /\/mcp endpoint/);
+  assertThrows(() => validatePublicReleaseConfig({ ...good, ZSSH_PLUGIN_MCP_URL: "https://mcp.zssh.dev/mcp?target=review" }), /query parameters/);
   assertThrows(() => validatePublicReleaseConfig({ ...good, ZSSH_REVIEW_WRITE_FILE: good.ZSSH_REVIEW_FILE }), /different files/);
   assertThrows(() => validatePublicReleaseConfig({ ...good, ZSSH_REVIEW_ACCESS_TOKEN: "short" }), /at least 20/);
 
