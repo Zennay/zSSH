@@ -72,6 +72,10 @@ try {
   if (info.plugin_profile !== "public") throw new Error(`wrong plugin profile: ${info.plugin_profile}`);
   if (info.exec_mode !== "disabled") throw new Error(`raw shell is not disabled: ${info.exec_mode}`);
   if (info.auth_mode !== "legacy") throw new Error(`unexpected test auth mode: ${info.auth_mode}`);
+  if (info.target_label !== "Linux target") throw new Error(`unexpected public target label: ${info.target_label}`);
+  for (const forbidden of ["hostname", "uid", "allowed_roots", "safe_programs"]) {
+    if (Object.hasOwn(info, forbidden)) throw new Error(`public server info leaks private field: ${forbidden}`);
+  }
 
   for (const name of ["get_system_uptime", "get_system_identity"]) {
     const response = await client.callTool({ name, arguments: {} });
