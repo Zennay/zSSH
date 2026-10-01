@@ -20,7 +20,7 @@
       "interface": {
         "displayName": "zSSH",
         "shortDescription": "Secure Linux operations",
-        "longDescription": "Connect ChatGPT to a Linux target you explicitly pair. Inspect uptime, identity, kernel, disk, and memory; read text files within operator-configured roots; and write text files when requested. OAuth identifies the caller and local pairing grants target access. Generic shell execution is not exposed in the public plugin, and file access stays bounded to configured roots.",
+        "longDescription": "Connect ChatGPT to a Linux target you explicitly pair. Inspect uptime, identity, kernel, disk, and memory; read text files within operator-configured roots; and write text files when requested. A compact connection card shows target and pairing state. OAuth identifies the caller, while approval and revocation stay local to the Linux target. Generic shell execution is not exposed in the public plugin.",
         "developerName": "Zennay",
         "category": "Developer Tools",
         "capabilities": [
@@ -72,7 +72,7 @@
               "description": "Show the authenticated profile and target pairing state.",
               "prompt": "Which zSSH profile am I connected as, and is it paired to this Linux target?",
               "tools_triggered": "get_profile, get_pairing_status",
-              "expected_behavior": "Return a stable opaque profile ID and the current pairing state. Do not expose the raw OAuth subject, bearer token, or other authentication secrets."
+              "expected_behavior": "Return the stable opaque profile ID and pairing state, and render the compact connection card. If approval is pending, show the short-lived pairing request without exposing the raw OAuth subject, bearer token, or other authentication secrets."
             }
           ],
           "negative": [
@@ -95,7 +95,7 @@
         "commerce_description": "zSSH does not sell products or process payments."
       },
       "publication": {
-        "release_notes": "Initial public-plugin candidate with scoped Linux inspection, bounded file access, OAuth resource-server enforcement, local target pairing, and revocation."
+        "release_notes": "Initial public-plugin candidate with scoped Linux inspection, bounded file access, OAuth resource-server enforcement, local target pairing and revocation, plus a compact connection-status UI with no external origins."
       }
     }
   }
