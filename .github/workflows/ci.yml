@@ -66,6 +66,8 @@ jobs:
           export ZSSH_PLUGIN_PROFILE=public
           export ZSSH_PUBLIC_AUTH_MODE=legacy
           export ZSSH_ALLOW_LEGACY_PUBLIC_AUTH=1
+          export ZSSH_PAIRING_REQUIRED=0
+          export ZSSH_ALLOW_UNPAIRED_PUBLIC=1
           export ZSSH_EXEC_MODE=disabled
           node server.mjs &
           server_pid=$!
@@ -112,3 +114,6 @@ jobs:
           test "$code" = "401"
           grep -Fi 'WWW-Authenticate: Bearer ' "$headers"
           grep -F 'resource_metadata="https://mcp.zssh.example/.well-known/oauth-protected-resource"' "$headers"
+
+      - name: Exercise OAuth target pairing and revocation
+        run: node pairing-canary.mjs

@@ -70,7 +70,18 @@ Do not silently convert zSSH into a service that stores user SSH private keys or
 
 ### 3. Pairing and revocation
 
-Before public launch, users need an explicit way to pair a target, see which target/account is connected, and revoke that pairing without editing server files manually.
+Implemented at the target boundary:
+
+- OAuth identity alone does not grant target access;
+- `get_pairing_status` creates/returns a short-lived local pairing request;
+- the target owner approves requests with `pairing-cli.mjs approve <request-id>`;
+- `pairing-cli.mjs list` shows pairings and pending requests;
+- `pairing-cli.mjs revoke <profile-id>` revokes access immediately;
+- raw OAuth subject values are not persisted in the pairing registry;
+- all public target tools except profile/pairing discovery require an active pairing;
+- CI proves unpaired denial → local approval → allowed call → revoke → denial.
+
+Remaining pairing work is product/UX integration for installation and a production control-plane flow if zSSH moves from per-target endpoints to a shared public gateway.
 
 ### 4. Review package
 
