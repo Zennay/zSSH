@@ -19,6 +19,7 @@ on:
     branches: [main]
     paths:
       - ".github/workflows/public-release-gate.yml"
+      - ".github/openai-production-probe-trigger"
       - "release-contract.mjs"
       - "scripts/check-public-release-config.mjs"
       - "scripts/build-openai-plugin.py"
