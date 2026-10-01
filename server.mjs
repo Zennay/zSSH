@@ -8,6 +8,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { z } from "zod";
+import { bearerChallenge, oauthConfigFromEnv, protectedResourceMetadata, requireScopes, verifyOAuthAuthorizationHeader } from "./oauth.mjs";
 
 const VERSION = "0.1.0";
 const PORT = Number(process.env.PORT || 8788);
@@ -21,6 +22,8 @@ const CAPABILITY_TOKEN = process.env.ZSSH_MCP_CAPABILITY_TOKEN || "";
 const TRUST_LOCAL_TUNNEL = process.env.ZSSH_TRUST_LOCAL_TUNNEL === "1";
 const PLUGIN_PROFILE = process.env.ZSSH_PLUGIN_PROFILE === "public" ? "public" : "private";
 const OPENAI_APPS_CHALLENGE_TOKEN = process.env.OPENAI_APPS_CHALLENGE_TOKEN || "";
+const PUBLIC_AUTH_MODE = process.env.ZSSH_PUBLIC_AUTH_MODE === "legacy" ? "legacy" : "oauth";
+const OAUTH_CONFIG = oauthConfigFromEnv();
 const AUDIT_LOG = path.resolve(process.env.ZSSH_AUDIT_LOG || "./data/audit.jsonl");
 const SAFE_PROGRAM_PATHS = Object.freeze({
   uptime: "/usr/bin/uptime",
@@ -358,6 +361,43 @@ function result(value, isError = false) {
   };
 }
 
+function authInfoFromExtra(extra) {
+  return extra?.authInfo || extra?.http?.authInfo || null;
+}
+
+function publicSecurity(scope) {
+  if (PLUGIN_PROFILE !== "public" || PUBLIC_AUTH_MODE !== "oauth") return {};
+  return {
+    securitySchemes: [{ type: "oauth2", scopes: [scope] }]
+  };
+}
+
+function toolScopeError(extra, scope) {
+  if (PLUGIN_PROFILE !== "public" || PUBLIC_AUTH_MODE !== "oauth") return null;
+  try {
+    requireScopes(authInfoFromExtra(extra), [scope]);
+    return null;
+  } catch (err) {
+    const code = err?.code === "insufficient_scope" ? "insufficient_scope" : "invalid_token";
+    const description = code === "insufficient_scope"
+      ? "This zSSH action requires the " + scope + " permission."
+      : "A valid zSSH OAuth access token is required.";
+    return {
+      content: [{ type: "text", text: description }],
+      isError: true,
+      _meta: {
+        "mcp/www_authenticate": [
+          bearerChallenge(OAUTH_CONFIG, {
+            scope,
+            error: code,
+            errorDescription: description,
+          })
+        ]
+      }
+    };
+  }
+}
+
 function createMcpServer() {
   const server = new McpServer(
     { name: "zssh", version: VERSION },
@@ -375,9 +415,14 @@ function createMcpServer() {
       title: "Server info",
       description: "Read basic identity and zSSH policy state for the connected Linux target.",
       inputSchema: {},
-      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+      ...publicSecurity(OAUTH_CONFIG?.readScope || "zssh:read"),
+      ...(PLUGIN_PROFILE === "public" ? { _meta: { "openai/profile": true } } : {})
     },
-    async () => result({
+    async (_args, extra) => {
+      const authError = toolScopeError(extra, OAUTH_CONFIG?.readScope || "zssh:read");
+      if (authError) return authError;
+      return result({
       version: VERSION,
       hostname: os.hostname(),
       platform: process.platform,
@@ -388,8 +433,10 @@ function createMcpServer() {
       safe_programs: getEnabledSafePrograms(),
       allowed_roots: getAllowedRoots(),
       timeout_seconds: COMMAND_TIMEOUT_SECONDS,
-      max_output_bytes: MAX_OUTPUT_BYTES
-    })
+      max_output_bytes: MAX_OUTPUT_BYTES,
+      auth_mode: PLUGIN_PROFILE === "public" ? PUBLIC_AUTH_MODE : "private"
+    });
+    }
   );
 
   server.registerTool(
@@ -398,9 +445,12 @@ function createMcpServer() {
       title: "Read file",
       description: "Read a UTF-8 text file inside configured zSSH allowed roots. Secret-like values are redacted.",
       inputSchema: { path: z.string().min(1) },
-      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+      ...publicSecurity(OAUTH_CONFIG?.readScope || "zssh:read")
     },
-    async ({ path: filePath }) => {
+    async ({ path: filePath }, extra) => {
+      const authError = toolScopeError(extra, OAUTH_CONFIG?.readScope || "zssh:read");
+      if (authError) return authError;
       try {
         return result(await readTextFile(filePath));
       } catch (err) {
@@ -418,9 +468,12 @@ function createMcpServer() {
         path: z.string().min(1),
         content: z.string()
       },
-      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false }
+      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
+      ...publicSecurity(OAUTH_CONFIG?.writeScope || "zssh:write")
     },
-    async ({ path: filePath, content }) => {
+    async ({ path: filePath, content }, extra) => {
+      const authError = toolScopeError(extra, OAUTH_CONFIG?.writeScope || "zssh:write");
+      if (authError) return authError;
       try {
         return result({ ok: true, ...(await writeTextFile(filePath, content)) });
       } catch (err) {
@@ -438,9 +491,12 @@ function createMcpServer() {
           title,
           description,
           inputSchema: {},
-          annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }
+          annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+          ...publicSecurity(OAUTH_CONFIG?.readScope || "zssh:read")
         },
-        async () => {
+        async (_args, extra) => {
+          const authError = toolScopeError(extra, OAUTH_CONFIG?.readScope || "zssh:read");
+          if (authError) return authError;
           try {
             const value = await runSafeProgram(program, args);
             return result(value, !value.ok);
@@ -550,15 +606,35 @@ function capabilityAuthorized(pathname) {
   return Boolean(CAPABILITY_TOKEN) && secureEqual(pathname, "/mcp/" + CAPABILITY_TOKEN);
 }
 
-function authorized(req) {
-  if (TRUST_LOCAL_TUNNEL && isLoopbackRequest(req)) return true;
+async function authorizeRequest(req) {
+  if (PLUGIN_PROFILE === "public" && PUBLIC_AUTH_MODE === "oauth") {
+    const authInfo = await verifyOAuthAuthorizationHeader(req.headers.authorization, OAUTH_CONFIG);
+    // MCP SDK v1 reads req.auth and forwards it to tool callbacks as extra.authInfo.
+    req.auth = authInfo;
+    return authInfo;
+  }
 
-  // Hosted clients such as Claude can use a static custom header without an
-  // OAuth browser flow. Keep bearer auth for Claude Code and existing clients.
-  if (secureEqual(req.headers["x-zssh-key"], API_KEY)) return true;
-  if (secureEqual(req.headers.authorization, DEV_TOKEN ? "Bearer " + DEV_TOKEN : "")) return true;
+  if (TRUST_LOCAL_TUNNEL && isLoopbackRequest(req)) return { mode: "trusted-loopback" };
 
-  return !API_KEY && !DEV_TOKEN && process.env.NODE_ENV !== "production";
+  // Private/trusted clients keep the existing static auth methods.
+  if (secureEqual(req.headers["x-zssh-key"], API_KEY)) return { mode: "api-key" };
+  if (secureEqual(req.headers.authorization, DEV_TOKEN ? "Bearer " + DEV_TOKEN : "")) return { mode: "bearer" };
+
+  if (!API_KEY && !DEV_TOKEN && process.env.NODE_ENV !== "production") return { mode: "development" };
+  const error = new Error("unauthorized");
+  error.code = "invalid_token";
+  throw error;
+}
+
+function unauthorizedResponse(res, error) {
+  const headers = { "content-type": "application/json" };
+  if (PLUGIN_PROFILE === "public" && PUBLIC_AUTH_MODE === "oauth" && OAUTH_CONFIG) {
+    headers["WWW-Authenticate"] = bearerChallenge(OAUTH_CONFIG, {
+      error: error?.code === "insufficient_scope" ? "insufficient_scope" : "invalid_token",
+      errorDescription: "A valid zSSH OAuth access token is required.",
+    });
+  }
+  return res.writeHead(401, headers).end(JSON.stringify({ error: "unauthorized" }));
 }
 
 function cors(res) {
@@ -575,7 +651,18 @@ export function start() {
   if (PLUGIN_PROFILE === "public" && EXEC_MODE === "full") {
     throw new Error("public plugin profile refuses ZSSH_EXEC_MODE=full; raw shell must stay disabled");
   }
-  if (process.env.NODE_ENV === "production" && !CAPABILITY_TOKEN && !API_KEY && !DEV_TOKEN && !TRUST_LOCAL_TUNNEL) {
+  if (PLUGIN_PROFILE === "public" && PUBLIC_AUTH_MODE === "oauth" && !OAUTH_CONFIG) {
+    throw new Error("public plugin OAuth requires ZSSH_OAUTH_ISSUER, ZSSH_PUBLIC_BASE_URL, and ZSSH_OAUTH_JWKS_URI");
+  }
+  if (PLUGIN_PROFILE === "public" && PUBLIC_AUTH_MODE === "oauth" && process.env.NODE_ENV === "production") {
+    for (const [name, value] of [["ZSSH_OAUTH_ISSUER", OAUTH_CONFIG.issuer], ["ZSSH_PUBLIC_BASE_URL", OAUTH_CONFIG.resource], ["ZSSH_OAUTH_JWKS_URI", OAUTH_CONFIG.jwksUri]]) {
+      if (new URL(value).protocol !== "https:") throw new Error(name + " must use HTTPS in production");
+    }
+  }
+  if (PLUGIN_PROFILE === "public" && PUBLIC_AUTH_MODE === "legacy" && process.env.NODE_ENV === "production" && process.env.ZSSH_ALLOW_LEGACY_PUBLIC_AUTH !== "1") {
+    throw new Error("production public profile requires OAuth; legacy auth is allowed only with explicit ZSSH_ALLOW_LEGACY_PUBLIC_AUTH=1");
+  }
+  if (process.env.NODE_ENV === "production" && !(PLUGIN_PROFILE === "public" && PUBLIC_AUTH_MODE === "oauth") && !CAPABILITY_TOKEN && !API_KEY && !DEV_TOKEN && !TRUST_LOCAL_TUNNEL) {
     throw new Error("production requires authentication; configure a capability token, ZSSH_API_KEY, a bearer token, or explicitly trust the loopback tunnel");
   }
 
@@ -588,6 +675,11 @@ export function start() {
       return res.writeHead(200, { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" }).end(OPENAI_APPS_CHALLENGE_TOKEN);
     }
 
+    if (req.method === "GET" && url.pathname === "/.well-known/oauth-protected-resource") {
+      if (PLUGIN_PROFILE !== "public" || PUBLIC_AUTH_MODE !== "oauth" || !OAUTH_CONFIG) return res.writeHead(404).end("Not Found");
+      return res.writeHead(200, { "content-type": "application/json", "cache-control": "public, max-age=300" }).end(JSON.stringify(protectedResourceMetadata(OAUTH_CONFIG)));
+    }
+
     if (req.method === "GET" && url.pathname === "/health") {
       return res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ ok: true, service: "zssh", version: VERSION }));
     }
@@ -597,8 +689,12 @@ export function start() {
     cors(res);
 
     if (req.method === "OPTIONS") return res.writeHead(204).end();
-    if (!capabilityAuth && !authorized(req)) {
-      return res.writeHead(401, { "content-type": "application/json" }).end(JSON.stringify({ error: "unauthorized" }));
+    if (!capabilityAuth) {
+      try {
+        await authorizeRequest(req);
+      } catch (err) {
+        return unauthorizedResponse(res, err);
+      }
     }
 
     if (!["POST", "GET", "DELETE"].includes(req.method || "")) return res.writeHead(405).end("Method Not Allowed");
