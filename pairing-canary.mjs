@@ -41,6 +41,7 @@ const child = spawn(process.execPath, ["server.mjs"], {
     ZSSH_PLUGIN_PROFILE: "public",
     ZSSH_PUBLIC_AUTH_MODE: "oauth",
     ZSSH_EXEC_MODE: "disabled",
+    ZSSH_PUBLIC_ALLOWED_ROOTS: root,
     ZSSH_ALLOWED_ROOTS: root,
     ZSSH_AUDIT_LOG: path.join(root, "audit.jsonl"),
     ZSSH_PUBLIC_BASE_URL: resource,
