@@ -365,10 +365,36 @@ function authInfoFromExtra(extra) {
   return extra?.authInfo || extra?.http?.authInfo || null;
 }
 
-function publicSecurity(scope) {
+function publicSecurity(scope, extraMeta = {}) {
   if (PLUGIN_PROFILE !== "public") return {};
+  const securitySchemes = [{ type: "oauth2", scopes: [scope] }];
   return {
-    securitySchemes: [{ type: "oauth2", scopes: [scope] }]
+    securitySchemes,
+    _meta: {
+      securitySchemes,
+      ...extraMeta,
+    }
+  };
+}
+
+function publicProfileFromAuth(extra) {
+  const authInfo = authInfoFromExtra(extra);
+  const subject = String(authInfo?.extra?.sub || authInfo?.clientId || "").trim();
+  if (!subject) {
+    const error = new Error("authenticated profile has no stable subject");
+    error.code = "invalid_token";
+    throw error;
+  }
+  const issuer = String(authInfo?.extra?.issuer || OAUTH_CONFIG?.issuer || "");
+  const resource = String(OAUTH_CONFIG?.resource || "");
+  const opaqueId = crypto.createHash("sha256")
+    .update(issuer + "\u0000" + subject + "\u0000" + resource)
+    .digest("hex")
+    .slice(0, 32);
+  return {
+    id: "zssh_" + opaqueId,
+    name: "zSSH",
+    nickname: os.hostname(),
   };
 }
 
@@ -416,8 +442,7 @@ function createMcpServer() {
       description: "Read basic identity and zSSH policy state for the connected Linux target.",
       inputSchema: {},
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-      ...publicSecurity(OAUTH_CONFIG?.readScope || "zssh:read"),
-      ...(PLUGIN_PROFILE === "public" ? { _meta: { "openai/profile": true } } : {})
+      ...publicSecurity(OAUTH_CONFIG?.readScope || "zssh:read")
     },
     async (_args, extra) => {
       const authError = toolScopeError(extra, OAUTH_CONFIG?.readScope || "zssh:read");
@@ -484,6 +509,48 @@ function createMcpServer() {
 
 
   if (PLUGIN_PROFILE === "public") {
+    server.registerTool(
+      "get_profile",
+      {
+        title: "Get connected zSSH profile",
+        description: "Return the stable profile represented by the current authenticated zSSH connection.",
+        inputSchema: {},
+        outputSchema: {
+          id: z.string().min(1),
+          name: z.string().optional(),
+          nickname: z.string().optional(),
+        },
+        annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+        ...publicSecurity(OAUTH_CONFIG?.readScope || "zssh:read", { "openai/profile": true })
+      },
+      async (_args, extra) => {
+        const authError = toolScopeError(extra, OAUTH_CONFIG?.readScope || "zssh:read");
+        if (authError) return authError;
+        try {
+          const profile = publicProfileFromAuth(extra);
+          return {
+            content: [{ type: "text", text: JSON.stringify(profile) }],
+            structuredContent: profile,
+            isError: false,
+          };
+        } catch (err) {
+          return {
+            content: [{ type: "text", text: "Authentication required for profile resolution." }],
+            isError: true,
+            _meta: {
+              "mcp/www_authenticate": [
+                bearerChallenge(OAUTH_CONFIG, {
+                  scope: OAUTH_CONFIG?.readScope || "zssh:read",
+                  error: "invalid_token",
+                  errorDescription: String(err?.message || "Authentication required"),
+                })
+              ]
+            }
+          };
+        }
+      }
+    );
+
     const registerReadOnlyProgramTool = (name, title, description, program, args = []) => {
       server.registerTool(
         name,
