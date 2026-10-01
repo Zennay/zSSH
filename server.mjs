@@ -1,6 +1,6 @@
 import { createServer } from "node:http";
 import { spawn } from "node:child_process";
-import { promises as fs, realpathSync } from "node:fs";
+import { promises as fs, realpathSync, readFileSync } from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import crypto from "node:crypto";
@@ -27,6 +27,8 @@ const PUBLIC_AUTH_MODE = process.env.ZSSH_PUBLIC_AUTH_MODE === "legacy" ? "legac
 const OAUTH_CONFIG = oauthConfigFromEnv();
 const PAIRING_REQUIRED = PLUGIN_PROFILE === "public" && process.env.ZSSH_PAIRING_REQUIRED !== "0";
 const TARGET_LABEL = String(process.env.ZSSH_TARGET_LABEL || "Linux target").trim().slice(0, 80) || "Linux target";
+const CONNECTION_UI_URI = "ui://zssh/connection-card-v1.html";
+const CONNECTION_UI_HTML = readFileSync(new URL("./ui/connection-card.html", import.meta.url), "utf8");
 const AUDIT_LOG = path.resolve(process.env.ZSSH_AUDIT_LOG || "./data/audit.jsonl");
 const SAFE_PROGRAM_PATHS = Object.freeze({
   uptime: "/usr/bin/uptime",
@@ -540,6 +542,26 @@ function createMcpServer() {
 
 
   if (PLUGIN_PROFILE === "public") {
+    server.registerResource("zssh-connection-status", CONNECTION_UI_URI, {}, async () => ({
+      contents: [
+        {
+          uri: CONNECTION_UI_URI,
+          mimeType: "text/html;profile=mcp-app",
+          text: CONNECTION_UI_HTML,
+          _meta: {
+            ui: {
+              prefersBorder: true,
+              csp: {
+                connectDomains: [],
+                resourceDomains: [],
+              },
+            },
+            "openai/widgetDescription": "Compact zSSH connection and target-pairing status. Pairing approval remains local to the Linux target.",
+          },
+        },
+      ],
+    }));
+
     server.registerTool(
       "get_profile",
       {
@@ -592,11 +614,17 @@ function createMcpServer() {
           paired: z.boolean(),
           pending: z.boolean(),
           profile_id: z.string().min(1),
+          target_label: z.string().min(1),
           request_id: z.string().nullable().optional(),
           expires_at: z.string().nullable().optional(),
         },
         annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-        ...publicSecurity(OAUTH_CONFIG?.readScope || "zssh:read")
+        ...publicSecurity(OAUTH_CONFIG?.readScope || "zssh:read", {
+          ui: { resourceUri: CONNECTION_UI_URI },
+          "openai/outputTemplate": CONNECTION_UI_URI,
+          "openai/toolInvocation/invoking": "Checking zSSH connection…",
+          "openai/toolInvocation/invoked": "zSSH connection checked.",
+        })
       },
       async (_args, extra) => {
         const authError = await publicToolAuthorizationError(extra, OAUTH_CONFIG?.readScope || "zssh:read", { requirePairing: false });
@@ -610,6 +638,7 @@ function createMcpServer() {
             paired: Boolean(pairing.paired),
             pending: Boolean(pairing.pending),
             profile_id: pairing.profile_id,
+            target_label: TARGET_LABEL,
             request_id: pairing.request_id || null,
             expires_at: pairing.expires_at || null,
           };
