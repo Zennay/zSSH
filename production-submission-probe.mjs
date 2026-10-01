@@ -1,6 +1,12 @@
 import crypto from "node:crypto";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import {
+  assertExactBearerResourceMetadata,
+  fetchNoRedirect,
+  protectedResourceMetadataUrl,
+  validatePublicMcpUrl,
+} from "./release-contract.mjs";
 
 function required(name) {
   const value = String(process.env[name] || "").trim();
@@ -28,10 +34,12 @@ function oauthSchemes(tool) {
   return tool?.securitySchemes || tool?._meta?.securitySchemes || [];
 }
 
-const mcpUrl = new URL(required("ZSSH_PLUGIN_MCP_URL"));
 const allowHttp = process.env.ZSSH_PROBE_ALLOW_HTTP === "1";
-if (!allowHttp && mcpUrl.protocol !== "https:") throw new Error("ZSSH_PLUGIN_MCP_URL must use HTTPS");
-if (mcpUrl.pathname.replace(/\/$/, "") !== "/mcp") throw new Error("ZSSH_PLUGIN_MCP_URL must end in /mcp");
+const mcpUrl = validatePublicMcpUrl(required("ZSSH_PLUGIN_MCP_URL"), {
+  name: "ZSSH_PLUGIN_MCP_URL",
+  allowHttp,
+  requirePublicHostname: !allowHttp,
+});
 
 const accessToken = required("ZSSH_REVIEW_ACCESS_TOKEN");
 const reviewReadFile = required("ZSSH_REVIEW_FILE");
@@ -39,14 +47,14 @@ const reviewWriteFile = required("ZSSH_REVIEW_WRITE_FILE");
 const challengeToken = String(process.env.OPENAI_APPS_CHALLENGE_TOKEN || "").trim();
 
 const origin = mcpUrl.origin;
-const metadataUrl = new URL("/.well-known/oauth-protected-resource", origin);
+const metadataUrl = protectedResourceMetadataUrl(mcpUrl);
 const healthUrl = new URL("/health", origin);
 const challengeUrl = new URL("/.well-known/openai-apps-challenge", origin);
 
-const health = await fetch(healthUrl);
+const health = await fetchNoRedirect(healthUrl, {}, "health endpoint");
 if (!health.ok) throw new Error("health endpoint failed: HTTP " + health.status);
 
-const metadataResponse = await fetch(metadataUrl);
+const metadataResponse = await fetchNoRedirect(metadataUrl, {}, "OAuth protected-resource metadata");
 if (!metadataResponse.ok) throw new Error("OAuth protected-resource metadata failed: HTTP " + metadataResponse.status);
 const metadata = await metadataResponse.json();
 if (metadata.resource !== origin) {
@@ -59,21 +67,19 @@ if (!Array.isArray(metadata.scopes_supported) || !metadata.scopes_supported.incl
   throw new Error("OAuth protected-resource metadata is missing zssh:read/zssh:write");
 }
 
-const unauthenticated = await fetch(mcpUrl, {
+const unauthenticated = await fetchNoRedirect(mcpUrl, {
   method: "POST",
   headers: { "content-type": "application/json" },
   body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} }),
-});
+}, "unauthenticated MCP endpoint");
 if (unauthenticated.status !== 401) {
   throw new Error("unauthenticated MCP request must return 401, got " + unauthenticated.status);
 }
 const challengeHeader = unauthenticated.headers.get("www-authenticate") || "";
-if (!/^Bearer\b/i.test(challengeHeader) || !challengeHeader.includes("resource_metadata=")) {
-  throw new Error("401 response is missing Bearer resource_metadata challenge");
-}
+assertExactBearerResourceMetadata(challengeHeader, metadataUrl);
 
 if (challengeToken) {
-  const verification = await fetch(challengeUrl, { cache: "no-store" });
+  const verification = await fetchNoRedirect(challengeUrl, { cache: "no-store" }, "OpenAI domain challenge");
   const body = await verification.text();
   if (!verification.ok || body !== challengeToken) {
     throw new Error("OpenAI domain verification challenge does not match exactly");
@@ -201,6 +207,8 @@ try {
     oauth_resource: metadata.resource,
     authorization_servers: metadata.authorization_servers,
     domain_challenge_checked: Boolean(challengeToken),
+    no_redirect_contract_validated: true,
+    exact_resource_metadata_challenge_validated: true,
     tool_count: tools.length,
     forbidden_generic_tools_absent: true,
     annotations_validated: true,
