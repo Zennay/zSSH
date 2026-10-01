@@ -26,7 +26,7 @@ const outputFile = path.join(reviewRoot, "output.txt");
 const port = 18793;
 const jwksPort = 18794;
 const resource = `http://127.0.0.1:${port}`;
-const issuer = "https://issuer.submission-probe.test";
+const issuer = `http://127.0.0.1:${jwksPort}`;
 const challengeToken = "challenge-" + Date.now();
 
 await mkdir(reviewRoot, { recursive: true });
@@ -39,9 +39,23 @@ jwk.use = "sig";
 jwk.alg = "RS256";
 
 const jwksServer = createHttpServer((req, res) => {
-  if (req.url !== "/jwks") return res.writeHead(404).end();
-  res.writeHead(200, { "content-type": "application/json" });
-  res.end(JSON.stringify({ keys: [jwk] }));
+  if (req.url === "/jwks") {
+    res.writeHead(200, { "content-type": "application/json" });
+    return res.end(JSON.stringify({ keys: [jwk] }));
+  }
+  if (req.url === "/.well-known/oauth-authorization-server") {
+    res.writeHead(200, { "content-type": "application/json" });
+    return res.end(JSON.stringify({
+      issuer,
+      authorization_endpoint: issuer + "/authorize",
+      token_endpoint: issuer + "/token",
+      registration_endpoint: issuer + "/register",
+      response_types_supported: ["code"],
+      code_challenge_methods_supported: ["S256"],
+      token_endpoint_auth_methods_supported: ["none"],
+    }));
+  }
+  return res.writeHead(404).end();
 });
 await new Promise(resolve => jwksServer.listen(jwksPort, "127.0.0.1", resolve));
 
@@ -130,7 +144,7 @@ try {
     throw new Error("production probe failed: " + result.stderr + "\n" + result.stdout);
   }
   const report = JSON.parse(result.stdout);
-  if (!report.ok || !report.annotations_validated || !report.review_file_write_roundtrip_green || !report.no_redirect_contract_validated || !report.exact_resource_metadata_challenge_validated || !/^[a-f0-9]{64}$/.test(String(report.tool_scan_sha256 || ""))) {
+  if (!report.ok || !report.annotations_validated || !report.review_file_write_roundtrip_green || !report.no_redirect_contract_validated || !report.exact_resource_metadata_challenge_validated || !report.oauth_authorization_server_metadata_validated || !report.oauth_pkce_s256_validated || !/^[a-f0-9]{64}$/.test(String(report.tool_scan_sha256 || ""))) {
     throw new Error("production probe did not report all green gates: " + result.stdout);
   }
   console.log(JSON.stringify({ ok: true, production_submission_probe_canary: report }, null, 2));
