@@ -87,6 +87,22 @@ Production hardening still requires a dedicated service account, scoped sudo/cap
 
 ## ChatGPT integration status
 
+OpenAI public review is being developed as a separate fail-closed profile so the existing private operator workflow remains available.
+
+### Public plugin review profile
+
+Set `ZSSH_PLUGIN_PROFILE=public` to advertise only a narrow review-oriented tool surface. In this profile:
+
+- `zssh_exec` and `zssh_run_safe` are not exposed to MCP clients;
+- read-only system inspection is split into explicit tools such as `get_system_uptime`, `get_disk_usage`, and `get_memory_usage`;
+- `ZSSH_EXEC_MODE=full` is rejected at startup;
+- all exposed tools carry explicit read-only, destructive, and open-world annotations;
+- `OPENAI_APPS_CHALLENGE_TOKEN` can serve the exact plaintext domain-verification token at `/.well-known/openai-apps-challenge`;
+- CI runs `public-plugin-canary.mjs` against the real MCP server and fails if generic executors reappear.
+
+Privacy, terms, support, and the current review checklist are in [PRIVACY.md](./PRIVACY.md), [TERMS.md](./TERMS.md), [SUPPORT.md](./SUPPORT.md), and [docs/openai-plugin-review.md](./docs/openai-plugin-review.md).
+
+
 OpenAI's current plugin documentation uses remote MCP over streamable HTTP. Public submission requires a stable public HTTPS endpoint. Development bearer auth is temporary; OAuth-compatible user authentication, target pairing, and public submission remain later milestones. The loopback gateway is not yet a plugin that normal ChatGPT chats can select.
 
 ## Claude MCP compatibility
