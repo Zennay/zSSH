@@ -5,9 +5,24 @@ on:
     branches: [main]
     paths:
       - ".github/workflows/public-release-gate.yml"
+      - "release-contract.mjs"
       - "scripts/check-public-release-config.mjs"
       - "production-submission-probe.mjs"
+      - "production-submission-probe-canary.mjs"
+      - "test/release-contract.test.mjs"
       - "submission/**"
+      - "docs/openai-plugin-*.md"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/public-release-gate.yml"
+      - "release-contract.mjs"
+      - "scripts/check-public-release-config.mjs"
+      - "production-submission-probe.mjs"
+      - "production-submission-probe-canary.mjs"
+      - "test/release-contract.test.mjs"
+      - "submission/**"
+      - "docs/openai-plugin-*.md"
   workflow_dispatch:
 
 permissions:
@@ -29,10 +44,35 @@ jobs:
           node-version: 20
       - name: Self-test release configuration guard
         run: node scripts/check-public-release-config.mjs --self-test
+      - name: Exercise release origin contract
+        run: node --test test/release-contract.test.mjs
       - name: Validate release scripts
         run: |
+          node --check release-contract.mjs
           node --check scripts/check-public-release-config.mjs
           node --check production-submission-probe.mjs
+          node --check production-submission-probe-canary.mjs
+
+  vps-rehearsal:
+    name: Self-hosted VPS release rehearsal
+    if: github.event_name != 'workflow_dispatch'
+    needs: contract
+    runs-on: self-hosted
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install production probe dependencies
+        run: npm install --ignore-scripts --no-audit --no-fund
+      - name: Re-run release contract on the VPS runner
+        run: node --test test/release-contract.test.mjs
+      - name: Exercise isolated production-like public profile
+        run: node production-submission-probe-canary.mjs
+      - name: Record VPS rehearsal proof
+        run: |
+          printf 'ZSSH_VPS_RELEASE_REHEARSAL_GREEN sha=%s run=%s\n' "$GITHUB_SHA" "$GITHUB_RUN_ID"
 
   production:
     name: Production submission probe
@@ -75,6 +115,8 @@ jobs:
             workflow_run_attempt: process.env.GITHUB_RUN_ATTEMPT,
             endpoint_origin: endpoint.origin,
             endpoint_path: endpoint.pathname,
+            redirect_policy: "manual-fail-closed",
+            resource_metadata_challenge: "exact-same-origin",
             verified_at: new Date().toISOString()
           };
           writeFileSync(process.env.EVIDENCE_PATH, JSON.stringify(evidence, null, 2) + "\n");
