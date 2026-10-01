@@ -3,6 +3,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import {
   assertExactBearerResourceMetadata,
+  assertPublicToolScopeContract,
   fetchAuthorizationServerMetadata,
   fetchNoRedirect,
   protectedResourceMetadataUrl,
@@ -30,10 +31,6 @@ function jsonResult(result) {
   } catch {
     return { text };
   }
-}
-
-function oauthSchemes(tool) {
-  return tool?.securitySchemes || tool?._meta?.securitySchemes || [];
 }
 
 const allowHttp = process.env.ZSSH_PROBE_ALLOW_HTTP === "1";
@@ -143,16 +140,14 @@ try {
     if (byName.has(name)) throw new Error("public production scan exposes forbidden generic tool: " + name);
   }
 
+  assertPublicToolScopeContract(tools);
+
   for (const tool of tools) {
     const annotations = tool.annotations || {};
     for (const key of ["readOnlyHint", "destructiveHint", "openWorldHint"]) {
       if (typeof annotations[key] !== "boolean") {
         throw new Error(tool.name + " lacks explicit annotation " + key);
       }
-    }
-    const schemes = oauthSchemes(tool);
-    if (!schemes.some(scheme => scheme?.type === "oauth2" && Array.isArray(scheme.scopes) && scheme.scopes.length > 0)) {
-      throw new Error(tool.name + " lacks OAuth security metadata");
     }
   }
 
@@ -235,6 +230,7 @@ try {
     forbidden_generic_tools_absent: true,
     annotations_validated: true,
     oauth_security_validated: true,
+    oauth_tool_scope_contract_validated: true,
     oauth_authorization_server_metadata_validated: true,
     oauth_pkce_s256_validated: authorizationServerEvidence.every(item => item.pkce_s256 === true),
     oauth_authorization_servers: authorizationServerEvidence,

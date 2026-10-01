@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import {
   assertExactBearerResourceMetadata,
+  assertPublicToolScopeContract,
   authorizationServerMetadataUrls,
   fetchAuthorizationServerMetadata,
   fetchNoRedirect,
@@ -139,6 +140,62 @@ test("release probe helper fails closed instead of following redirects", async (
   } finally {
     await new Promise(resolve => server.close(resolve));
   }
+});
+
+test("public tool scope contract rejects scope drift and unreviewed surface expansion", () => {
+  const read = name => ({
+    name,
+    securitySchemes: [{ type: "oauth2", scopes: ["zssh:read"] }],
+    _meta: { securitySchemes: [{ type: "oauth2", scopes: ["zssh:read"] }] },
+  });
+  const write = {
+    name: "zssh_write_file",
+    securitySchemes: [{ type: "oauth2", scopes: ["zssh:write"] }],
+    _meta: { securitySchemes: [{ type: "oauth2", scopes: ["zssh:write"] }] },
+  };
+  const tools = [
+    read("get_profile"),
+    read("get_pairing_status"),
+    read("zssh_server_info"),
+    read("get_system_uptime"),
+    read("get_system_identity"),
+    read("get_kernel_info"),
+    read("get_disk_usage"),
+    read("get_memory_usage"),
+    read("zssh_read_file"),
+    write,
+  ];
+  assert.equal(assertPublicToolScopeContract(tools), true);
+
+  const wireOnly = tools.map(tool => {
+    const { securitySchemes, ...rest } = tool;
+    return rest;
+  });
+  assert.equal(assertPublicToolScopeContract(wireOnly), true);
+
+  const topLevelDrift = tools.map(tool => tool.name === "get_profile"
+    ? { ...tool, securitySchemes: [{ type: "oauth2", scopes: ["zssh:write"] }] }
+    : tool);
+  assert.throws(() => assertPublicToolScopeContract(topLevelDrift), /get_profile.*zssh:read/);
+
+  const scopeDrift = tools.map(tool => tool.name === "zssh_write_file"
+    ? {
+        ...tool,
+        securitySchemes: [{ type: "oauth2", scopes: ["zssh:read"] }],
+        _meta: { securitySchemes: [{ type: "oauth2", scopes: ["zssh:read"] }] },
+      }
+    : tool);
+  assert.throws(() => assertPublicToolScopeContract(scopeDrift), /zssh_write_file.*zssh:write/);
+
+  assert.throws(
+    () => assertPublicToolScopeContract([...tools, read("unreviewed_tool")]),
+    /unreviewed tools: unreviewed_tool/
+  );
+
+  const metadataDrift = tools.map(tool => tool.name === "get_profile"
+    ? { ...tool, _meta: { securitySchemes: [{ type: "oauth2", scopes: ["zssh:write"] }] } }
+    : tool);
+  assert.throws(() => assertPublicToolScopeContract(metadataDrift), /get_profile.*zssh:read/);
 });
 
 test("public tool contract fingerprint is stable across ordering but changes with metadata", () => {
