@@ -167,6 +167,17 @@ test("public tool scope contract rejects scope drift and unreviewed surface expa
   ];
   assert.equal(assertPublicToolScopeContract(tools), true);
 
+  const wireOnly = tools.map(tool => {
+    const { securitySchemes, ...rest } = tool;
+    return rest;
+  });
+  assert.equal(assertPublicToolScopeContract(wireOnly), true);
+
+  const topLevelDrift = tools.map(tool => tool.name === "get_profile"
+    ? { ...tool, securitySchemes: [{ type: "oauth2", scopes: ["zssh:write"] }] }
+    : tool);
+  assert.throws(() => assertPublicToolScopeContract(topLevelDrift), /get_profile.*zssh:read/);
+
   const scopeDrift = tools.map(tool => tool.name === "zssh_write_file"
     ? {
         ...tool,
