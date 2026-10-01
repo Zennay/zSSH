@@ -3,6 +3,7 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import { mkdtemp, rm } from "node:fs/promises";
 import path from "node:path";
 import crypto from "node:crypto";
+import { VERSION } from "./version.mjs";
 
 const port = Number(process.env.PORT || 8788);
 const token = process.env.ZSSH_DEV_BEARER_TOKEN || "";
@@ -22,6 +23,13 @@ const transport = new StreamableHTTPClientTransport(
 );
 
 try {
+  const healthResponse = await fetch(`http://127.0.0.1:${port}/health`);
+  if (!healthResponse.ok) throw new Error(`health check failed: HTTP ${healthResponse.status}`);
+  const health = await healthResponse.json();
+  if (health.version !== VERSION) {
+    throw new Error(`runtime health version mismatch: expected ${VERSION}, got ${health.version}`);
+  }
+
   await client.connect(transport);
 
   const listed = await client.listTools();
@@ -33,6 +41,9 @@ try {
   const infoResult = await client.callTool({ name: "zssh_server_info", arguments: {} });
   const infoText = infoResult.content?.find(part => part.type === "text")?.text;
   const info = JSON.parse(infoText || "{}");
+  if (info.version !== VERSION) {
+    throw new Error(`MCP server version mismatch: expected ${VERSION}, got ${info.version}`);
+  }
   if (info.uid === 0) throw new Error("zSSH is running as root");
   if (info.exec_mode !== "disabled") throw new Error(`raw shell is not fail-closed: ${info.exec_mode}`);
 
@@ -71,6 +82,7 @@ try {
   console.log(JSON.stringify({
     ok: true,
     service: "zssh",
+    version: VERSION,
     uid: info.uid,
     exec_mode: info.exec_mode,
     safe_program: safe.program,
