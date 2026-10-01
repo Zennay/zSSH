@@ -31,7 +31,7 @@ The annotation explanations to paste into review are maintained in `docs/openai-
 
 ## Reviewer target fixture
 
-The review cases assume the dedicated review target has `/srv/zssh-review` inside `ZSSH_ALLOWED_ROOTS`, with a UTF-8 file at `/srv/zssh-review/sample.txt`. The reviewer OAuth account must be explicitly paired to that target before target operations are expected to succeed.
+The review cases assume the dedicated review target has `/srv/zssh-review` configured as `ZSSH_PUBLIC_ALLOWED_ROOTS`, with a UTF-8 file at `/srv/zssh-review/sample.txt`. Keep this public root free of credentials and authentication secrets. The public file tools reject common credential-file paths and secret-like content rather than returning it. The reviewer OAuth account must be explicitly paired to that target before target operations are expected to succeed.
 
 The final directory submission also needs a verified developer identity, successful domain verification, a current production tool scan, and reviewer-accessible OAuth credentials.
 
