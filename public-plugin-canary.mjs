@@ -1,5 +1,6 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import { assertPublicToolScopeContract } from "./release-contract.mjs";
 
 const port = Number(process.env.PORT || 8788);
 const token = process.env.ZSSH_DEV_BEARER_TOKEN || "";
@@ -44,16 +45,14 @@ try {
     if (names.has(forbidden)) throw new Error(`unsafe generic tool exposed in public profile: ${forbidden}`);
   }
 
+  assertPublicToolScopeContract(tools);
+
   for (const tool of tools) {
     const a = tool.annotations || {};
     for (const key of ["readOnlyHint", "destructiveHint", "openWorldHint"]) {
       if (typeof a[key] !== "boolean") {
         throw new Error(`tool ${tool.name} is missing explicit boolean annotation ${key}`);
       }
-    }
-    const schemes = tool.securitySchemes || tool._meta?.securitySchemes || [];
-    if (!schemes.some(scheme => scheme?.type === "oauth2" && Array.isArray(scheme.scopes) && scheme.scopes.length > 0)) {
-      throw new Error(`tool ${tool.name} is missing an OAuth security scheme`);
     }
   }
 
@@ -141,6 +140,7 @@ try {
     raw_shell_exposed: false,
     annotations_validated: true,
     oauth_security_schemes_validated: true,
+    oauth_tool_scope_contract_validated: true,
     connection_ui_validated: true,
     restricted_credential_data_rejected: true,
     domain_challenge_validated: Boolean(challenge),
