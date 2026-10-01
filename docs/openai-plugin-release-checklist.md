@@ -7,7 +7,7 @@ This checklist tracks the production path from the current review-ready MCP prof
 ## Pre-release
 
 - [ ] Stable public HTTPS MCP endpoint configured
-- [ ] Production OAuth authorization server configured with PKCE support
+- [ ] Production OAuth authorization server publishes discovery metadata with authorization-code flow, PKCE S256, and token endpoint auth methods
 - [ ] Resource-server metadata points to the production MCP resource
 - [ ] Health, OAuth metadata, challenge, and unauthenticated MCP checks do not redirect away from the submitted origin
 - [ ] `WWW-Authenticate` advertises the exact same-origin `/.well-known/oauth-protected-resource` URL
@@ -31,7 +31,8 @@ Verify:
 - sensitive paths are rejected;
 - reviewer file fixture remains bounded to the configured public root;
 - tokens and credentials are never printed;
-- release checks fail closed on redirects or mismatched OAuth resource-metadata challenge URLs.
+- release checks fail closed on redirects or mismatched OAuth resource-metadata challenge URLs;
+- the production probe resolves the advertised authorization server and validates issuer binding, authorization/token endpoints, authorization-code support, PKCE S256, and declared token endpoint auth methods.
 
 ## Reproducible submission bundle
 
@@ -47,6 +48,7 @@ Record:
 - SHA-256 fingerprint of the exact public tool metadata returned by the production scan;
 - SHA-256 of the exact `zssh-openai-plugin.zip` uploaded by the production release gate;
 - plugin version, currently `0.1.1`, matching `package.json` and `submission/plugin.template.json`;
+- authorization-server metadata URL(s), issuer(s), and PKCE S256 evidence emitted by the production probe;
 - reviewer walkthrough result;
 - portal scan findings and resolutions.
 
