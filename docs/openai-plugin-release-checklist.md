@@ -38,9 +38,10 @@ Verify:
 Record:
 
 - production endpoint version/revision;
-- CI run result, including the self-hosted VPS release rehearsal for the exact commit;
+- CI run result for the exact commit;
+- VPS rollout proof from the dedicated `Zennay/zCloud` `zSSH standalone VPS release` workflow, pinned to the exact canonical zSSH commit;
 - SHA-256 fingerprint of the exact public tool metadata returned by the production scan;
 - reviewer walkthrough result;
 - portal scan findings and resolutions.
 
-A green local canary alone does not indicate production submission readiness.
+A green local canary alone does not indicate production submission readiness. The zSSH repository intentionally does not own the VPS runner; live rollout evidence is produced through the dedicated zCloud VPS release lane so repository-scoped runner queues cannot masquerade as deployment proof.

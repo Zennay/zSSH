@@ -53,26 +53,6 @@ jobs:
           node --check production-submission-probe.mjs
           node --check production-submission-probe-canary.mjs
 
-  vps-rehearsal:
-    name: Self-hosted VPS release rehearsal
-    if: github.event_name != 'workflow_dispatch'
-    needs: contract
-    runs-on: self-hosted
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-      - name: Install production probe dependencies
-        run: npm install --ignore-scripts --no-audit --no-fund
-      - name: Re-run release contract on the VPS runner
-        run: node --test test/release-contract.test.mjs
-      - name: Exercise isolated production-like public profile
-        run: node production-submission-probe-canary.mjs
-      - name: Record VPS rehearsal proof
-        run: |
-          printf 'ZSSH_VPS_RELEASE_REHEARSAL_GREEN sha=%s run=%s\n' "$GITHUB_SHA" "$GITHUB_RUN_ID"
 
   production:
     name: Production submission probe
