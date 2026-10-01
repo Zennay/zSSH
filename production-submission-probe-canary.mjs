@@ -130,7 +130,7 @@ try {
     throw new Error("production probe failed: " + result.stderr + "\n" + result.stdout);
   }
   const report = JSON.parse(result.stdout);
-  if (!report.ok || !report.annotations_validated || !report.review_file_write_roundtrip_green) {
+  if (!report.ok || !report.annotations_validated || !report.review_file_write_roundtrip_green || !report.no_redirect_contract_validated || !report.exact_resource_metadata_challenge_validated) {
     throw new Error("production probe did not report all green gates: " + result.stdout);
   }
   console.log(JSON.stringify({ ok: true, production_submission_probe_canary: report }, null, 2));
