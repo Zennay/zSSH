@@ -66,7 +66,7 @@ export function publicPathLooksSensitive(inputPath) {
 
   if (segments.some(segment => [".ssh", ".gnupg", ".aws", ".azure", ".kube"].includes(segment))) return true;
   if (basename === ".env" || basename.startsWith(".env.")) return true;
-  if ([".netrc", ".npmrc", ".pypirc", "credentials", "credentials.json", "config.json"].includes(basename)) return true;
+  if ([".netrc", ".npmrc", ".pypirc", "credentials", "credentials.json"].includes(basename)) return true;
   if (/\.(pem|key|p12|pfx|jks|keystore|kdbx)$/.test(basename)) return true;
   if (/(^|[-_.])(secret|secrets|credential|credentials|token|tokens|password|passwords)([-_.]|$)/.test(basename)) return true;
   return false;
