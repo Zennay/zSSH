@@ -422,13 +422,13 @@ async function publicToolAuthorizationError(extra, scope, { requirePairing = tru
 
   const pairing = await getPairingStatus(authInfoFromExtra(extra), {
     resource: OAUTH_CONFIG?.resource || "",
-    createRequest: true,
+    createRequest: false,
   });
   if (pairing.paired) return null;
 
   const message = pairing.pending
     ? "This OAuth profile is not paired to the Linux target yet. Approve pairing request " + pairing.request_id + " locally on the target."
-    : "This OAuth profile is not paired to the Linux target.";
+    : "This OAuth profile is not paired to the Linux target. Call get_pairing_status to create a short-lived pairing request for local approval.";
   return {
     content: [{ type: "text", text: message }],
     structuredContent: {
