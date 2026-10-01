@@ -105,6 +105,20 @@ Privacy, terms, support, and the current review checklist are in [PRIVACY.md](./
 
 OpenAI's current plugin documentation uses remote MCP over streamable HTTP. Public submission requires a stable public HTTPS endpoint. Development bearer auth is temporary; OAuth-compatible user authentication, target pairing, and public submission remain later milestones. The loopback gateway is not yet a plugin that normal ChatGPT chats can select.
 
+### Public OAuth resource server
+
+Public zSSH now defaults to OAuth resource-server mode. Configure an established OAuth/OIDC provider with:
+
+- `ZSSH_PUBLIC_BASE_URL` — the canonical HTTPS resource identifier;
+- `ZSSH_OAUTH_ISSUER` — the exact authorization-server issuer;
+- `ZSSH_OAUTH_JWKS_URI` — the provider JWKS endpoint;
+- `ZSSH_OAUTH_SCOPES` — defaults to `zssh:read zssh:write`.
+
+The server publishes `/.well-known/oauth-protected-resource`, returns a standards-based `WWW-Authenticate` challenge, verifies JWT signature/issuer/audience/expiry, and enforces read/write scopes at tool level. Public production mode refuses legacy static authentication unless an explicit test-only override is set.
+
+The private/default profile keeps the existing capability URL, API-key, bearer-token, and trusted-loopback workflows unchanged.
+
+
 ## Claude MCP compatibility
 
 zSSH exposes the standard Streamable HTTP MCP transport at `/mcp`, so it can be
