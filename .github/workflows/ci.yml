@@ -159,3 +159,6 @@ jobs:
           test -f "$review_root/sample.txt"
           grep -F "status=ready" "$review_root/sample.txt"
           node -e 'const fs=require("fs"); const x=JSON.parse(fs.readFileSync(process.argv[1],"utf8")); if(!x.ok || x.review_root!==process.argv[2]) process.exit(1)' "$RUNNER_TEMP/review-fixture.json" "$review_root"
+
+      - name: Exercise production submission readiness probe
+        run: node production-submission-probe-canary.mjs
