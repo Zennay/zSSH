@@ -6,7 +6,7 @@ import path from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { exportJWK, generateKeyPair, SignJWT } from "jose";
-import { approvePairing, revokePairing } from "./pairing.mjs";
+import { approvePairing, listPairings, revokePairing } from "./pairing.mjs";
 
 const root = await mkdtemp(path.join(os.tmpdir(), "zssh-pairing-canary-"));
 const pairingFile = path.join(root, "pairings.json");
@@ -93,14 +93,18 @@ try {
   if (!/^zssh_[a-f0-9]{32}$/.test(profile.id || "")) throw new Error("profile id is not stable/opaque");
   if (profile.nickname !== "Review target") throw new Error("profile nickname does not use operator target label");
 
+  const blockedBefore = await client.callTool({ name: "get_system_uptime", arguments: {} });
+  if (!blockedBefore.isError) throw new Error("unpaired system tool call was not blocked");
+  const stateBeforeRequest = await listPairings({ env: pairingEnv });
+  if (stateBeforeRequest.requests.length !== 0) {
+    throw new Error("read-only target call created pairing state");
+  }
+
   const statusResult = await client.callTool({ name: "get_pairing_status", arguments: {} });
   const status = statusResult.structuredContent || JSON.parse(statusResult.content?.find(p => p.type === "text")?.text || "{}");
   if (status.paired !== false || status.pending !== true || !status.request_id) {
-    throw new Error("pairing request was not created");
+    throw new Error("pairing request was not created by get_pairing_status");
   }
-
-  const blockedBefore = await client.callTool({ name: "get_system_uptime", arguments: {} });
-  if (!blockedBefore.isError) throw new Error("unpaired system tool call was not blocked");
 
   await approvePairing(status.request_id, { env: pairingEnv });
 
@@ -117,6 +121,7 @@ try {
   console.log(JSON.stringify({
     ok: true,
     profile_id: profile.id,
+    read_only_unpaired_side_effect_free: true,
     request_created: true,
     unpaired_blocked: true,
     paired_allowed: true,
