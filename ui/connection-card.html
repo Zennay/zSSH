@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>zSSH connection</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: transparent; color: var(--color-text-primary, inherit); }
+    .card { padding: 12px; display: grid; gap: 10px; }
+    .top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .brand { display: grid; gap: 2px; min-width: 0; }
+    .brand strong { font-size: 14px; line-height: 1.2; }
+    .target { font-size: 12px; opacity: .72; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .badge {
+      flex: 0 0 auto; border: 1px solid currentColor; border-radius: 999px;
+      padding: 3px 8px; font-size: 11px; font-weight: 600;
+    }
+    .details { display: grid; gap: 6px; font-size: 12px; }
+    .row { display: flex; justify-content: space-between; gap: 16px; }
+    .key { opacity: .68; }
+    .value { text-align: right; overflow-wrap: anywhere; }
+    .note { margin: 0; font-size: 11px; line-height: 1.35; opacity: .68; }
+    button {
+      width: fit-content; border: 1px solid currentColor; border-radius: 8px;
+      background: transparent; color: inherit; padding: 6px 9px; font: inherit; cursor: pointer;
+    }
+    button:disabled { cursor: default; opacity: .55; }
+  </style>
+</head>
+<body>
+  <main class="card" aria-live="polite">
+    <div class="top">
+      <div class="brand">
+        <strong>zSSH</strong>
+        <span id="target" class="target">Linux target</span>
+      </div>
+      <span id="status" class="badge">Checking…</span>
+    </div>
+
+    <div class="details">
+      <div class="row"><span class="key">Profile</span><span id="profile" class="value">—</span></div>
+      <div id="requestRow" class="row" hidden><span class="key">Pairing request</span><span id="request" class="value">—</span></div>
+    </div>
+
+    <p id="note" class="note">Approval stays local to the Linux target.</p>
+    <button id="refresh" type="button">Refresh status</button>
+  </main>
+
+  <script>
+    const targetEl = document.getElementById("target");
+    const statusEl = document.getElementById("status");
+    const profileEl = document.getElementById("profile");
+    const requestRowEl = document.getElementById("requestRow");
+    const requestEl = document.getElementById("request");
+    const noteEl = document.getElementById("note");
+    const refreshEl = document.getElementById("refresh");
+
+    const pending = new Map();
+    let nextId = 1;
+
+    function request(method, params) {
+      const id = nextId++;
+      window.parent.postMessage({ jsonrpc: "2.0", id, method, params }, "*");
+      return new Promise((resolve, reject) => pending.set(id, { resolve, reject }));
+    }
+
+    function render(value) {
+      if (!value || typeof value !== "object") return;
+      targetEl.textContent = String(value.target_label || "Linux target");
+      profileEl.textContent = String(value.profile_id || "—");
+
+      if (value.paired) {
+        statusEl.textContent = "Connected";
+        requestRowEl.hidden = true;
+        noteEl.textContent = "This ChatGPT profile is paired with the Linux target.";
+        return;
+      }
+
+      statusEl.textContent = value.pending ? "Approval needed" : "Not paired";
+      requestRowEl.hidden = !value.request_id;
+      requestEl.textContent = value.request_id ? String(value.request_id) : "—";
+      noteEl.textContent = value.pending
+        ? "Approve this short-lived request locally on the Linux target. ChatGPT cannot approve itself."
+        : "Create a pairing request, then approve it locally on the Linux target.";
+    }
+
+    window.addEventListener("message", (event) => {
+      if (event.source !== window.parent) return;
+      const message = event.data;
+      if (!message || message.jsonrpc !== "2.0") return;
+
+      if (message.id !== undefined && pending.has(message.id)) {
+        const waiter = pending.get(message.id);
+        pending.delete(message.id);
+        if (message.error) waiter.reject(message.error);
+        else waiter.resolve(message.result);
+        return;
+      }
+
+      if (message.method === "ui/notifications/tool-result") {
+        render(message.params?.structuredContent);
+      }
+    }, { passive: true });
+
+    if (window.openai?.toolOutput) render(window.openai.toolOutput);
+
+    refreshEl.addEventListener("click", async () => {
+      refreshEl.disabled = true;
+      try {
+        const result = await request("tools/call", { name: "get_pairing_status", arguments: {} });
+        render(result?.structuredContent);
+      } catch {
+        noteEl.textContent = "Could not refresh the pairing status.";
+      } finally {
+        refreshEl.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>

@@ -4,7 +4,7 @@ zSSH is a **standalone security-first remote operations project**. zCloud is its
 
 ## Current milestone
 
-**M1 — Safe local execution proof.** M0 and the standalone repository migration are complete.
+**Public plugin candidate — review hardening.** The safe execution foundation, public OAuth resource-server profile, local target pairing/revocation, and machine-validated submission package are implemented. Remaining work is concentrated in production OAuth/reviewer setup, the public endpoint model, and final OpenAI portal validation.
 
 This branch proves the smallest safe foundation:
 
@@ -87,7 +87,7 @@ Production hardening still requires a dedicated service account, scoped sudo/cap
 
 ## ChatGPT integration status
 
-OpenAI public review is being developed as a separate fail-closed profile so the existing private operator workflow remains available.
+OpenAI public review uses a separate fail-closed profile so the existing private operator workflow remains available. The public profile now includes a compact MCP Apps connection card for profile/pairing status; the operational tools continue to work without UI.
 
 ### Public plugin review profile
 
@@ -103,7 +103,7 @@ Set `ZSSH_PLUGIN_PROFILE=public` to advertise only a narrow review-oriented tool
 Privacy, terms, support, and the current review checklist are in [PRIVACY.md](./PRIVACY.md), [TERMS.md](./TERMS.md), [SUPPORT.md](./SUPPORT.md), and [docs/openai-plugin-review.md](./docs/openai-plugin-review.md).
 
 
-OpenAI's current plugin documentation uses remote MCP over streamable HTTP. Public submission requires a stable public HTTPS endpoint. Development bearer auth is temporary; OAuth-compatible user authentication, target pairing, and public submission remain later milestones. The loopback gateway is not yet a plugin that normal ChatGPT chats can select.
+OpenAI's current plugin documentation uses remote MCP over Streamable HTTP. Public submission requires a stable public HTTPS endpoint, production OAuth, a current tool scan, domain verification, review cases, and reviewer credentials. zSSH already implements the OAuth resource-server boundary and target pairing; the remaining product decision is how a self-hosted per-user target maps to OpenAI's normal universal-endpoint model (template URLs are restricted to trusted developers).
 
 ### Public OAuth resource server
 

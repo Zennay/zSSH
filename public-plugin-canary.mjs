@@ -62,6 +62,32 @@ try {
     throw new Error("get_profile is not marked as the OpenAI profile tool");
   }
 
+  const pairingTool = tools.find(tool => tool.name === "get_pairing_status");
+  const connectionUiUri = pairingTool?._meta?.ui?.resourceUri;
+  if (connectionUiUri !== "ui://zssh/connection-card-v1.html") {
+    throw new Error("get_pairing_status is not linked to the connection UI resource");
+  }
+
+  const resources = await client.listResources();
+  if (!(resources.resources || []).some(resource => resource.uri === connectionUiUri)) {
+    throw new Error("connection UI resource is not advertised");
+  }
+  const uiResource = await client.readResource({ uri: connectionUiUri });
+  const ui = (uiResource.contents || []).find(content => content.uri === connectionUiUri);
+  if (ui?.mimeType !== "text/html;profile=mcp-app") {
+    throw new Error("connection UI resource has the wrong MCP Apps MIME type");
+  }
+  if (!String(ui?.text || "").includes("Approval stays local to the Linux target.")) {
+    throw new Error("connection UI does not explain the local approval boundary");
+  }
+  if (/<iframe\b/i.test(String(ui?.text || ""))) {
+    throw new Error("connection UI must not embed third-party frames");
+  }
+  const csp = ui?._meta?.ui?.csp || {};
+  if ((csp.connectDomains || []).length || (csp.resourceDomains || []).length || (csp.frameDomains || []).length) {
+    throw new Error("connection UI unexpectedly allows external origins");
+  }
+
   const writeTool = tools.find(tool => tool.name === "zssh_write_file");
   if (writeTool?.annotations?.readOnlyHint !== false || writeTool?.annotations?.destructiveHint !== true) {
     throw new Error("write tool annotations are not fail-safe");
@@ -96,6 +122,7 @@ try {
     raw_shell_exposed: false,
     annotations_validated: true,
     oauth_security_schemes_validated: true,
+    connection_ui_validated: true,
     domain_challenge_validated: Boolean(challenge),
     tool_count: names.size,
   }));
