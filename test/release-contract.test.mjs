@@ -6,6 +6,7 @@ import {
   fetchNoRedirect,
   isNonPublicHostname,
   protectedResourceMetadataUrl,
+  publicToolContractFingerprint,
   validatePublicMcpUrl,
 } from "../release-contract.mjs";
 
@@ -63,4 +64,22 @@ test("release probe helper fails closed instead of following redirects", async (
   } finally {
     await new Promise(resolve => server.close(resolve));
   }
+});
+
+test("public tool contract fingerprint is stable across ordering but changes with metadata", () => {
+  const first = [
+    { name: "write_file", annotations: { destructiveHint: true, readOnlyHint: false }, inputSchema: { type: "object", properties: { path: { type: "string" } } } },
+    { name: "get_profile", _meta: { "openai/profile": true }, annotations: { readOnlyHint: true, destructiveHint: false } },
+  ];
+  const reordered = [
+    { annotations: { destructiveHint: false, readOnlyHint: true }, name: "get_profile", _meta: { "openai/profile": true } },
+    { inputSchema: { properties: { path: { type: "string" } }, type: "object" }, name: "write_file", annotations: { readOnlyHint: false, destructiveHint: true } },
+  ];
+  const fingerprint = publicToolContractFingerprint(first);
+  assert.match(fingerprint, /^[a-f0-9]{64}$/);
+  assert.equal(fingerprint, publicToolContractFingerprint(reordered));
+  assert.notEqual(
+    fingerprint,
+    publicToolContractFingerprint([{ ...first[0], description: "changed review metadata" }, first[1]])
+  );
 });

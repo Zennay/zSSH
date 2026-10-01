@@ -97,16 +97,26 @@ jobs:
       - name: Fail closed on incomplete or non-public release configuration
         run: node scripts/check-public-release-config.mjs
       - name: Run end-to-end OpenAI submission probe
-        run: node production-submission-probe.mjs
+        shell: bash
+        env:
+          PROBE_REPORT_PATH: ${{ runner.temp }}/zssh-openai-production-probe.json
+        run: |
+          set -Eeuo pipefail
+          node production-submission-probe.mjs | tee "$PROBE_REPORT_PATH"
       - name: Record non-secret release evidence
         shell: bash
         env:
           EVIDENCE_PATH: ${{ runner.temp }}/zssh-openai-release-evidence.json
+          PROBE_REPORT_PATH: ${{ runner.temp }}/zssh-openai-production-probe.json
         run: |
           set -Eeuo pipefail
           node --input-type=module <<'NODE'
-          import { writeFileSync } from "node:fs";
+          import { readFileSync, writeFileSync } from "node:fs";
           const endpoint = new URL(process.env.ZSSH_PLUGIN_MCP_URL);
+          const probe = JSON.parse(readFileSync(process.env.PROBE_REPORT_PATH, "utf8"));
+          if (!/^[a-f0-9]{64}$/.test(String(probe.tool_scan_sha256 || ""))) {
+            throw new Error("production probe did not emit a valid tool scan fingerprint");
+          }
           const evidence = {
             ok: true,
             repository: process.env.GITHUB_REPOSITORY,
@@ -115,6 +125,7 @@ jobs:
             workflow_run_attempt: process.env.GITHUB_RUN_ATTEMPT,
             endpoint_origin: endpoint.origin,
             endpoint_path: endpoint.pathname,
+            tool_scan_sha256: probe.tool_scan_sha256,
             redirect_policy: "manual-fail-closed",
             resource_metadata_challenge: "exact-same-origin",
             verified_at: new Date().toISOString()

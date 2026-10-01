@@ -39,6 +39,7 @@ Record:
 
 - production endpoint version/revision;
 - CI run result, including the self-hosted VPS release rehearsal for the exact commit;
+- SHA-256 fingerprint of the exact public tool metadata returned by the production scan;
 - reviewer walkthrough result;
 - portal scan findings and resolutions.
 

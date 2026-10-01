@@ -5,6 +5,7 @@ import {
   assertExactBearerResourceMetadata,
   fetchNoRedirect,
   protectedResourceMetadataUrl,
+  publicToolContractFingerprint,
   validatePublicMcpUrl,
 } from "./release-contract.mjs";
 
@@ -114,6 +115,7 @@ try {
   const listed = await client.listTools();
   const tools = listed.tools || [];
   const byName = new Map(tools.map(tool => [tool.name, tool]));
+  const toolScanSha256 = publicToolContractFingerprint(tools);
 
   for (const name of requiredTools) {
     if (!byName.has(name)) throw new Error("production scan is missing tool: " + name);
@@ -210,6 +212,7 @@ try {
     no_redirect_contract_validated: true,
     exact_resource_metadata_challenge_validated: true,
     tool_count: tools.length,
+    tool_scan_sha256: toolScanSha256,
     forbidden_generic_tools_absent: true,
     annotations_validated: true,
     oauth_security_validated: true,
