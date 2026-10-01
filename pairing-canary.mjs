@@ -47,6 +47,7 @@ const child = spawn(process.execPath, ["server.mjs"], {
     ZSSH_OAUTH_ISSUER: issuer,
     ZSSH_OAUTH_JWKS_URI: `http://127.0.0.1:${jwksPort}/jwks`,
     ZSSH_OAUTH_SCOPES: "zssh:read zssh:write",
+    ZSSH_TARGET_LABEL: "Review target",
     ...pairingEnv,
   },
   stdio: ["ignore", "pipe", "pipe"],
@@ -90,6 +91,7 @@ try {
   const profileResult = await client.callTool({ name: "get_profile", arguments: {} });
   const profile = profileResult.structuredContent || JSON.parse(profileResult.content?.find(p => p.type === "text")?.text || "{}");
   if (!/^zssh_[a-f0-9]{32}$/.test(profile.id || "")) throw new Error("profile id is not stable/opaque");
+  if (profile.nickname !== "Review target") throw new Error("profile nickname does not use operator target label");
 
   const statusResult = await client.callTool({ name: "get_pairing_status", arguments: {} });
   const status = statusResult.structuredContent || JSON.parse(statusResult.content?.find(p => p.type === "text")?.text || "{}");
