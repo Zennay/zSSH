@@ -64,6 +64,8 @@ jobs:
           export ZSSH_DEV_BEARER_TOKEN="$(openssl rand -hex 32)"
           export OPENAI_APPS_CHALLENGE_TOKEN="$(openssl rand -hex 32)"
           export ZSSH_PLUGIN_PROFILE=public
+          export ZSSH_PUBLIC_AUTH_MODE=legacy
+          export ZSSH_ALLOW_LEGACY_PUBLIC_AUTH=1
           export ZSSH_EXEC_MODE=disabled
           node server.mjs &
           server_pid=$!
@@ -73,3 +75,40 @@ jobs:
           done
           curl --fail --silent "http://127.0.0.1:$PORT/health" >/dev/null
           node public-plugin-canary.mjs
+
+      - name: Exercise public OAuth discovery and HTTP challenge
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test_root="$(mktemp -d)"
+          trap 'kill "$server_pid" 2>/dev/null || true; rm -rf "$test_root"' EXIT
+          export NODE_ENV=production
+          export PORT=18790
+          export ZSSH_ALLOWED_ROOTS="$test_root"
+          export ZSSH_AUDIT_LOG="$test_root/audit.jsonl"
+          export ZSSH_PLUGIN_PROFILE=public
+          export ZSSH_PUBLIC_AUTH_MODE=oauth
+          export ZSSH_EXEC_MODE=disabled
+          export ZSSH_PUBLIC_BASE_URL="https://mcp.zssh.example"
+          export ZSSH_OAUTH_ISSUER="https://auth.zssh.example"
+          export ZSSH_OAUTH_JWKS_URI="https://auth.zssh.example/.well-known/jwks.json"
+          export ZSSH_OAUTH_SCOPES="zssh:read zssh:write"
+          node server.mjs &
+          server_pid=$!
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent "http://127.0.0.1:$PORT/health" >/dev/null; then break; fi
+            sleep 1
+          done
+          curl --fail --silent "http://127.0.0.1:$PORT/health" >/dev/null
+          metadata="$(curl --fail --silent "http://127.0.0.1:$PORT/.well-known/oauth-protected-resource")"
+          node -e '
+            const metadata = JSON.parse(process.argv[1]);
+            if (metadata.resource !== "https://mcp.zssh.example") throw new Error("wrong OAuth resource");
+            if (!metadata.authorization_servers?.includes("https://auth.zssh.example")) throw new Error("missing authorization server");
+            if (!metadata.scopes_supported?.includes("zssh:read") || !metadata.scopes_supported?.includes("zssh:write")) throw new Error("missing OAuth scopes");
+          ' "$metadata"
+          headers="$(mktemp)"
+          code="$(curl --silent --output /dev/null --dump-header "$headers" --write-out "%{http_code}" -X POST "http://127.0.0.1:$PORT/mcp")"
+          test "$code" = "401"
+          grep -Fi 'WWW-Authenticate: Bearer ' "$headers"
+          grep -F 'resource_metadata="https://mcp.zssh.example/.well-known/oauth-protected-resource"' "$headers"
