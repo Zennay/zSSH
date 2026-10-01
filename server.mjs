@@ -54,6 +54,24 @@ export function redactSecrets(input) {
   return text;
 }
 
+export function containsCredentialLikeSecret(input) {
+  const raw = String(input ?? "");
+  return redactSecrets(raw) !== raw;
+}
+
+export function publicPathLooksSensitive(inputPath) {
+  const normalized = String(inputPath || "").replace(/\\/g, "/").toLowerCase();
+  const segments = normalized.split("/").filter(Boolean);
+  const basename = segments.at(-1) || "";
+
+  if (segments.some(segment => [".ssh", ".gnupg", ".aws", ".azure", ".kube"].includes(segment))) return true;
+  if (basename === ".env" || basename.startsWith(".env.")) return true;
+  if ([".netrc", ".npmrc", ".pypirc", "credentials", "credentials.json"].includes(basename)) return true;
+  if (/\.(pem|key|p12|pfx|jks|keystore|kdbx)$/.test(basename)) return true;
+  if (/(^|[-_.])(secret|secrets|credential|credentials|token|tokens|password|passwords)([-_.]|$)/.test(basename)) return true;
+  return false;
+}
+
 export function classifyCommand(command) {
   const raw = String(command || "").trim();
   const c = raw.toLowerCase();
@@ -81,7 +99,8 @@ export function classifyCommand(command) {
 }
 
 function getAllowedRoots() {
-  const raw = process.env.ZSSH_ALLOWED_ROOTS || process.cwd();
+  const publicRoots = PLUGIN_PROFILE === "public" ? String(process.env.ZSSH_PUBLIC_ALLOWED_ROOTS || "").trim() : "";
+  const raw = publicRoots || process.env.ZSSH_ALLOWED_ROOTS || process.cwd();
   return raw.split(",").map(v => path.resolve(v.trim())).filter(Boolean);
 }
 
@@ -338,17 +357,29 @@ async function execute(command, cwd, timeoutSeconds) {
   });
 }
 
-async function readTextFile(filePath) {
+async function readTextFile(filePath, { rejectSecrets = false } = {}) {
+  if (rejectSecrets && publicPathLooksSensitive(filePath)) {
+    throw new Error("public plugin refuses secret or credential file paths");
+  }
   const resolved = await resolveAllowedPath(filePath);
   const stat = await fs.stat(resolved);
   if (!stat.isFile()) throw new Error("path is not a regular file");
   if (stat.size > MAX_FILE_BYTES) throw new Error("file exceeds ZSSH_MAX_FILE_BYTES");
   const content = await fs.readFile(resolved, "utf8");
+  if (rejectSecrets && containsCredentialLikeSecret(content)) {
+    throw new Error("public plugin refuses files that appear to contain credentials or authentication secrets");
+  }
   await audit({ action: "read_file", path: resolved, bytes: stat.size, outcome: "ok" });
   return { path: resolved, bytes: stat.size, content: redactSecrets(content) };
 }
 
-async function writeTextFile(filePath, content) {
+async function writeTextFile(filePath, content, { rejectSecrets = false } = {}) {
+  if (rejectSecrets && publicPathLooksSensitive(filePath)) {
+    throw new Error("public plugin refuses secret or credential file paths");
+  }
+  if (rejectSecrets && containsCredentialLikeSecret(content)) {
+    throw new Error("public plugin refuses content that appears to contain credentials or authentication secrets");
+  }
   const bytes = Buffer.byteLength(content, "utf8");
   if (bytes > MAX_FILE_BYTES) throw new Error("content exceeds ZSSH_MAX_FILE_BYTES");
   const resolved = await resolveAllowedPath(filePath, { forWrite: true });
@@ -510,7 +541,7 @@ function createMcpServer() {
       const authError = await publicToolAuthorizationError(extra, OAUTH_CONFIG?.readScope || "zssh:read");
       if (authError) return authError;
       try {
-        return result(await readTextFile(filePath));
+        return result(await readTextFile(filePath, { rejectSecrets: PLUGIN_PROFILE === "public" }));
       } catch (err) {
         return result({ ok: false, error: String(err?.message || err) }, true);
       }
@@ -533,7 +564,7 @@ function createMcpServer() {
       const authError = await publicToolAuthorizationError(extra, OAUTH_CONFIG?.writeScope || "zssh:write");
       if (authError) return authError;
       try {
-        return result({ ok: true, ...(await writeTextFile(filePath, content)) });
+        return result({ ok: true, ...(await writeTextFile(filePath, content, { rejectSecrets: PLUGIN_PROFILE === "public" })) });
       } catch (err) {
         return result({ ok: false, error: String(err?.message || err) }, true);
       }
@@ -819,6 +850,9 @@ export function start() {
   }
   if (PLUGIN_PROFILE === "public" && EXEC_MODE === "full") {
     throw new Error("public plugin profile refuses ZSSH_EXEC_MODE=full; raw shell must stay disabled");
+  }
+  if (PLUGIN_PROFILE === "public" && process.env.NODE_ENV === "production" && !String(process.env.ZSSH_PUBLIC_ALLOWED_ROOTS || "").trim()) {
+    throw new Error("production public profile requires explicit ZSSH_PUBLIC_ALLOWED_ROOTS; do not reuse broad private filesystem roots");
   }
   if (PLUGIN_PROFILE === "public" && PUBLIC_AUTH_MODE === "oauth" && !OAUTH_CONFIG) {
     throw new Error("public plugin OAuth requires ZSSH_OAUTH_ISSUER, ZSSH_PUBLIC_BASE_URL, and ZSSH_OAUTH_JWKS_URI");

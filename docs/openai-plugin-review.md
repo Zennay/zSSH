@@ -19,6 +19,8 @@ The public profile currently has:
 - target pairing and immediate local revocation;
 - no `zssh_exec` or generic program runner in the public tool scan;
 - explicit `readOnlyHint`, `destructiveHint`, `idempotentHint`, and `openWorldHint` annotations;
+- a separate explicit `ZSSH_PUBLIC_ALLOWED_ROOTS` boundary for the public profile; production public mode will not reuse broad private roots;
+- public file tools reject credential-like paths and content instead of treating secret redaction as sufficient;
 - bounded filesystem roots and atomic text-file writes;
 - non-root startup, command timeouts, output limits, secret redaction, and JSONL audit logging;
 - exact OpenAI domain-challenge handling at `/.well-known/openai-apps-challenge`;
