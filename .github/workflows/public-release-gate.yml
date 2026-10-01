@@ -1,0 +1,89 @@
+name: OpenAI public release gate
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/public-release-gate.yml"
+      - "scripts/check-public-release-config.mjs"
+      - "production-submission-probe.mjs"
+      - "submission/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: zssh-openai-public-release
+  cancel-in-progress: false
+
+jobs:
+  contract:
+    name: Release gate contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Self-test release configuration guard
+        run: node scripts/check-public-release-config.mjs --self-test
+      - name: Validate release scripts
+        run: |
+          node --check scripts/check-public-release-config.mjs
+          node --check production-submission-probe.mjs
+
+  production:
+    name: Production submission probe
+    if: github.event_name == 'workflow_dispatch'
+    needs: contract
+    runs-on: self-hosted
+    timeout-minutes: 15
+    environment: openai-production
+    env:
+      ZSSH_PLUGIN_MCP_URL: ${{ vars.ZSSH_PLUGIN_MCP_URL }}
+      ZSSH_REVIEW_FILE: ${{ vars.ZSSH_REVIEW_FILE }}
+      ZSSH_REVIEW_WRITE_FILE: ${{ vars.ZSSH_REVIEW_WRITE_FILE }}
+      ZSSH_REVIEW_ACCESS_TOKEN: ${{ secrets.ZSSH_REVIEW_ACCESS_TOKEN }}
+      OPENAI_APPS_CHALLENGE_TOKEN: ${{ secrets.OPENAI_APPS_CHALLENGE_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install production probe dependencies
+        run: npm install --ignore-scripts --no-audit --no-fund
+      - name: Fail closed on incomplete or non-public release configuration
+        run: node scripts/check-public-release-config.mjs
+      - name: Run end-to-end OpenAI submission probe
+        run: node production-submission-probe.mjs
+      - name: Record non-secret release evidence
+        shell: bash
+        env:
+          EVIDENCE_PATH: ${{ runner.temp }}/zssh-openai-release-evidence.json
+        run: |
+          set -Eeuo pipefail
+          node --input-type=module <<'NODE'
+          import { writeFileSync } from "node:fs";
+          const endpoint = new URL(process.env.ZSSH_PLUGIN_MCP_URL);
+          const evidence = {
+            ok: true,
+            repository: process.env.GITHUB_REPOSITORY,
+            commit_sha: process.env.GITHUB_SHA,
+            workflow_run_id: process.env.GITHUB_RUN_ID,
+            workflow_run_attempt: process.env.GITHUB_RUN_ATTEMPT,
+            endpoint_origin: endpoint.origin,
+            endpoint_path: endpoint.pathname,
+            verified_at: new Date().toISOString()
+          };
+          writeFileSync(process.env.EVIDENCE_PATH, JSON.stringify(evidence, null, 2) + "\n");
+          console.log("OPENAI_PUBLIC_RELEASE_GATE_GREEN");
+          NODE
+      - name: Upload release evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: zssh-openai-release-evidence-${{ github.run_id }}
+          path: ${{ runner.temp }}/zssh-openai-release-evidence.json
+          if-no-files-found: error
+          retention-days: 30
