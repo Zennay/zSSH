@@ -238,6 +238,59 @@ function canonicalize(value) {
   );
 }
 
+export const PUBLIC_TOOL_SCOPE_CONTRACT = Object.freeze({
+  get_profile: "zssh:read",
+  get_pairing_status: "zssh:read",
+  zssh_server_info: "zssh:read",
+  get_system_uptime: "zssh:read",
+  get_system_identity: "zssh:read",
+  get_kernel_info: "zssh:read",
+  get_disk_usage: "zssh:read",
+  get_memory_usage: "zssh:read",
+  zssh_read_file: "zssh:read",
+  zssh_write_file: "zssh:write",
+});
+
+function assertExactOAuthScheme(tool, location, schemes, expectedScope) {
+  if (!Array.isArray(schemes)) {
+    fail(`${tool.name} is missing ${location} OAuth security metadata`);
+  }
+  if (schemes.length !== 1 || schemes[0]?.type !== "oauth2") {
+    fail(`${tool.name} ${location} must contain exactly one oauth2 security scheme`);
+  }
+  const scopes = Array.isArray(schemes[0].scopes)
+    ? [...new Set(schemes[0].scopes.map(String))].sort()
+    : [];
+  if (scopes.length !== 1 || scopes[0] !== expectedScope) {
+    fail(`${tool.name} ${location} must require exactly ${expectedScope}`);
+  }
+}
+
+export function assertPublicToolScopeContract(tools, expected = PUBLIC_TOOL_SCOPE_CONTRACT) {
+  if (!Array.isArray(tools)) fail("public tool scope contract requires a tool array");
+  const byName = new Map();
+  for (const tool of tools) {
+    const name = String(tool?.name || "");
+    if (!name) fail("public tool scan contains an unnamed tool");
+    if (byName.has(name)) fail(`public tool scan contains duplicate tool: ${name}`);
+    byName.set(name, tool);
+  }
+
+  const expectedNames = Object.keys(expected).sort();
+  const actualNames = [...byName.keys()].sort();
+  const missing = expectedNames.filter(name => !byName.has(name));
+  const unreviewed = actualNames.filter(name => !Object.hasOwn(expected, name));
+  if (missing.length) fail(`public tool scan is missing reviewed tools: ${missing.join(", ")}`);
+  if (unreviewed.length) fail(`public tool scan exposes unreviewed tools: ${unreviewed.join(", ")}`);
+
+  for (const [name, expectedScope] of Object.entries(expected)) {
+    const tool = byName.get(name);
+    assertExactOAuthScheme(tool, "securitySchemes", tool.securitySchemes, expectedScope);
+    assertExactOAuthScheme(tool, "_meta.securitySchemes", tool?._meta?.securitySchemes, expectedScope);
+  }
+  return true;
+}
+
 export function publicToolContractFingerprint(tools) {
   const normalized = [...(tools || [])]
     .map(tool => ({
