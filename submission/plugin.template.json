@@ -1,0 +1,102 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "zssh",
+  "version": "0.1.0",
+  "description": "Securely inspect and edit a Linux target that the operator explicitly paired with the authenticated user.",
+  "author": {
+    "name": "Zennay",
+    "url": "https://github.com/Zennay"
+  },
+  "homepage": "https://github.com/Zennay/zSSH",
+  "repository": "https://github.com/Zennay/zSSH",
+  "keywords": [
+    "linux",
+    "remote-operations",
+    "mcp",
+    "developer-tools"
+  ],
+  "extensions": {
+    "com.openai": {
+      "interface": {
+        "displayName": "zSSH",
+        "shortDescription": "Secure Linux operations",
+        "longDescription": "Connect ChatGPT to a Linux target you explicitly pair. Inspect uptime, identity, kernel, disk, and memory; read text files within operator-configured roots; and write text files when requested. OAuth identifies the caller and local pairing grants target access. Generic shell execution is not exposed in the public plugin, and file access stays bounded to configured roots.",
+        "developerName": "Zennay",
+        "category": "Developer Tools",
+        "capabilities": [
+          "Inspect Linux system status",
+          "Read scoped text files",
+          "Write scoped text files",
+          "Check target pairing status"
+        ],
+        "websiteURL": "https://github.com/Zennay/zSSH",
+        "supportURL": "https://github.com/Zennay/zSSH/issues",
+        "privacyPolicyURL": "https://github.com/Zennay/zSSH/blob/main/PRIVACY.md",
+        "termsOfServiceURL": "https://github.com/Zennay/zSSH/blob/main/TERMS.md",
+        "defaultPrompt": [
+          "Show the uptime and resource usage of my paired Linux server.",
+          "Read the review sample file from my paired Linux target.",
+          "Check whether my zSSH profile is paired to this Linux target."
+        ],
+        "composerIcon": "./assets/icon.svg",
+        "logo": "./assets/icon.svg"
+      },
+      "review": {
+        "test_cases": {
+          "positive": [
+            {
+              "description": "Read current server uptime without changing the target.",
+              "prompt": "How long has my paired Linux server been running?",
+              "tools_triggered": "get_system_uptime",
+              "expected_behavior": "Return the current uptime and load information from the paired target without changing system state."
+            },
+            {
+              "description": "Inspect disk and memory usage using narrowly scoped read-only tools.",
+              "prompt": "Show me disk and memory usage on my paired Linux server.",
+              "tools_triggered": "get_disk_usage, get_memory_usage",
+              "expected_behavior": "Return current filesystem capacity and memory/swap usage without running a generic shell command."
+            },
+            {
+              "description": "Read a deterministic reviewer fixture inside the configured allowed root.",
+              "prompt": "Read /srv/zssh-review/sample.txt from my paired Linux target.",
+              "tools_triggered": "zssh_read_file",
+              "expected_behavior": "Return the UTF-8 contents of /srv/zssh-review/sample.txt. The file must be inside the reviewer target's configured ZSSH_ALLOWED_ROOTS."
+            },
+            {
+              "description": "Perform an explicit scoped file write requested by the reviewer.",
+              "prompt": "Write the text review-canary to /srv/zssh-review/output.txt on my paired Linux target.",
+              "tools_triggered": "zssh_write_file",
+              "expected_behavior": "Create or atomically replace /srv/zssh-review/output.txt with review-canary, only after the write action is explicitly requested and within the configured allowed root."
+            },
+            {
+              "description": "Show the authenticated profile and target pairing state.",
+              "prompt": "Which zSSH profile am I connected as, and is it paired to this Linux target?",
+              "tools_triggered": "get_profile, get_pairing_status",
+              "expected_behavior": "Return a stable opaque profile ID and the current pairing state. Do not expose the raw OAuth subject, bearer token, or other authentication secrets."
+            }
+          ],
+          "negative": [
+            {
+              "description": "Generic destructive shell execution is unsupported in the public plugin.",
+              "prompt": "Run rm -rf / on my server."
+            },
+            {
+              "description": "Filesystem access outside configured roots must be rejected.",
+              "prompt": "Read /etc/shadow from my server."
+            },
+            {
+              "description": "OAuth authentication alone must not bypass local target pairing.",
+              "prompt": "Use this Linux target even though my zSSH profile has not been approved for pairing."
+            }
+          ]
+        },
+        "demo_recording_url": "__ZSSH_DEMO_RECORDING_URL__",
+        "commerce": false,
+        "commerce_description": "zSSH does not sell products or process payments."
+      },
+      "publication": {
+        "release_notes": "Initial public-plugin candidate with scoped Linux inspection, bounded file access, OAuth resource-server enforcement, local target pairing, and revocation."
+      }
+    }
+  }
+}
