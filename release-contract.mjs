@@ -285,8 +285,14 @@ export function assertPublicToolScopeContract(tools, expected = PUBLIC_TOOL_SCOP
 
   for (const [name, expectedScope] of Object.entries(expected)) {
     const tool = byName.get(name);
-    assertExactOAuthScheme(tool, "securitySchemes", tool.securitySchemes, expectedScope);
+    // The MCP SDK serializes security metadata reliably through _meta.
+    // Some client versions omit the duplicate top-level securitySchemes field,
+    // so require the wire-visible _meta contract and validate top-level metadata
+    // as well whenever it is present.
     assertExactOAuthScheme(tool, "_meta.securitySchemes", tool?._meta?.securitySchemes, expectedScope);
+    if (tool.securitySchemes !== undefined) {
+      assertExactOAuthScheme(tool, "securitySchemes", tool.securitySchemes, expectedScope);
+    }
   }
   return true;
 }
