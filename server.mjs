@@ -366,7 +366,7 @@ function authInfoFromExtra(extra) {
 }
 
 function publicSecurity(scope) {
-  if (PLUGIN_PROFILE !== "public" || PUBLIC_AUTH_MODE !== "oauth") return {};
+  if (PLUGIN_PROFILE !== "public") return {};
   return {
     securitySchemes: [{ type: "oauth2", scopes: [scope] }]
   };
