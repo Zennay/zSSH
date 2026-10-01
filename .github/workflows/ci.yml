@@ -114,3 +114,6 @@ jobs:
           test "$code" = "401"
           grep -Fi 'WWW-Authenticate: Bearer ' "$headers"
           grep -F 'resource_metadata="https://mcp.zssh.example/.well-known/oauth-protected-resource"' "$headers"
+
+      - name: Exercise OAuth target pairing and revocation
+        run: node pairing-canary.mjs
