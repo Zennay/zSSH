@@ -67,7 +67,7 @@ Write:
 
 The private profile keeps the existing trusted-operator tools and is not part of the public submission scan.
 
-## Remaining gates before directory submission
+## Research-first release source\n\nThe dated primary-source contract for public release is maintained in [docs/research/openai-plugin-submission-2026-10.md](./research/openai-plugin-submission-2026-10.md). Any architectural, auth, permission, UI, or submission change must research the current primary docs first, record the decision, then implement and test it. Research-only and coding-without-research are both incomplete.\n\n## Remaining gates before directory submission
 
 ### 1. Production OAuth login
 
