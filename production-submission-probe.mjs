@@ -1,0 +1,217 @@
+import crypto from "node:crypto";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+
+function required(name) {
+  const value = String(process.env[name] || "").trim();
+  if (!value) throw new Error(name + " is required");
+  return value;
+}
+
+function textPart(result) {
+  return result?.content?.find(part => part.type === "text")?.text || "";
+}
+
+function jsonResult(result) {
+  if (result?.structuredContent && typeof result.structuredContent === "object") {
+    return result.structuredContent;
+  }
+  const text = textPart(result);
+  try {
+    return JSON.parse(text || "{}");
+  } catch {
+    return { text };
+  }
+}
+
+function oauthSchemes(tool) {
+  return tool?.securitySchemes || tool?._meta?.securitySchemes || [];
+}
+
+const mcpUrl = new URL(required("ZSSH_PLUGIN_MCP_URL"));
+const allowHttp = process.env.ZSSH_PROBE_ALLOW_HTTP === "1";
+if (!allowHttp && mcpUrl.protocol !== "https:") throw new Error("ZSSH_PLUGIN_MCP_URL must use HTTPS");
+if (mcpUrl.pathname.replace(/\/$/, "") !== "/mcp") throw new Error("ZSSH_PLUGIN_MCP_URL must end in /mcp");
+
+const accessToken = required("ZSSH_REVIEW_ACCESS_TOKEN");
+const reviewReadFile = required("ZSSH_REVIEW_FILE");
+const reviewWriteFile = required("ZSSH_REVIEW_WRITE_FILE");
+const challengeToken = String(process.env.OPENAI_APPS_CHALLENGE_TOKEN || "").trim();
+
+const origin = mcpUrl.origin;
+const metadataUrl = new URL("/.well-known/oauth-protected-resource", origin);
+const healthUrl = new URL("/health", origin);
+const challengeUrl = new URL("/.well-known/openai-apps-challenge", origin);
+
+const health = await fetch(healthUrl);
+if (!health.ok) throw new Error("health endpoint failed: HTTP " + health.status);
+
+const metadataResponse = await fetch(metadataUrl);
+if (!metadataResponse.ok) throw new Error("OAuth protected-resource metadata failed: HTTP " + metadataResponse.status);
+const metadata = await metadataResponse.json();
+if (metadata.resource !== origin) {
+  throw new Error("OAuth resource mismatch: expected " + origin + ", got " + metadata.resource);
+}
+if (!Array.isArray(metadata.authorization_servers) || metadata.authorization_servers.length < 1) {
+  throw new Error("OAuth protected-resource metadata has no authorization server");
+}
+if (!Array.isArray(metadata.scopes_supported) || !metadata.scopes_supported.includes("zssh:read") || !metadata.scopes_supported.includes("zssh:write")) {
+  throw new Error("OAuth protected-resource metadata is missing zssh:read/zssh:write");
+}
+
+const unauthenticated = await fetch(mcpUrl, {
+  method: "POST",
+  headers: { "content-type": "application/json" },
+  body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} }),
+});
+if (unauthenticated.status !== 401) {
+  throw new Error("unauthenticated MCP request must return 401, got " + unauthenticated.status);
+}
+const challengeHeader = unauthenticated.headers.get("www-authenticate") || "";
+if (!/^Bearer\b/i.test(challengeHeader) || !challengeHeader.includes("resource_metadata=")) {
+  throw new Error("401 response is missing Bearer resource_metadata challenge");
+}
+
+if (challengeToken) {
+  const verification = await fetch(challengeUrl, { cache: "no-store" });
+  const body = await verification.text();
+  if (!verification.ok || body !== challengeToken) {
+    throw new Error("OpenAI domain verification challenge does not match exactly");
+  }
+}
+
+const client = new Client({ name: "zssh-production-submission-probe", version: "1.0.0" });
+const transport = new StreamableHTTPClientTransport(mcpUrl, {
+  requestInit: {
+    headers: {
+      Authorization: "Bearer " + accessToken,
+    },
+  },
+});
+
+const requiredTools = [
+  "get_profile",
+  "get_pairing_status",
+  "zssh_server_info",
+  "get_system_uptime",
+  "get_system_identity",
+  "get_kernel_info",
+  "get_disk_usage",
+  "get_memory_usage",
+  "zssh_read_file",
+  "zssh_write_file",
+];
+const forbiddenTools = ["zssh_exec", "zssh_run_safe"];
+
+try {
+  await client.connect(transport);
+  const listed = await client.listTools();
+  const tools = listed.tools || [];
+  const byName = new Map(tools.map(tool => [tool.name, tool]));
+
+  for (const name of requiredTools) {
+    if (!byName.has(name)) throw new Error("production scan is missing tool: " + name);
+  }
+  for (const name of forbiddenTools) {
+    if (byName.has(name)) throw new Error("public production scan exposes forbidden generic tool: " + name);
+  }
+
+  for (const tool of tools) {
+    const annotations = tool.annotations || {};
+    for (const key of ["readOnlyHint", "destructiveHint", "openWorldHint"]) {
+      if (typeof annotations[key] !== "boolean") {
+        throw new Error(tool.name + " lacks explicit annotation " + key);
+      }
+    }
+    const schemes = oauthSchemes(tool);
+    if (!schemes.some(scheme => scheme?.type === "oauth2" && Array.isArray(scheme.scopes) && scheme.scopes.length > 0)) {
+      throw new Error(tool.name + " lacks OAuth security metadata");
+    }
+  }
+
+  const profileTool = byName.get("get_profile");
+  if (profileTool?._meta?.["openai/profile"] !== true) {
+    throw new Error("get_profile is not marked as the OpenAI profile tool");
+  }
+
+  const writeTool = byName.get("zssh_write_file");
+  if (writeTool?.annotations?.readOnlyHint !== false || writeTool?.annotations?.destructiveHint !== true) {
+    throw new Error("zssh_write_file annotations are not fail-safe");
+  }
+
+  const pairingTool = byName.get("get_pairing_status");
+  if (pairingTool?.annotations?.readOnlyHint !== false || pairingTool?.annotations?.destructiveHint !== false) {
+    throw new Error("get_pairing_status annotations do not match its request-creation behavior");
+  }
+
+  const profileCall = await client.callTool({ name: "get_profile", arguments: {} });
+  if (profileCall.isError) throw new Error("get_profile failed: " + textPart(profileCall));
+  const profile = jsonResult(profileCall);
+  if (!/^zssh_[a-f0-9]{32}$/.test(String(profile.id || ""))) {
+    throw new Error("get_profile did not return a stable opaque zSSH profile id");
+  }
+
+  const pairingCall = await client.callTool({ name: "get_pairing_status", arguments: {} });
+  if (pairingCall.isError) throw new Error("get_pairing_status failed: " + textPart(pairingCall));
+  const pairing = jsonResult(pairingCall);
+  if (pairing.paired !== true) {
+    throw new Error("review OAuth profile is not locally paired to the production target");
+  }
+
+  const infoCall = await client.callTool({ name: "zssh_server_info", arguments: {} });
+  if (infoCall.isError) throw new Error("zssh_server_info failed: " + textPart(infoCall));
+  const info = jsonResult(infoCall);
+  if (info.plugin_profile !== "public" || info.auth_mode !== "oauth" || info.pairing_required !== true) {
+    throw new Error("production server policy is not public+oauth+pairing");
+  }
+  for (const field of ["hostname", "uid", "allowed_roots", "safe_programs"]) {
+    if (Object.hasOwn(info, field)) throw new Error("public server_info exposes private field: " + field);
+  }
+
+  for (const name of ["get_system_uptime", "get_system_identity", "get_kernel_info", "get_disk_usage", "get_memory_usage"]) {
+    const response = await client.callTool({ name, arguments: {} });
+    if (response.isError) throw new Error(name + " failed: " + textPart(response));
+    const value = jsonResult(response);
+    if (value.ok !== true) throw new Error(name + " did not return ok=true");
+  }
+
+  const read = await client.callTool({ name: "zssh_read_file", arguments: { path: reviewReadFile } });
+  if (read.isError) throw new Error("review read-file case failed: " + textPart(read));
+  const readValue = jsonResult(read);
+  if (!String(readValue.content || "").includes("zSSH reviewer fixture")) {
+    throw new Error("review fixture content is missing");
+  }
+
+  const marker = "submission-probe-" + crypto.randomUUID();
+  const write = await client.callTool({
+    name: "zssh_write_file",
+    arguments: { path: reviewWriteFile, content: marker + "\n" },
+  });
+  if (write.isError) throw new Error("review write-file case failed: " + textPart(write));
+
+  const readBack = await client.callTool({ name: "zssh_read_file", arguments: { path: reviewWriteFile } });
+  const readBackValue = jsonResult(readBack);
+  if (readBack.isError || readBackValue.content !== marker + "\n") {
+    throw new Error("review write/read roundtrip did not match");
+  }
+
+  console.log(JSON.stringify({
+    ok: true,
+    mcp_origin: origin,
+    oauth_resource: metadata.resource,
+    authorization_servers: metadata.authorization_servers,
+    domain_challenge_checked: Boolean(challengeToken),
+    tool_count: tools.length,
+    forbidden_generic_tools_absent: true,
+    annotations_validated: true,
+    oauth_security_validated: true,
+    profile_id_shape_validated: true,
+    paired_review_identity: true,
+    public_metadata_minimized: true,
+    read_only_system_tools_green: true,
+    review_file_read_green: true,
+    review_file_write_roundtrip_green: true,
+  }, null, 2));
+} finally {
+  await client.close().catch(() => {});
+}
