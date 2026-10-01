@@ -149,7 +149,7 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--mcp-url", default=os.getenv("ZSSH_PLUGIN_MCP_URL", ""))
     parser.add_argument("--demo-url", default=os.getenv("ZSSH_PLUGIN_DEMO_RECORDING_URL", ""))
-    parser.add_argument("--icon", default=os.getenv("ZSSH_PLUGIN_ICON", ""))
+    parser.add_argument("--icon", default=os.getenv("ZSSH_PLUGIN_ICON", str(DEFAULT_ICON)))
     parser.add_argument("--out-dir", default=str(DEFAULT_OUT))
     args = parser.parse_args()
 
@@ -189,13 +189,21 @@ def main() -> None:
         zip_path.unlink()
     with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
         for file in sorted(out_dir.rglob("*")):
-            if file.is_file():
-                archive.write(file, file.relative_to(out_dir).as_posix())
+            if not file.is_file():
+                continue
+            relative = file.relative_to(out_dir).as_posix()
+            info = zipfile.ZipInfo(relative, date_time=(1980, 1, 1, 0, 0, 0))
+            info.compress_type = zipfile.ZIP_DEFLATED
+            info.external_attr = (0o644 & 0xFFFF) << 16
+            archive.writestr(info, file.read_bytes())
 
+    bundle_sha256 = hashlib.sha256(zip_path.read_bytes()).hexdigest()
     print(json.dumps({
         "ok": True,
+        "version": plugin["version"],
         "package_dir": str(out_dir),
         "zip": str(zip_path),
+        "zip_sha256": bundle_sha256,
         "mcp_url": mcp_url,
         "positive_cases": 5,
         "negative_cases": 3,
