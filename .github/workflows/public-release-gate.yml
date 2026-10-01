@@ -56,6 +56,7 @@ jobs:
           node --check scripts/check-public-release-config.mjs
           node --check production-submission-probe.mjs
           node --check production-submission-probe-canary.mjs
+          python3 -m py_compile scripts/build-openai-plugin.py
 
 
   production:
@@ -104,6 +105,7 @@ jobs:
         env:
           EVIDENCE_PATH: ${{ runner.temp }}/zssh-openai-release-evidence.json
           PROBE_REPORT_PATH: ${{ runner.temp }}/zssh-openai-production-probe.json
+          BUNDLE_REPORT_PATH: ${{ runner.temp }}/zssh-openai-bundle.json
         run: |
           set -Eeuo pipefail
           node --input-type=module <<'NODE'
