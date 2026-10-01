@@ -49,6 +49,10 @@ try {
         throw new Error(`tool ${tool.name} is missing explicit boolean annotation ${key}`);
       }
     }
+    const schemes = tool.securitySchemes || [];
+    if (!schemes.some(scheme => scheme?.type === "oauth2" && Array.isArray(scheme.scopes) && scheme.scopes.length > 0)) {
+      throw new Error(`tool ${tool.name} is missing an OAuth security scheme`);
+    }
   }
 
   const writeTool = tools.find(tool => tool.name === "zssh_write_file");
@@ -60,6 +64,7 @@ try {
   const info = JSON.parse(infoResult.content?.find(part => part.type === "text")?.text || "{}");
   if (info.plugin_profile !== "public") throw new Error(`wrong plugin profile: ${info.plugin_profile}`);
   if (info.exec_mode !== "disabled") throw new Error(`raw shell is not disabled: ${info.exec_mode}`);
+  if (info.auth_mode !== "legacy") throw new Error(`unexpected test auth mode: ${info.auth_mode}`);
 
   for (const name of ["get_system_uptime", "get_system_identity"]) {
     const response = await client.callTool({ name, arguments: {} });
@@ -79,6 +84,7 @@ try {
     profile: info.plugin_profile,
     raw_shell_exposed: false,
     annotations_validated: true,
+    oauth_security_schemes_validated: true,
     domain_challenge_validated: Boolean(challenge),
     tool_count: names.size,
   }));
