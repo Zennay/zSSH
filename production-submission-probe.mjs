@@ -3,6 +3,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import {
   assertExactBearerResourceMetadata,
+  fetchAuthorizationServerMetadata,
   fetchNoRedirect,
   protectedResourceMetadataUrl,
   publicToolContractFingerprint,
@@ -66,6 +67,24 @@ if (!Array.isArray(metadata.authorization_servers) || metadata.authorization_ser
 }
 if (!Array.isArray(metadata.scopes_supported) || !metadata.scopes_supported.includes("zssh:read") || !metadata.scopes_supported.includes("zssh:write")) {
   throw new Error("OAuth protected-resource metadata is missing zssh:read/zssh:write");
+}
+
+const authorizationServerEvidence = [];
+for (const issuer of metadata.authorization_servers) {
+  const discovered = await fetchAuthorizationServerMetadata(issuer, {
+    allowHttp,
+    requirePublicHostname: !allowHttp,
+  });
+  authorizationServerEvidence.push({
+    issuer: discovered.validated.issuer,
+    metadata_url: discovered.url,
+    authorization_endpoint: discovered.validated.authorization_endpoint,
+    token_endpoint: discovered.validated.token_endpoint,
+    registration_endpoint: discovered.validated.registration_endpoint,
+    pkce_s256: discovered.validated.pkce_s256,
+    authorization_code: discovered.validated.authorization_code,
+    token_endpoint_auth_methods: discovered.validated.token_endpoint_auth_methods,
+  });
 }
 
 const unauthenticated = await fetchNoRedirect(mcpUrl, {
@@ -216,6 +235,9 @@ try {
     forbidden_generic_tools_absent: true,
     annotations_validated: true,
     oauth_security_validated: true,
+    oauth_authorization_server_metadata_validated: true,
+    oauth_pkce_s256_validated: authorizationServerEvidence.every(item => item.pkce_s256 === true),
+    oauth_authorization_servers: authorizationServerEvidence,
     profile_id_shape_validated: true,
     paired_review_identity: true,
     public_metadata_minimized: true,
