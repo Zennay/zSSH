@@ -82,8 +82,20 @@ jobs:
           node-version: 20
       - name: Install production probe dependencies
         run: npm install --ignore-scripts --no-audit --no-fund
+      - name: Record secret-safe release configuration presence
+        env:
+          PREFLIGHT_EVIDENCE_PATH: ${{ runner.temp }}/zssh-openai-preflight.json
+        run: node scripts/check-public-release-config.mjs --presence-json > "$PREFLIGHT_EVIDENCE_PATH"
       - name: Fail closed on incomplete or non-public release configuration
         run: node scripts/check-public-release-config.mjs
+      - name: Upload preflight evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zssh-openai-preflight-${{ github.run_id }}
+          path: ${{ runner.temp }}/zssh-openai-preflight.json
+          if-no-files-found: error
+          retention-days: 30
       - name: Build exact OpenAI submission bundle
         shell: bash
         env:
@@ -154,6 +166,7 @@ jobs:
           name: zssh-openai-release-${{ github.run_id }}
           path: |
             ${{ runner.temp }}/zssh-openai-release-evidence.json
+            ${{ runner.temp }}/zssh-openai-preflight.json
             dist/zssh-openai-plugin.zip
           if-no-files-found: error
           retention-days: 30
