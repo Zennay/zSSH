@@ -1,1 +1,2 @@
-Update this file with a commit whose message starts with [openai-production-probe] to run the protected production submission probe.
+Production probe trigger.
+Requested for canonical release a115e31c7968caa38931218c8b109cc21ee296cd on 2026-10-01.
