@@ -11,7 +11,8 @@
     "start": "node server.mjs",
     "test": "node --test",
     "mcp:claude-canary": "node mcp-claude-canary.mjs",
-    "plugin:build": "python3 scripts/build-openai-plugin.py"
+    "plugin:build": "python3 scripts/build-openai-plugin.py",
+    "review:fixture": "node scripts/prepare-review-target.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.20.2",
