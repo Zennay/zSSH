@@ -15,11 +15,25 @@ function requireValue(env, name, { minLength = 1 } = {}) {
   return value;
 }
 
+function requireHttpsUrl(env, name) {
+  let url;
+  try {
+    url = new URL(requireValue(env, name));
+  } catch {
+    fail(`${name} must be a valid URL`);
+  }
+  if (url.protocol !== "https:" || url.username || url.password) {
+    fail(`${name} must be an HTTPS URL without embedded credentials`);
+  }
+  return url;
+}
+
 export function validatePublicReleaseConfig(env = process.env) {
   const mcpUrl = validatePublicMcpUrl(
     requireValue(env, "ZSSH_PLUGIN_MCP_URL"),
     { name: "ZSSH_PLUGIN_MCP_URL" }
   );
+  const demoRecordingUrl = requireHttpsUrl(env, "ZSSH_PLUGIN_DEMO_RECORDING_URL");
   const accessToken = requireValue(env, "ZSSH_REVIEW_ACCESS_TOKEN", { minLength: 20 });
   const challengeToken = requireValue(env, "OPENAI_APPS_CHALLENGE_TOKEN", { minLength: 16 });
   const reviewFile = requireValue(env, "ZSSH_REVIEW_FILE");
@@ -36,6 +50,7 @@ export function validatePublicReleaseConfig(env = process.env) {
     ok: true,
     endpoint_origin: mcpUrl.origin,
     endpoint_path: mcpUrl.pathname,
+    demo_recording_origin: demoRecordingUrl.origin,
     review_file_name: path.basename(reviewFile),
     write_file_name: path.basename(writeFile),
     access_token_present: accessToken.length > 0,
@@ -59,6 +74,7 @@ function assertThrows(fn, pattern) {
 export function runSelfTest() {
   const good = {
     ZSSH_PLUGIN_MCP_URL: "https://mcp.zssh.dev/mcp",
+    ZSSH_PLUGIN_DEMO_RECORDING_URL: "https://review.example/zssh-demo",
     ZSSH_REVIEW_ACCESS_TOKEN: "review-token-0123456789abcdef",
     OPENAI_APPS_CHALLENGE_TOKEN: "challenge-0123456789abcdef",
     ZSSH_REVIEW_FILE: "/srv/zssh-review/sample.txt",
@@ -71,6 +87,7 @@ export function runSelfTest() {
   assertThrows(() => validatePublicReleaseConfig({ ...good, ZSSH_PLUGIN_MCP_URL: "https://127.0.0.1/mcp" }), /public hostname/);
   assertThrows(() => validatePublicReleaseConfig({ ...good, ZSSH_PLUGIN_MCP_URL: "https://mcp.zssh.dev/other" }), /\/mcp endpoint/);
   assertThrows(() => validatePublicReleaseConfig({ ...good, ZSSH_PLUGIN_MCP_URL: "https://mcp.zssh.dev/mcp?target=review" }), /query parameters/);
+  assertThrows(() => validatePublicReleaseConfig({ ...good, ZSSH_PLUGIN_DEMO_RECORDING_URL: "http://review.example/demo" }), /HTTPS URL/);
   assertThrows(() => validatePublicReleaseConfig({ ...good, ZSSH_REVIEW_WRITE_FILE: good.ZSSH_REVIEW_FILE }), /different files/);
   assertThrows(() => validatePublicReleaseConfig({ ...good, ZSSH_REVIEW_ACCESS_TOKEN: "short" }), /at least 20/);
 
