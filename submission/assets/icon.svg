@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title">
+  <title>zSSH</title>
+  <rect width="512" height="512" rx="112" fill="#111111"/>
+  <path d="M120 170l116 86-116 86" fill="none" stroke="#ffffff" stroke-width="42" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M270 342h122" fill="none" stroke="#ffffff" stroke-width="42" stroke-linecap="round"/>
+</svg>
