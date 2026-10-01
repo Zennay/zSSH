@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, writeFile, rm, symlink } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { classifyCommand, redactSecrets, resolveAllowedPath, runSafeProgram, isMainEntry } from "../server.mjs";
+import { classifyCommand, containsCredentialLikeSecret, publicPathLooksSensitive, redactSecrets, resolveAllowedPath, runSafeProgram, isMainEntry } from "../server.mjs";
 
 test("classifies read-only commands", () => {
   assert.equal(classifyCommand("systemctl status nginx"), "read_only");
@@ -24,6 +24,16 @@ test("redacts common secrets", () => {
   assert.match(value, /Bearer \[REDACTED\]/);
   assert.match(value, /password=\[REDACTED\]/);
   assert.doesNotMatch(value, /abc123|hunter2|eyJ\.secret/);
+});
+
+test("public file policy rejects credential-like paths and contents", () => {
+  assert.equal(publicPathLooksSensitive("/srv/zssh-review/.env"), true);
+  assert.equal(publicPathLooksSensitive("/srv/zssh-review/.ssh/id_ed25519"), true);
+  assert.equal(publicPathLooksSensitive("/srv/zssh-review/client.pem"), true);
+  assert.equal(publicPathLooksSensitive("/srv/zssh-review/notes.txt"), false);
+  assert.equal(containsCredentialLikeSecret("api_key=abc123"), true);
+  assert.equal(containsCredentialLikeSecret("Authorization: Bearer eyJ.demo"), true);
+  assert.equal(containsCredentialLikeSecret("ordinary deployment notes"), false);
 });
 
 test("allowed path gate accepts inside root and rejects outside root", async () => {
