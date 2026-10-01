@@ -119,6 +119,26 @@ The server publishes `/.well-known/oauth-protected-resource`, returns a standard
 The private/default profile keeps the existing capability URL, API-key, bearer-token, and trusted-loopback workflows unchanged.
 
 
+### Target pairing and revocation
+
+A valid OAuth token identifies a user, but it does **not** automatically grant access to a Linux target. Public mode requires a second local pairing gate.
+
+After OAuth linking, call `get_pairing_status`. If the profile is not paired, zSSH creates a short-lived request such as `pair_ab12...`. On the target, the owner approves it locally:
+
+```bash
+node pairing-cli.mjs approve pair_ab12...
+```
+
+The profile can then use the target within its OAuth scopes. To revoke it immediately:
+
+```bash
+node pairing-cli.mjs list
+node pairing-cli.mjs revoke zssh_<profile-id>
+```
+
+The registry stores opaque hashed profile IDs rather than the raw OAuth subject. Pairing is required by default for the public profile and cannot be disabled in production without an explicit unsafe test override.
+
+
 ## Claude MCP compatibility
 
 zSSH exposes the standard Streamable HTTP MCP transport at `/mcp`, so it can be
