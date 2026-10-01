@@ -9,12 +9,13 @@ zSSH is a self-hosted remote-operations MCP project for Linux targets. This poli
 zSSH may process only the data needed for a requested tool action, including:
 
 - command or tool inputs explicitly sent to the connected zSSH server;
-- file paths and file contents explicitly read from or written to configured allowed roots;
+- in the public plugin, non-secret text file paths and contents explicitly read from or written to the dedicated public roots configured by the server operator;
+- in private owner-operated mode, file paths and contents explicitly requested within the operator's broader configured roots;
 - Linux system information returned by narrowly scoped inspection tools;
 - authentication material used to authorize the connection; and
 - local audit records containing action type, outcome, bounded execution metadata, paths, and redacted command information.
 
-zSSH is designed not to request passwords, private keys, API keys, MFA/OTP codes, or other authentication secrets as tool inputs. Secret-like values in tool output and audit data are redacted where the implementation can recognize them.
+zSSH is designed not to request passwords, private keys, API keys, MFA/OTP codes, or other authentication secrets as tool inputs. The public plugin additionally refuses common credential-file paths and rejects file content that appears to contain authentication secrets; it does not rely on redaction as permission to expose those files. Private owner-operated mode retains redaction as a defense-in-depth control.
 
 ## Purpose
 
@@ -39,6 +40,7 @@ The server operator can:
 - stop or uninstall zSSH;
 - revoke or rotate connection credentials;
 - restrict accessible filesystem roots;
+- configure a separate, narrow `ZSSH_PUBLIC_ALLOWED_ROOTS` set for the public plugin;
 - keep raw shell disabled;
 - select the public plugin profile, which does not expose generic command execution;
 - configure or remove local audit logs subject to their own operational requirements.
