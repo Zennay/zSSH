@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -18,6 +19,7 @@ import xml.etree.ElementTree as ET
 ROOT = Path(__file__).resolve().parents[1]
 SUBMISSION = ROOT / "submission"
 DEFAULT_OUT = ROOT / "dist" / "openai-plugin"
+DEFAULT_ICON = SUBMISSION / "assets" / "icon.svg"
 
 
 def fail(message: str) -> None:
@@ -164,6 +166,9 @@ def main() -> None:
     icon_suffix = validate_icon(icon_source)
 
     plugin = read_json(SUBMISSION / "plugin.template.json")
+    package_metadata = read_json(ROOT / "package.json")
+    if plugin.get("version") != package_metadata.get("version"):
+        fail("submission plugin version must match package.json version")
     mcp = read_json(SUBMISSION / "mcp.template.json")
     plugin["extensions"]["com.openai"]["review"]["demo_recording_url"] = demo_url
     icon_ref = "./assets/icon" + icon_suffix
