@@ -149,3 +149,13 @@ jobs:
           assert mcp["mcpServers"]["zssh"]["url"] == "https://mcp.review.example/mcp"
           print("OPENAI_PLUGIN_PACKAGE_GREEN")
           PY
+
+      - name: Validate reviewer target fixture
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          review_root="$RUNNER_TEMP/zssh-review"
+          node scripts/prepare-review-target.mjs --root "$review_root" > "$RUNNER_TEMP/review-fixture.json"
+          test -f "$review_root/sample.txt"
+          grep -F "status=ready" "$review_root/sample.txt"
+          node -e 'const fs=require("fs"); const x=JSON.parse(fs.readFileSync(process.argv[1],"utf8")); if(!x.ok || x.review_root!==process.argv[2]) process.exit(1)' "$RUNNER_TEMP/review-fixture.json" "$review_root"
