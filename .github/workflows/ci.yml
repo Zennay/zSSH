@@ -120,6 +120,9 @@ jobs:
       - name: Exercise OAuth target pairing and revocation
         run: node pairing-canary.mjs
 
+      - name: Validate OpenAI submission contract canary
+        run: python3 scripts/openai-submission-contract-canary.py
+
       - name: Validate reproducible OpenAI submission bundle
         shell: bash
         run: |

@@ -1,0 +1,12 @@
+{
+  "get_profile": "zssh:read",
+  "get_pairing_status": "zssh:read",
+  "zssh_server_info": "zssh:read",
+  "get_system_uptime": "zssh:read",
+  "get_system_identity": "zssh:read",
+  "get_kernel_info": "zssh:read",
+  "get_disk_usage": "zssh:read",
+  "get_memory_usage": "zssh:read",
+  "zssh_read_file": "zssh:read",
+  "zssh_write_file": "zssh:write"
+}
