@@ -1,0 +1,185 @@
+name: zSSH recover FTMO runner for Worker5 deploy
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/ftmo-worker5-runner-recovery-20261002.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: zssh-ftmo-worker5-runner-recovery
+  cancel-in-progress: false
+
+jobs:
+  recover:
+    runs-on: self-hosted
+    timeout-minutes: 8
+    env:
+      QUEUE_ID: zssh-ftmo-worker5-runner-recovery-20261002
+      FTMO_SERVICE: actions.runner.Zennay-Ftmo.vps-bb300bba-ftmo.service
+      FTMO_RUN_USER: ftmo-runner
+      TARGET_SHA: 756e00da4712af0612ac7a4fe2640c3fbd0af058
+      TARGET_RUN: "37036478118"
+    steps:
+      - name: Verify zSSH runner and enqueue guarded recovery
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(hostname)" = "vps-bb300bba"
+          if [[ "${RUNNER_NAME:-}" == "vps-bb300bba-ftmo" ]]; then
+            echo "Refusing FTMO-runner self-recovery" >&2
+            exit 1
+          fi
+          python3 - <<'PY'
+          import importlib.util
+          import json
+          import os
+          from pathlib import Path
+
+          qid = os.environ["QUEUE_ID"]
+          root = Path("/home/ubuntu/zennay-cloud")
+          spec = importlib.util.spec_from_file_location("zcloud_server", root / "server.py")
+          server = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(server)
+          server.DB = root / "history.db"
+          server.init_db()
+
+          with server.connect() as conn:
+              row = conn.execute(
+                  "SELECT queue_id,project_id,priority,status,eligible,worker_slot "
+                  "FROM portfolio_queue WHERE queue_id=?",
+                  (qid,),
+              ).fetchone()
+          if row is None:
+              result = server.portfolio_queue_enqueue(
+                  "zssh",
+                  "Recover FTMO Actions listener for Worker5 deployment",
+                  "P0",
+                  "On vps-bb300bba recover only the FTMO Actions listener so queued deploy run 37036478118 for SHA 756e00da4712af0612ac7a4fe2640c3fbd0af058 schedules; preserve active Runner.Worker jobs; prove target run leaves queued state.",
+                  "https://github.com/Zennay/Ftmo/actions/runs/37036478118",
+                  None,
+                  qid,
+              )
+              print("WORKER5_RECOVERY_QUEUE_ENQUEUE=" + json.dumps(result, sort_keys=True, default=str))
+          with server.connect() as conn:
+              row = conn.execute(
+                  "SELECT queue_id,project_id,priority,status,eligible,worker_slot "
+                  "FROM portfolio_queue WHERE queue_id=?",
+                  (qid,),
+              ).fetchone()
+          item = dict(row) if row else None
+          if not item or item["project_id"] != "zssh" or item["priority"] != "P0":
+              raise SystemExit("guarded recovery queue assignment missing or invalid")
+          if item["status"] not in {"queued","claimed","running","verifying","in_progress","done"}:
+              raise SystemExit(f"recovery queue assignment not runnable: {item}")
+          print("WORKER5_RECOVERY_QUEUE_GREEN=" + json.dumps(item, sort_keys=True, default=str))
+          PY
+
+      - name: Diagnose and recover only idle FTMO listener
+        id: recovery
+        shell: bash
+        run: |
+          set -euo pipefail
+          current="$(gh api "repos/Zennay/Ftmo/actions/runs/$TARGET_RUN" --jq '.status + " " + .head_sha')"
+          echo "FTMO_TARGET_PRE=$current"
+          test "${current#* }" = "$TARGET_SHA"
+
+          pre_state="$(systemctl is-active "$FTMO_SERVICE" || true)"
+          pre_pid="$(systemctl show "$FTMO_SERVICE" -p MainPID --value || true)"
+          worker_before=0
+          if pgrep -u "$FTMO_RUN_USER" -f 'Runner\.Worker' >/dev/null 2>&1; then
+            worker_before=1
+          fi
+          echo "FTMO_W5_RUNNER_PRE state=$pre_state pid=$pre_pid worker=$worker_before"
+
+          status="${current%% *}"
+          if [[ "$status" == "in_progress" || "$status" == "completed" ]]; then
+            action="preserve-already-scheduled"
+          elif [[ "$worker_before" -eq 1 ]]; then
+            action="preserve-active-worker"
+          else
+            sudo -n systemctl reset-failed "$FTMO_SERVICE" || true
+            sudo -n systemctl restart "$FTMO_SERVICE"
+            action="restart-idle-listener"
+          fi
+
+          for _ in $(seq 1 30); do
+            post_state="$(systemctl is-active "$FTMO_SERVICE" || true)"
+            post_pid="$(systemctl show "$FTMO_SERVICE" -p MainPID --value || true)"
+            if [[ "$post_state" == "active" && "$post_pid" =~ ^[1-9][0-9]*$ ]]; then
+              break
+            fi
+            sleep 2
+          done
+          test "${post_state:-}" = "active"
+          echo "FTMO_W5_RUNNER_RECOVERY_ACTION=$action"
+          echo "FTMO_W5_RUNNER_POST state=$post_state pid=$post_pid"
+          echo "action=$action" >> "$GITHUB_OUTPUT"
+
+      - name: Prove exact deployment run schedules
+        id: scheduling
+        shell: bash
+        run: |
+          set -euo pipefail
+          scheduled=""
+          for _ in $(seq 1 45); do
+            payload="$(gh api "repos/Zennay/Ftmo/actions/runs/$TARGET_RUN")"
+            status="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["status"])' <<<"$payload")"
+            sha="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["head_sha"])' <<<"$payload")"
+            conclusion="$(python3 -c 'import json,sys; print(json.load(sys.stdin).get("conclusion"))' <<<"$payload")"
+            test "$sha" = "$TARGET_SHA"
+            echo "FTMO_W5_TARGET run=$TARGET_RUN status=$status conclusion=$conclusion sha=$sha"
+            if [[ "$status" == "in_progress" || "$status" == "completed" ]]; then
+              scheduled="$status"
+              break
+            fi
+            sleep 4
+          done
+          test -n "$scheduled"
+          echo "FTMO_W5_SCHEDULING_GREEN=1"
+          echo "scheduled=$scheduled" >> "$GITHUB_OUTPUT"
+
+      - name: Retire completed auxiliary recovery queue item
+        env:
+          RECOVERY_ACTION: ${{ steps.recovery.outputs.action }}
+          SCHEDULED_STATE: ${{ steps.scheduling.outputs.scheduled }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import importlib.util
+          import json
+          import os
+          from pathlib import Path
+
+          qid = os.environ["QUEUE_ID"]
+          root = Path("/home/ubuntu/zennay-cloud")
+          spec = importlib.util.spec_from_file_location("zcloud_server", root / "server.py")
+          server = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(server)
+          server.DB = root / "history.db"
+          evidence = (
+              f"Worker5 FTMO runner recovery executed on vps-bb300bba; "
+              f"workflow_run={os.environ['GITHUB_RUN_ID']}; action={os.environ.get('RECOVERY_ACTION')}; "
+              f"target_run={os.environ['TARGET_RUN']}; target_sha={os.environ['TARGET_SHA']}; "
+              f"target_state={os.environ.get('SCHEDULED_STATE')}."
+          )
+          result = server.portfolio_queue_drop(qid, evidence)
+          print("WORKER5_RECOVERY_QUEUE_DROP=" + json.dumps(result, sort_keys=True, default=str))
+          if not result.get("dropped"):
+              raise SystemExit("recovery queue retirement refused")
+          with server.connect() as conn:
+              row = conn.execute(
+                  "SELECT queue_id,status,eligible,worker_slot,evidence FROM portfolio_queue WHERE queue_id=?",
+                  (qid,),
+              ).fetchone()
+          final = dict(row) if row else None
+          print("WORKER5_RECOVERY_QUEUE_READBACK=" + json.dumps(final, sort_keys=True, default=str))
+          if final and (int(final["eligible"] or 0) != 0 or final["worker_slot"] is not None):
+              raise SystemExit("retired recovery queue remains eligible or assigned")
+          print("WORKER5_RECOVERY_QUEUE_RETIRED_GREEN=1")
+          PY
