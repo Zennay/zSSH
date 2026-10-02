@@ -1,4 +1,5 @@
 name: FTMO PR407 stale CI cancellation proof
+# trigger: explicit second push after workflow registration
 
 on:
   push:
