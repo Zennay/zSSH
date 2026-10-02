@@ -1,0 +1,91 @@
+name: FTMO PR448 finalization observer
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/ftmo-pr448-finalization-observer.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  observe:
+    runs-on: self-hosted
+    timeout-minutes: 5
+    env:
+      QUEUE_ID: ftmo-7ee077e0b88278da
+      FTMO_ROOT: /opt/ftmo-autonomous
+    steps:
+      - name: Observe canonical deploy and SQLite state
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(hostname)" = "vps-bb300bba"
+          python3 - <<'PY' > /tmp/ftmo-pr448-finalization-observer.json
+          import json, os, sqlite3, subprocess
+          from pathlib import Path
+
+          def gh(path):
+              return json.loads(subprocess.check_output(["gh","api",path],text=True))
+
+          deploys=gh("repos/Zennay/Ftmo/actions/workflows/deploy-autonomous-vps.yml/runs?per_page=12").get("workflow_runs",[])
+          deploys=[{
+              "id":x.get("id"),"status":x.get("status"),"conclusion":x.get("conclusion"),
+              "head_sha":x.get("head_sha"),"event":x.get("event"),"created_at":x.get("created_at"),
+              "updated_at":x.get("updated_at")
+          } for x in deploys]
+
+          runtime=None
+          p=Path(os.environ["FTMO_ROOT"])/".scratch/autonomy/status.json"
+          if p.is_file() and not p.is_symlink():
+              s=json.loads(p.read_text(encoding="utf-8"))
+              r=s.get("research") or {}
+              ctl=s.get("research_controller") or {}
+              loop=ctl.get("generation_loop") or {}
+              out=ctl.get("outcome_execution") or {}
+              runtime={
+                  "runtime_revision":s.get("runtime_revision"),
+                  "deployment_workflow_run_id":s.get("deployment_workflow_run_id"),
+                  "completed_at_utc":s.get("completed_at_utc"),
+                  "research_cycle_completed_at_utc":s.get("research_cycle_completed_at_utc"),
+                  "research_cycle_ok":s.get("research_cycle_ok"),
+                  "generation_number":r.get("generation_number"),
+                  "stage":r.get("next_stage"),
+                  "development_access_allowed":r.get("development_access_allowed"),
+                  "walk_forward_access_allowed":r.get("walk_forward_access_allowed"),
+                  "final_holdout_access_allowed":r.get("final_holdout_access_allowed"),
+                  "loop_action":loop.get("action"),
+                  "provider_foundation_progress_made":loop.get("provider_foundation_progress_made"),
+                  "partial_progress_providers":loop.get("partial_progress_providers"),
+                  "walk_forward_accessed":out.get("walk_forward_accessed"),
+                  "final_holdout_accessed":out.get("final_holdout_accessed"),
+                  "live_trading_allowed":s.get("live_trading_allowed"),
+                  "broker_order_submission_allowed":s.get("broker_order_submission_allowed"),
+                  "autonomous_cloud_budget_usd":s.get("autonomous_cloud_budget_usd"),
+              }
+
+          queue=None
+          db=Path("/home/ubuntu/zennay-cloud/history.db")
+          with sqlite3.connect(db) as c:
+              c.row_factory=sqlite3.Row
+              row=c.execute(
+                  "SELECT queue_id,project_id,status,eligible,worker_slot,evidence,updated_at "
+                  "FROM portfolio_queue WHERE queue_id=?",(os.environ["QUEUE_ID"],)
+              ).fetchone()
+              queue=dict(row) if row else None
+
+          service={
+              "state":subprocess.run(["systemctl","is-active","ftmo-autonomous-marathon.service"],capture_output=True,text=True).stdout.strip(),
+              "pid":subprocess.run(["systemctl","show","ftmo-autonomous-marathon.service","-p","MainPID","--value"],capture_output=True,text=True).stdout.strip(),
+          }
+          print(json.dumps({"deploy_runs":deploys,"runtime":runtime,"queue":queue,"service":service},sort_keys=True,indent=2))
+          PY
+          encoded="$(base64 -w0 /tmp/ftmo-pr448-finalization-observer.json)"
+          path="runtime-evidence/ftmo-pr448-finalization-observer.json"
+          current="$(gh api "repos/Zennay/zSSH/contents/$path" --jq .sha 2>/dev/null || true)"
+          args=(--method PUT "repos/Zennay/zSSH/contents/$path" -f message="Record FTMO PR448 finalization observer" -f content="$encoded")
+          if [[ -n "$current" ]]; then args+=(-f sha="$current"); fi
+          gh api "${args[@]}" >/dev/null
+          cat /tmp/ftmo-pr448-finalization-observer.json
