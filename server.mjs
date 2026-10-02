@@ -875,6 +875,13 @@ export function start() {
     if (!req.url) return res.writeHead(400).end("Missing URL");
     const url = new URL(req.url, "http://" + (req.headers.host || "localhost"));
 
+    if (req.method === "GET" && PLUGIN_PROFILE === "public") {
+      const publicPage = publicSiteResponse(url.pathname);
+      if (publicPage) {
+        return res.writeHead(publicPage.status, publicPage.headers).end(publicPage.body);
+      }
+    }
+
     if (req.method === "GET" && url.pathname === "/.well-known/openai-apps-challenge") {
       if (!OPENAI_APPS_CHALLENGE_TOKEN) return res.writeHead(404).end("Not Found");
       return res.writeHead(200, { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" }).end(OPENAI_APPS_CHALLENGE_TOKEN);
