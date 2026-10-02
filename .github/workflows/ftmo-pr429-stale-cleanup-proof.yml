@@ -1,0 +1,110 @@
+name: FTMO PR429 stale cleanup and exact-head proof
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/ftmo-pr429-stale-cleanup-proof.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ftmo-pr429-stale-cleanup-proof
+  cancel-in-progress: true
+
+jobs:
+  cleanup-and-proof:
+    runs-on: self-hosted
+    timeout-minutes: 18
+    env:
+      TARGET_SHA: 8ec1585fb50e9d4a62cce292d54d4a2dacc922c8
+      STALE_PR425_RUN: "36997715718"
+    steps:
+      - name: Verify VPS and cancel only proven stale FTMO runs
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(hostname)" = "vps-bb300bba"
+
+          main_sha="$(gh api repos/Zennay/Ftmo/branches/main --jq .commit.sha)"
+          open_heads="$(gh api 'repos/Zennay/Ftmo/pulls?state=open&per_page=100' --jq '.[].head.sha')"
+          printf 'protected_main_sha=%s\n' "$main_sha"
+          printf 'protected_open_heads=%s\n' "$(printf '%s' "$open_heads" | paste -sd, -)"
+
+          pr425_merged="$(gh api repos/Zennay/Ftmo/pulls/425 --jq .merged)"
+          pr425_head="$(gh api repos/Zennay/Ftmo/pulls/425 --jq .head.sha)"
+          stale_status="$(gh api repos/Zennay/Ftmo/actions/runs/$STALE_PR425_RUN --jq .status)"
+          stale_head="$(gh api repos/Zennay/Ftmo/actions/runs/$STALE_PR425_RUN --jq .head_sha)"
+          if [[ "$pr425_merged" == "true" && "$pr425_head" == "$stale_head" && "$stale_status" == "in_progress" ]]; then
+            gh run cancel "$STALE_PR425_RUN" --repo Zennay/Ftmo
+            echo "cancelled_stale_in_progress=$STALE_PR425_RUN head=$stale_head"
+          else
+            echo "left_stale_candidate=$STALE_PR425_RUN merged=$pr425_merged status=$stale_status head=$stale_head"
+          fi
+
+          stale_ids=(
+            37000037009 37000037032 37000037085
+            36999671257 36999671296 36999579776
+            36998295127 36996606986 36996559156
+            36996451673 36996247136 36991324051
+            36942167531 36941649689
+          )
+
+          for run_id in "${stale_ids[@]}"; do
+            status="$(gh api "repos/Zennay/Ftmo/actions/runs/$run_id" --jq .status 2>/dev/null || true)"
+            head_sha="$(gh api "repos/Zennay/Ftmo/actions/runs/$run_id" --jq .head_sha 2>/dev/null || true)"
+            [[ -n "$status" && -n "$head_sha" ]] || continue
+
+            if [[ "$head_sha" == "$main_sha" || "$head_sha" == "$TARGET_SHA" ]]; then
+              echo "protected_run=$run_id status=$status head=$head_sha"
+              continue
+            fi
+            if printf '%s\n' "$open_heads" | grep -Fxq "$head_sha"; then
+              echo "protected_open_pr_run=$run_id status=$status head=$head_sha"
+              continue
+            fi
+            case "$status" in
+              queued|pending)
+                gh run cancel "$run_id" --repo Zennay/Ftmo
+                echo "cancelled_stale_queued=$run_id head=$head_sha"
+                ;;
+              *)
+                echo "left_run=$run_id status=$status head=$head_sha"
+                ;;
+            esac
+          done
+
+      - name: Fetch exact FTMO PR429 head
+        shell: bash
+        run: |
+          set -euo pipefail
+          src="$RUNNER_TEMP/ftmo-pr429-exact-head"
+          rm -rf "$src"
+          gh repo clone Zennay/Ftmo "$src" -- --filter=blob:none --no-checkout >/dev/null
+          git -C "$src" checkout --detach "$TARGET_SHA" >/dev/null
+          test "$(git -C "$src" rev-parse HEAD)" = "$TARGET_SHA"
+          echo "exact_head_sha=$TARGET_SHA"
+
+      - name: Install isolated test environment
+        shell: bash
+        run: |
+          set -euo pipefail
+          src="$RUNNER_TEMP/ftmo-pr429-exact-head"
+          venv="$RUNNER_TEMP/ftmo-pr429-exact-head-venv"
+          rm -rf "$venv"
+          python3 -m venv "$venv"
+          "$venv/bin/python" -m pip install -q -r "$src/requirements-ci.txt"
+          "$venv/bin/python" -m pip install -q -e "$src"
+
+      - name: Compile and prove cache-progress hardening
+        shell: bash
+        run: |
+          set -euo pipefail
+          src="$RUNNER_TEMP/ftmo-pr429-exact-head"
+          venv="$RUNNER_TEMP/ftmo-pr429-exact-head-venv"
+          cd "$src"
+          "$venv/bin/python" -m compileall -q src/prop_trading_ai/ops/autonomous_rollover.py
+          "$venv/bin/python" -m pytest -q \
+            tests/test_autonomous_provider_retry.py \
+            tests/test_zero_cost_workflow_boundary.py
