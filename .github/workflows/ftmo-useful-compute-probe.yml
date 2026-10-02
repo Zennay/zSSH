@@ -39,6 +39,10 @@ jobs:
 
           deployed_revision="$(tr -d '\r\n' < "$FTMO_ROOT/.scratch/autonomy/deployed-main-sha")"
           test -n "$deployed_revision"
+          git -C "$FTMO_ROOT" cat-file -e "$REQUIRED_ATTRIBUTION_ANCESTOR^{commit}"
+          git -C "$FTMO_ROOT" cat-file -e "$deployed_revision^{commit}"
+          git -C "$FTMO_ROOT" merge-base --is-ancestor "$REQUIRED_ATTRIBUTION_ANCESTOR" "$deployed_revision"
+          echo "FTMO_ATTRIBUTION_ANCESTRY_VERIFIED=$REQUIRED_ATTRIBUTION_ANCESTOR..$deployed_revision"
           grep -Fq 'top_level_cgroup_cpu_seconds' "$FTMO_ROOT/src/prop_trading_ai/ops/cpu_attribution.py"
           grep -Fq 'system_slice_unclassified_cpu_seconds' "$FTMO_ROOT/src/prop_trading_ai/ops/cpu_attribution.py"
           grep -Fq 'user_slice_cpu_seconds' "$FTMO_ROOT/src/prop_trading_ai/ops/cpu_attribution.py"
@@ -67,6 +71,9 @@ jobs:
               sudo -n systemctl set-property --runtime "$unit" CPUWeight=100 CPUQuota=100%
             fi
           done
+          if [ "$(systemctl show chatgpt-firefox.service -p LoadState --value 2>/dev/null || true)" = loaded ]; then
+            sudo -n systemctl set-property --runtime chatgpt-firefox.service CPUWeight=100 CPUQuota=100%
+          fi
 
           sudo -n systemctl enable --now ftmo-autonomous-marathon.service
           sudo -n systemctl restart ftmo-autonomous-marathon.service
@@ -131,6 +138,7 @@ jobs:
               "workflow_run_attempt":os.environ.get("GITHUB_RUN_ATTEMPT"),
               "zssh_source_sha":os.environ.get("GITHUB_SHA"),
               "required_attribution_ancestor":os.environ["REQUIRED_ATTRIBUTION_ANCESTOR"],
+              "required_attribution_ancestor_verified":True,
               "ftmo_runtime_revision":(root/".scratch/autonomy/deployed-main-sha").read_text(encoding="utf-8").strip(),
               "attribution":attr,
               "service":{
@@ -167,6 +175,8 @@ jobs:
                   "ftmo:CPUQuota=500%",
                   "haxlab-services:CPUWeight=100",
                   "haxlab-services:CPUQuota=100%",
+                  "chatgpt-firefox.service:CPUWeight=100 when loaded",
+                  "chatgpt-firefox.service:CPUQuota=100% when loaded",
               ],
           }
           Path("/tmp/ftmo-useful-compute-proof.json").write_text(
@@ -174,6 +184,8 @@ jobs:
           )
           print("FTMO_ZSSH_RECEIPT="+json.dumps(receipt,sort_keys=True))
 
+          if receipt.get("required_attribution_ancestor_verified") is not True:
+              raise SystemExit("required FTMO attribution ancestor not verified")
           if receipt["service"]["active_state"] != "active":
               raise SystemExit("FTMO marathon inactive")
           if receipt["service"]["cpu_weight"] != "10000":
@@ -229,6 +241,8 @@ jobs:
           import json
           from pathlib import Path
           r=json.loads(Path("artifacts/ops/ftmo-useful-compute-proof.json").read_text(encoding="utf-8"))
+          if r.get("required_attribution_ancestor_verified") is not True:
+              raise SystemExit("required FTMO attribution ancestor not verified")
           if r.get("service",{}).get("active_state") != "active":
               raise SystemExit("FTMO marathon inactive")
           if r.get("service",{}).get("cpu_weight") != "10000":
