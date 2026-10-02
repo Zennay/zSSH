@@ -138,3 +138,40 @@ jobs:
             git commit -m "Record FTMO f813 queue finalizer"
             git push origin HEAD:main
           fi
+
+      - name: Persist failure diagnostic
+        if: failure()
+        shell: bash
+        env:
+          FINALIZER_JOB_STATUS: ${{ job.status }}
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          git reset --hard origin/main
+          mkdir -p runtime-evidence
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          payload = {
+              "project": "ftmo",
+              "queue_id": os.environ["QUEUE_ID"],
+              "target_merge_sha": os.environ["MERGE_SHA"],
+              "target_proven_head": os.environ["PROVEN_HEAD"],
+              "target_exact_proof_run": int(os.environ["EXACT_PROOF_RUN"]),
+              "finalizer_workflow_run_id": int(os.environ["GITHUB_RUN_ID"]),
+              "finalizer_workflow_run_attempt": int(os.environ["GITHUB_RUN_ATTEMPT"]),
+              "job_status": os.environ["FINALIZER_JOB_STATUS"],
+              "workflow_sha": os.environ["GITHUB_SHA"],
+          }
+          out = Path(
+              "runtime-evidence/"
+              f"ftmo-f81305d51f3aba3b-finalizer-failure-{os.environ['GITHUB_RUN_ID']}.json"
+          )
+          out.write_text(json.dumps(payload, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+          print("FINALIZER_FAILURE_DIAGNOSTIC=" + json.dumps(payload, sort_keys=True))
+          PY
+          git config user.name "zssh-automation"
+          git config user.email "zssh-automation@users.noreply.github.com"
+          git add runtime-evidence/ftmo-f81305d51f3aba3b-finalizer-failure-*.json
+          git commit -m "Record FTMO f813 finalizer failure run ${GITHUB_RUN_ID}"
+          git push origin HEAD:main
