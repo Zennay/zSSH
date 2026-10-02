@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   reload-and-prove:
-    runs-on: [self-hosted, zcloud, vps]
+    runs-on: [self-hosted, haxlab]
     timeout-minutes: 7
     env:
       FTMO_ROOT: /opt/ftmo-autonomous
