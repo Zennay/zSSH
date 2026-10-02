@@ -16,7 +16,7 @@ concurrency:
 jobs:
   finalize:
     runs-on: [self-hosted, zcloud, vps]
-    timeout-minutes: 6
+    timeout-minutes: 7
     steps:
       - name: Verify proof, merge ancestry and persist SQLite DONE
         shell: bash
