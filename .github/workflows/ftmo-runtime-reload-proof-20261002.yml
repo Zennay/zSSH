@@ -10,8 +10,8 @@ permissions:
   contents: write
 
 concurrency:
-  group: ftmo-runtime-reload-proof-20261002
-  cancel-in-progress: false
+  group: ftmo-runtime-reload-proof-haxlab-20261002
+  cancel-in-progress: true
 
 jobs:
   reload-and-prove:
