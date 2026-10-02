@@ -170,3 +170,25 @@ Every queue item that changes public architecture, authentication, authorization
 5. Produce deterministic evidence.
 
 Research-only is not completion. Coding without research evidence is also not completion.
+
+
+## Same-origin public listing website — 2026-10-02
+
+Primary sources checked on 2026-10-02:
+- https://developers.openai.com/plugins/deploy/submission
+- https://developers.openai.com/plugins/deploy/app-review
+- https://developers.openai.com/plugins/deploy/submission-errors
+- https://developers.openai.com/plugins/build/auth
+
+Current platform facts:
+- Remote MCP directory submissions require HTTPS `websiteURL`, `supportURL`, `privacyPolicyURL`, and `termsOfServiceURL`.
+- The remote MCP endpoint must be publicly reachable; connection setup includes domain verification and a current tool scan.
+- Public URLs used in the submission must be accessible and consistent with the submitted publisher.
+- UI returned by an MCP server must use an explicit CSP for the origins it can access.
+- Authenticated write/customer-specific tools must retain the OAuth 2.1 protected-resource and per-tool security contract.
+
+Engineering decision:
+- The canonical zSSH package no longer points its listing URLs at GitHub pages. The build derives all four listing URLs from the validated production MCP origin: `/`, `/support`, `/privacy`, and `/terms`.
+- The public zSSH server serves those pages itself with no scripts, no forms, no analytics, no token-bearing URLs, and a restrictive CSP/referrer/permissions policy.
+- The production submission probe treats those pages as release-critical infrastructure: no redirects, successful HTML response, expected zSSH content, and restrictive CSP are required before release evidence can be green.
+- This same-origin policy is stricter than the minimum documented URL requirement by design. It reduces mutable external dependencies and makes publisher/product/domain review evidence easier to reason about.
