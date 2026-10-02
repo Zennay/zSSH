@@ -1,4 +1,4 @@
-name: Verify72 fallback cleanup
+name: Verify72 FTMO runner recovery via HaxLab lane
 
 on:
   push:
@@ -12,11 +12,98 @@ permissions:
 
 concurrency:
   group: verify72-haxlab-finalizer-w2
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
-  cleanup:
-    if: ${{ false }}
-    runs-on: self-hosted
+  reprobe:
+    runs-on: [self-hosted, haxlab]
+    timeout-minutes: 5
     steps:
-      - run: echo "disabled after successful SQLite finalization"
+      - name: Verify host and recover only inactive FTMO listener
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(hostname)" = "vps-bb300bba"
+          SERVICE=actions.runner.Zennay-Ftmo.vps-bb300bba-ftmo.service
+
+          pre_state="$(systemctl is-active "$SERVICE" || true)"
+          pre_pid="$(systemctl show "$SERVICE" -p MainPID --value || true)"
+          action=preserve-active-listener
+
+          if [[ "$pre_state" != "active" ]]; then
+            action=start-inactive-listener
+            sudo -n systemctl reset-failed "$SERVICE" || true
+            sudo -n systemctl start "$SERVICE"
+          fi
+
+          for _ in $(seq 1 15); do
+            systemctl is-active --quiet "$SERVICE" && break
+            sleep 2
+          done
+
+          post_state="$(systemctl is-active "$SERVICE" || true)"
+          post_pid="$(systemctl show "$SERVICE" -p MainPID --value || true)"
+          test "$post_state" = "active"
+          [[ "$post_pid" =~ ^[1-9][0-9]*$ ]]
+          test -r "/proc/$post_pid/cmdline"
+          cmdline="$(tr '\0' ' ' < "/proc/$post_pid/cmdline")"
+          [[ "$cmdline" == *"Runner.Listener"* || "$cmdline" == *"runsvc.sh"* ]]
+
+          echo "FTMO_RUNNER_SERVICE=$SERVICE"
+          echo "FTMO_RUNNER_PRE state=$pre_state pid=$pre_pid"
+          echo "FTMO_RUNNER_ACTION=$action"
+          echo "FTMO_RUNNER_POST state=$post_state pid=$post_pid"
+          systemctl show "$SERVICE" -p ActiveState -p SubState -p MainPID -p NRestarts -p Result --no-pager
+
+          echo "FTMO_RUNNER_JOURNAL_FRESH_BEGIN"
+          journalctl -u "$SERVICE" --since "-30 min" --no-pager 2>/dev/null \
+            | grep -Eai 'listening for jobs|running job|job request|shutdown|signal|stopp|start|kill|oom|memory|session' \
+            | tail -120 || true
+          echo "FTMO_RUNNER_JOURNAL_FRESH_END"
+
+          echo "FTMO_KERNEL_OOM_FRESH_BEGIN"
+          (sudo -n journalctl -k --since "-30 min" --no-pager 2>/dev/null || \
+            journalctl -k --since "-30 min" --no-pager 2>/dev/null || true) \
+            | grep -Eai 'out of memory|oom|killed process|memory cgroup' \
+            | tail -120 || true
+          echo "FTMO_KERNEL_OOM_FRESH_END"
+
+      - name: Read verify72 SQLite state
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          import urllib.request
+
+          queue_id = "zssh-ftmo-verify72-runner-recovery-20261002"
+          with urllib.request.urlopen(
+              "http://127.0.0.1:8765/api/portfolio-queue?all=1", timeout=10
+          ) as response:
+              payload = json.load(response)
+          item = next(
+              (x for x in payload.get("items", []) if x.get("queue_id") == queue_id),
+              None,
+          )
+          if not item:
+              raise SystemExit("verify72 queue item missing")
+          print(
+              "VERIFY72_QUEUE_STATE",
+              json.dumps(
+                  {
+                      k: item.get(k)
+                      for k in (
+                          "queue_id",
+                          "project_id",
+                          "priority",
+                          "status",
+                          "eligible",
+                          "worker_slot",
+                          "updated_at",
+                          "evidence",
+                      )
+                  },
+                  sort_keys=True,
+              ),
+          )
+          PY
