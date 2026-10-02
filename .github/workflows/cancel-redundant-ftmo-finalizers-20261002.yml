@@ -1,0 +1,39 @@
+name: Cancel redundant FTMO queue finalizers
+
+on:
+  push:
+    branches: [ops/finalize-ftmo-1a8d0cb-20261002]
+    paths:
+      - '.github/workflows/cancel-redundant-ftmo-finalizers-20261002.yml'
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  cancel:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RUN_IDS: '36995472032 36995557728'
+    steps:
+      - name: Verify successful SQLite finalizer and cancel fallbacks
+        shell: bash
+        run: |
+          set -euo pipefail
+          finalizer_json="$(curl --fail --silent --show-error https://api.github.com/repos/Zennay/zCloud/actions/runs/36995034546)"
+          test "$(jq -r '.status' <<<"$finalizer_json")" = 'completed'
+          test "$(jq -r '.conclusion' <<<"$finalizer_json")" = 'success'
+          for run_id in $RUN_IDS; do
+            run_json="$(gh api "repos/Zennay/zSSH/actions/runs/$run_id")"
+            status="$(jq -r '.status' <<<"$run_json")"
+            case "$status" in
+              queued|in_progress|waiting|pending)
+                gh api --method POST "repos/Zennay/zSSH/actions/runs/$run_id/cancel" >/dev/null
+                echo "cancel_requested run=$run_id"
+                ;;
+              *) echo "already_terminal run=$run_id status=$status" ;;
+            esac
+          done
+          echo 'REDUNDANT_FINALIZERS_CANCELLED=verified'
