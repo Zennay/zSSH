@@ -172,3 +172,104 @@ jobs:
 
       - name: Exercise production submission readiness probe
         run: node production-submission-probe-canary.mjs
+
+
+  pr407-stale-ci-proof:
+    if: github.event_name == 'push' && contains(github.event.head_commit.message, 'Run guarded PR407 stale CI proof on VPS')
+    runs-on: self-hosted
+    timeout-minutes: 8
+    steps:
+      - name: Verify exact PR407 stale run scope and terminal state
+        shell: bash
+        env:
+          EXPECTED_PR407_HEAD: 60fcbbc3562e77013f44830c4db26b69f0167ca1
+          EXPECTED_PR407_MERGE: c7a83dae1cc4248e59b6a02d1ec9e0ac8b6dc56b
+          PROTECTED_PR408_HEAD: 482ae9782f941e6926d73d81c76f316ffec4c081
+        run: |
+          set -euo pipefail
+          host="$(hostname)"
+          case "$host" in
+            vps-bb300bba|vps-bb300bba.*) ;;
+            *) echo "REFUSE unexpected host=$host" >&2; exit 1 ;;
+          esac
+          command -v gh >/dev/null
+          gh auth status --hostname github.com >/dev/null 2>&1
+
+          pr407="$(gh api repos/Zennay/Ftmo/pulls/407)"
+          python3 - "$EXPECTED_PR407_HEAD" "$EXPECTED_PR407_MERGE" <<'PY' <<<"$pr407"
+import json, sys
+expected_head, expected_merge = sys.argv[1:]
+d=json.load(sys.stdin)
+assert d["state"] == "closed"
+assert d.get("merged_at")
+assert d["head"]["sha"] == expected_head
+assert d.get("merge_commit_sha") == expected_merge
+print("PR407_GUARD_OK", d["head"]["sha"], d["merge_commit_sha"])
+PY
+
+          pr406_head="$(gh api repos/Zennay/Ftmo/pulls/406 --jq '.head.sha')"
+          test "$EXPECTED_PR407_HEAD" != "$PROTECTED_PR408_HEAD"
+          test "$EXPECTED_PR407_HEAD" != "$pr406_head"
+
+          for id in 36981941923 36981941937; do
+            file="/tmp/ftmo-$id.json"
+            gh api "repos/Zennay/Ftmo/actions/runs/$id" > "$file"
+            python3 - "$file" "$id" "$EXPECTED_PR407_HEAD" "$PROTECTED_PR408_HEAD" "$pr406_head" <<'PY'
+import json, sys
+p, expected_id, expected_sha, protected408, pr406 = sys.argv[1:]
+d=json.load(open(p, encoding="utf-8"))
+assert str(d["id"]) == expected_id
+assert d["head_sha"] == expected_sha
+assert d["head_sha"] != protected408
+assert d["head_sha"] != pr406
+assert d["head_branch"] != "main"
+assert d["event"] == "pull_request"
+print(f'TARGET_GUARD_OK id={d["id"]} status={d["status"]} conclusion={d.get("conclusion")}')
+PY
+            status="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["status"])' "$file")"
+            case "$status" in
+              queued|pending|in_progress)
+                gh api -X POST "repos/Zennay/Ftmo/actions/runs/$id/cancel" >/dev/null
+                echo "TARGET_ACTION id=$id action=requested_cancel"
+                ;;
+              completed)
+                echo "TARGET_ACTION id=$id action=already_terminal"
+                ;;
+              *)
+                echo "REFUSE id=$id unknown_status=$status" >&2
+                exit 1
+                ;;
+            esac
+          done
+
+          for id in 36981941923 36981941937; do
+            terminal=false
+            for _ in $(seq 1 30); do
+              gh api "repos/Zennay/Ftmo/actions/runs/$id" > "/tmp/final-$id.json"
+              status="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["status"])' "/tmp/final-$id.json")"
+              if [ "$status" = completed ]; then terminal=true; break; fi
+              sleep 2
+            done
+            test "$terminal" = true
+            python3 - "/tmp/final-$id.json" "$EXPECTED_PR407_HEAD" <<'PY'
+import json, sys
+d=json.load(open(sys.argv[1], encoding="utf-8"))
+assert d["head_sha"] == sys.argv[2]
+assert d["head_branch"] != "main"
+assert d["status"] == "completed"
+print(f'TARGET_TERMINAL id={d["id"]} status={d["status"]} conclusion={d.get("conclusion")}')
+PY
+          done
+
+          for id in 36982734136 36982734283; do
+            gh api "repos/Zennay/Ftmo/actions/runs/$id" > "/tmp/pr408-$id.json"
+            python3 - "/tmp/pr408-$id.json" "$PROTECTED_PR408_HEAD" <<'PY'
+import json, sys
+d=json.load(open(sys.argv[1], encoding="utf-8"))
+assert d["head_sha"] == sys.argv[2]
+assert d["head_branch"] != "main"
+print(f'PR408_PROTECTED id={d["id"]} status={d["status"]} conclusion={d.get("conclusion")} head={d["head_sha"]}')
+PY
+          done
+
+          echo "ZSSH_PR407_STALE_CI_PROOF=GREEN runner=$host github_run_id=$GITHUB_RUN_ID"
