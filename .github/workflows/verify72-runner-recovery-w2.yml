@@ -1,4 +1,4 @@
-name: Finalize verify72 recovery queue via zSSH runner
+name: Verify72 fallback cleanup
 
 on:
   push:
@@ -12,121 +12,11 @@ permissions:
 
 concurrency:
   group: verify72-runner-recovery-w2
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
-  finalize:
+  cleanup:
+    if: ${{ false }}
     runs-on: self-hosted
-    timeout-minutes: 5
     steps:
-      - name: Verify VPS identity and FTMO runner health
-        shell: bash
-        run: |
-          set -euo pipefail
-          test "$(hostname)" = "vps-bb300bba"
-          test "$(id -un)" = "ubuntu"
-          SERVICE=actions.runner.Zennay-Ftmo.vps-bb300bba-ftmo.service
-          STATE="$(systemctl is-active "$SERVICE" || true)"
-          PID="$(systemctl show "$SERVICE" -p MainPID --value || true)"
-          test "$STATE" = "active"
-          [[ "$PID" =~ ^[1-9][0-9]*$ ]]
-          test -r "/proc/$PID/cmdline"
-          CMD="$(tr '\0' ' ' < "/proc/$PID/cmdline")"
-          [[ "$CMD" == *"Runner.Listener"* || "$CMD" == *"runsvc.sh"* ]]
-          echo "FTMO_RUNNER_HEALTH service=$SERVICE state=$STATE pid=$PID listener=1"
-          systemctl show "$SERVICE" -p ActiveState -p SubState -p MainPID -p NRestarts -p Result --no-pager
-
-      - name: Finalize exact Worker 2 SQLite assignment
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 - <<'PY'
-          import json
-          import urllib.request
-
-          base = "http://127.0.0.1:8765"
-          queue_id = "zssh-ftmo-verify72-runner-recovery-20261002"
-          expected_slot = 2
-
-          def get(path):
-              with urllib.request.urlopen(base + path, timeout=10) as response:
-                  return json.load(response)
-
-          def post(path, payload):
-              req = urllib.request.Request(
-                  base + path,
-                  data=json.dumps(payload).encode(),
-                  method="POST",
-                  headers={
-                      "Content-Type": "application/json",
-                      "X-ZCloud-Actor": "zssh-verify72-worker2-finalizer",
-                  },
-              )
-              with urllib.request.urlopen(req, timeout=10) as response:
-                  return json.load(response)
-
-          live = get("/api/portfolio-queue?all=1")
-          item = next((x for x in live.get("items", []) if x.get("queue_id") == queue_id), None)
-          if not item:
-              raise RuntimeError("verify72 queue item missing")
-          if str(item.get("project_id") or "").lower() != "zssh":
-              raise RuntimeError("verify72 project mismatch")
-
-          before = {
-              k: item.get(k)
-              for k in ("queue_id", "project_id", "priority", "status", "eligible", "worker_slot", "updated_at")
-          }
-          print("VERIFY72_QUEUE_BEFORE", json.dumps(before, sort_keys=True))
-
-          status = str(item.get("status") or "").lower()
-          slot = item.get("worker_slot")
-          evidence = (
-              "Worker 2/5 bounded zSSH-runner finalization on vps-bb300bba. "
-              "FTMO service actions.runner.Zennay-Ftmo.vps-bb300bba-ftmo.service "
-              "verified active/listening; recovery workflow 36993276087 attempt 2 succeeded "
-              "with preserve-active-worker and no fresh 45-minute OOM evidence; "
-              "post-recovery FTMO autonomous runtime run 36994271969 job 110797282084 "
-              "completed success on exact runner vps-bb300bba-ftmo. Historical run "
-              "36987947126 attempt 2 is already terminal zero-step/cancelled by workflow "
-              "concurrency and cannot be retroactively scheduled. No FTMO strategy, "
-              "provider, preregistration, development, walk-forward, holdout, broker/live, "
-              "paid-cloud, or secret state was changed."
-          )
-
-          if status == "queued" and bool(item.get("eligible")) and slot is None:
-              print("VERIFY72_QUEUE_ALREADY_CONTINUED=1")
-          elif status in {"claimed", "running", "verifying", "in_progress"}:
-              if int(slot or 0) != expected_slot:
-                  raise RuntimeError(f"refusing active assignment owned by slot {slot!r}, expected {expected_slot}")
-              result = post("/api/portfolio-queue", {
-                  "action": "result",
-                  "worker_slot": expected_slot,
-                  "queue_id": queue_id,
-                  "result": "CONTINUE",
-                  "evidence": evidence,
-              })
-              print("VERIFY72_QUEUE_RESULT", json.dumps(result, sort_keys=True))
-              if not result.get("ok"):
-                  raise RuntimeError("CONTINUE write rejected")
-          else:
-              raise RuntimeError(
-                  f"unexpected verify72 state status={status!r} eligible={item.get('eligible')!r} slot={slot!r}"
-              )
-
-          final = get("/api/portfolio-queue?all=1")
-          after = next((x for x in final.get("items", []) if x.get("queue_id") == queue_id), None)
-          if not after:
-              raise RuntimeError("verify72 queue item disappeared")
-          summary = {
-              k: after.get(k)
-              for k in ("queue_id", "project_id", "status", "eligible", "worker_slot", "updated_at", "evidence")
-          }
-          print("VERIFY72_QUEUE_AFTER", json.dumps(summary, sort_keys=True))
-          if str(after.get("status") or "").lower() != "queued":
-              raise RuntimeError("final status is not queued")
-          if not bool(after.get("eligible")):
-              raise RuntimeError("final item is not eligible")
-          if after.get("worker_slot") is not None:
-              raise RuntimeError("final item remains claimed")
-          print("VERIFY72_ZSSH_FINALIZE_GREEN=1")
-          PY
+      - run: echo "disabled after successful SQLite finalization"
