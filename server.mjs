@@ -10,6 +10,7 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import { z } from "zod";
 import { bearerChallenge, oauthConfigFromEnv, protectedResourceMetadata, requireScopes, verifyOAuthAuthorizationHeader } from "./oauth.mjs";
 import { getPairingStatus, profileIdFromAuth } from "./pairing.mjs";
+import { publicSiteResponse } from "./public-site.mjs";
 import { VERSION } from "./version.mjs";
 const PORT = Number(process.env.PORT || 8788);
 const EXEC_MODE = process.env.ZSSH_EXEC_MODE === "full" ? "full" : "disabled";
@@ -874,6 +875,13 @@ export function start() {
   const httpServer = createServer(async (req, res) => {
     if (!req.url) return res.writeHead(400).end("Missing URL");
     const url = new URL(req.url, "http://" + (req.headers.host || "localhost"));
+
+    if (req.method === "GET" && PLUGIN_PROFILE === "public") {
+      const publicPage = publicSiteResponse(url.pathname);
+      if (publicPage) {
+        return res.writeHead(publicPage.status, publicPage.headers).end(publicPage.body);
+      }
+    }
 
     if (req.method === "GET" && url.pathname === "/.well-known/openai-apps-challenge") {
       if (!OPENAI_APPS_CHALLENGE_TOKEN) return res.writeHead(404).end("Not Found");

@@ -49,6 +49,29 @@ const origin = mcpUrl.origin;
 const metadataUrl = protectedResourceMetadataUrl(mcpUrl);
 const healthUrl = new URL("/health", origin);
 const challengeUrl = new URL("/.well-known/openai-apps-challenge", origin);
+const listingPages = [
+  ["website", new URL("/", origin), "Your Linux target stays yours."],
+  ["support", new URL("/support", origin), "<h1>Support</h1>"],
+  ["privacy", new URL("/privacy", origin), "<h1>Privacy</h1>"],
+  ["terms", new URL("/terms", origin), "<h1>Terms</h1>"],
+];
+
+for (const [name, listingUrl, marker] of listingPages) {
+  const response = await fetchNoRedirect(listingUrl, { headers: { accept: "text/html" } }, name + " listing page");
+  if (!response.ok) throw new Error(name + " listing page failed: HTTP " + response.status);
+  const contentType = response.headers.get("content-type") || "";
+  if (!contentType.toLowerCase().startsWith("text/html")) {
+    throw new Error(name + " listing page must return text/html");
+  }
+  const csp = response.headers.get("content-security-policy") || "";
+  if (!/default-src\s+'none'/i.test(csp) || !/frame-ancestors\s+'none'/i.test(csp)) {
+    throw new Error(name + " listing page is missing the restrictive CSP");
+  }
+  const body = await response.text();
+  if (!body.includes(marker)) {
+    throw new Error(name + " listing page did not return the expected zSSH content");
+  }
+}
 
 const health = await fetchNoRedirect(healthUrl, {}, "health endpoint");
 if (!health.ok) throw new Error("health endpoint failed: HTTP " + health.status);
@@ -224,6 +247,8 @@ try {
     authorization_servers: metadata.authorization_servers,
     domain_challenge_checked: Boolean(challengeToken),
     no_redirect_contract_validated: true,
+    listing_urls_validated: true,
+    listing_paths: listingPages.map(([, listingUrl]) => listingUrl.pathname),
     exact_resource_metadata_challenge_validated: true,
     tool_count: tools.length,
     tool_scan_sha256: toolScanSha256,

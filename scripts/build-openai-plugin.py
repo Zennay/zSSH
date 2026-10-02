@@ -34,6 +34,17 @@ def https_url(value: str, field: str) -> str:
     return value
 
 
+def listing_urls(mcp_url: str) -> dict[str, str]:
+    parsed = urlparse(mcp_url)
+    origin = f"{parsed.scheme}://{parsed.netloc}"
+    return {
+        "websiteURL": origin + "/",
+        "supportURL": origin + "/support",
+        "privacyPolicyURL": origin + "/privacy",
+        "termsOfServiceURL": origin + "/terms",
+    }
+
+
 def read_json(path: Path) -> dict:
     try:
         return json.loads(path.read_text(encoding="utf-8"))
@@ -102,7 +113,7 @@ def validate_mcp_config(mcp: dict, expected_url: str) -> None:
         fail("zSSH MCP server URL must match the validated public MCP URL")
 
 
-def validate_plugin(plugin: dict) -> None:
+def validate_plugin(plugin: dict, expected_listing_urls: dict[str, str] | None = None) -> None:
     if plugin.get("$schema") != "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json":
         fail("plugin.json uses the wrong Agent Plugins schema")
     name = plugin.get("name", "")
@@ -132,7 +143,12 @@ def validate_plugin(plugin: dict) -> None:
         fail("capabilities must contain at most 20 one-line values of at most 120 characters")
 
     for field in ("websiteURL", "supportURL", "privacyPolicyURL", "termsOfServiceURL"):
-        https_url(str(interface.get(field, "")), "interface." + field)
+        actual = https_url(str(interface.get(field, "")), "interface." + field)
+        if expected_listing_urls is not None and actual != expected_listing_urls[field]:
+            fail(
+                f"interface.{field} must use the canonical same-origin public review URL "
+                f"{expected_listing_urls[field]}"
+            )
 
     prompts = interface.get("defaultPrompt", [])
     if isinstance(prompts, str):
@@ -224,12 +240,14 @@ def main() -> None:
     plugin["extensions"]["com.openai"]["review"]["demo_recording_url"] = demo_url
     icon_ref = "./assets/icon" + icon_suffix
     interface = plugin["extensions"]["com.openai"]["interface"]
+    listing = listing_urls(mcp_url)
+    interface.update(listing)
     interface["composerIcon"] = icon_ref
     interface["logo"] = icon_ref
     mcp["mcpServers"]["zssh"]["url"] = mcp_url
 
     validate_mcp_config(mcp, mcp_url)
-    validate_plugin(plugin)
+    validate_plugin(plugin, listing)
 
     out_dir = Path(args.out_dir).resolve()
     if out_dir == ROOT or ROOT not in out_dir.parents:
@@ -262,6 +280,7 @@ def main() -> None:
         "zip": str(zip_path),
         "zip_sha256": bundle_sha256,
         "mcp_url": mcp_url,
+        "listing_urls": listing,
         "positive_cases": 5,
         "negative_cases": 3,
         "reviewed_public_tools": len(read_json(PUBLIC_TOOL_CONTRACT)),

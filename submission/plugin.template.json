@@ -1,7 +1,7 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "zssh",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Securely inspect and edit a Linux target that the operator explicitly paired with the authenticated user.",
   "author": {
     "name": "Zennay",
@@ -29,10 +29,10 @@
           "Write scoped text files",
           "Check target pairing status"
         ],
-        "websiteURL": "https://github.com/Zennay/zSSH",
-        "supportURL": "https://github.com/Zennay/zSSH/issues",
-        "privacyPolicyURL": "https://github.com/Zennay/zSSH/blob/main/PRIVACY.md",
-        "termsOfServiceURL": "https://github.com/Zennay/zSSH/blob/main/TERMS.md",
+        "websiteURL": "__ZSSH_WEBSITE_URL__",
+        "supportURL": "__ZSSH_SUPPORT_URL__",
+        "privacyPolicyURL": "__ZSSH_PRIVACY_URL__",
+        "termsOfServiceURL": "__ZSSH_TERMS_URL__",
         "defaultPrompt": [
           "Show the uptime and resource usage of my paired Linux server.",
           "Read the review sample file from my paired Linux target.",
@@ -95,7 +95,7 @@
         "commerce_description": "zSSH does not sell products or process payments."
       },
       "publication": {
-        "release_notes": "Initial public-plugin candidate with scoped Linux inspection, dedicated non-secret public file roots, OAuth resource-server enforcement, local target pairing and revocation, and a compact connection-status UI with no external origins."
+        "release_notes": "Public release candidate adds a same-origin HTTPS review website for overview, support, privacy, and terms, alongside scoped Linux inspection, OAuth resource-server enforcement, local target pairing/revocation, and secret-safe public file access."
       }
     }
   }

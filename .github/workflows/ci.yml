@@ -30,7 +30,9 @@ jobs:
           bash -n ops/diagnose-vps.sh
           bash -n ops/register-zcloud.sh
       - name: Validate server syntax
-        run: node --check server.mjs
+        run: |
+          node --check server.mjs
+          node --check public-site.mjs
       - name: Exercise authenticated MCP file roundtrip and policy canary
         shell: bash
         run: |
@@ -143,7 +145,7 @@ jobs:
 
           first = json.loads(Path(sys.argv[1]).read_text())
           second = json.loads(Path(sys.argv[2]).read_text())
-          assert first["version"] == second["version"] == "0.1.1"
+          assert first["version"] == second["version"] == "0.1.2"
           assert first["zip_sha256"] == second["zip_sha256"]
           package = Path(first["zip"])
           assert hashlib.sha256(package.read_bytes()).hexdigest() == first["zip_sha256"]
@@ -152,11 +154,22 @@ jobs:
               assert {"plugin.json", "mcp.json", "assets/icon.svg"} <= names
               plugin = json.loads(z.read("plugin.json"))
               mcp = json.loads(z.read("mcp.json"))
-          assert plugin["version"] == "0.1.1"
+          assert plugin["version"] == "0.1.2"
           review = plugin["extensions"]["com.openai"]["review"]["test_cases"]
           assert len(review["positive"]) == 5
           assert len(review["negative"]) == 3
           assert mcp["mcpServers"]["zssh"]["url"] == "https://mcp.review.example/mcp"
+          interface = plugin["extensions"]["com.openai"]["interface"]
+          assert interface["websiteURL"] == "https://mcp.review.example/"
+          assert interface["supportURL"] == "https://mcp.review.example/support"
+          assert interface["privacyPolicyURL"] == "https://mcp.review.example/privacy"
+          assert interface["termsOfServiceURL"] == "https://mcp.review.example/terms"
+          assert first["listing_urls"] == {
+              "websiteURL": "https://mcp.review.example/",
+              "supportURL": "https://mcp.review.example/support",
+              "privacyPolicyURL": "https://mcp.review.example/privacy",
+              "termsOfServiceURL": "https://mcp.review.example/terms",
+          }
           print("OPENAI_PLUGIN_REPRODUCIBLE_BUNDLE_GREEN", first["zip_sha256"])
           PY
 

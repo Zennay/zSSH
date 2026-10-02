@@ -7,6 +7,8 @@ on:
       - ".github/workflows/public-release-gate.yml"
       - ".github/openai-production-probe-trigger"
       - "release-contract.mjs"
+      - "public-site.mjs"
+      - "test/public-site.test.mjs"
       - "scripts/check-public-release-config.mjs"
       - "scripts/build-openai-plugin.py"
       - "package.json"
@@ -21,6 +23,8 @@ on:
       - ".github/workflows/public-release-gate.yml"
       - ".github/openai-production-probe-trigger"
       - "release-contract.mjs"
+      - "public-site.mjs"
+      - "test/public-site.test.mjs"
       - "scripts/check-public-release-config.mjs"
       - "scripts/build-openai-plugin.py"
       - "package.json"
@@ -133,11 +137,14 @@ jobs:
           if (probe.oauth_authorization_server_metadata_validated !== true || probe.oauth_pkce_s256_validated !== true) {
             throw new Error("production probe did not prove OAuth authorization-server metadata + PKCE S256");
           }
+          if (probe.listing_urls_validated !== true) {
+            throw new Error("production probe did not prove same-origin public listing pages");
+          }
           if (!/^[a-f0-9]{64}$/.test(String(bundle.zip_sha256 || ""))) {
             throw new Error("submission bundle did not emit a valid SHA-256");
           }
-          if (bundle.version !== "0.1.1") {
-            throw new Error("submission bundle version is not 0.1.1");
+          if (bundle.version !== "0.1.2") {
+            throw new Error("submission bundle version is not 0.1.2");
           }
           const evidence = {
             ok: true,
@@ -151,6 +158,8 @@ jobs:
             plugin_version: bundle.version,
             submission_bundle_sha256: bundle.zip_sha256,
             redirect_policy: "manual-fail-closed",
+            listing_urls_validated: true,
+            listing_urls: bundle.listing_urls,
             resource_metadata_challenge: "exact-same-origin",
             oauth_authorization_server_metadata_validated: true,
             oauth_pkce_s256_validated: true,

@@ -1,6 +1,6 @@
 {
   "name": "@zennay/zssh",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "private": true,
   "description": "Security-first remote MCP operations gateway for Linux targets.",
   "type": "module",
