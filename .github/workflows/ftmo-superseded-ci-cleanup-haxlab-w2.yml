@@ -225,7 +225,20 @@ jobs:
           print("QUEUE_AFTER="+json.dumps(dict(final),sort_keys=True,default=str))
           PY
 
-      - name: Cancel queued duplicate zCloud verifier after successful cleanup\n        shell: bash\n        run: |\n          set -euo pipefail\n          rid="37007942596"\n          status="$(gh api "repos/Zennay/zCloud/actions/runs/$rid" --jq .status)"\n          if [[ "$status" == "queued" || "$status" == "pending" ]]; then\n            gh api --method POST "repos/Zennay/zCloud/actions/runs/$rid/cancel" >/dev/null\n            echo "DUPLICATE_CANCEL_REQUESTED=$rid"\n          else\n            echo "DUPLICATE_LEFT status=$status run=$rid"\n          fi\n\n      - name: Commit immutable receipt
+      - name: Cancel queued duplicate zCloud verifier after successful cleanup
+        shell: bash
+        run: |
+          set -euo pipefail
+          rid="37007942596"
+          status="$(gh api "repos/Zennay/zCloud/actions/runs/$rid" --jq .status)"
+          if [[ "$status" == "queued" || "$status" == "pending" ]]; then
+            gh api --method POST "repos/Zennay/zCloud/actions/runs/$rid/cancel" >/dev/null
+            echo "DUPLICATE_CANCEL_REQUESTED=$rid"
+          else
+            echo "DUPLICATE_LEFT status=$status run=$rid"
+          fi
+
+      - name: Commit immutable receipt
         shell: bash
         run: |
           set -euo pipefail
