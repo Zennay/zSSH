@@ -35,7 +35,9 @@ def expect_failure(fn, contains: str) -> None:
 
 plugin = load_json(ROOT / "submission" / "plugin.template.json")
 plugin["extensions"]["com.openai"]["review"]["demo_recording_url"] = "https://review.example/zssh-demo"
-builder.validate_plugin(plugin)
+listing = builder.listing_urls("https://mcp.review.example/mcp")
+plugin["extensions"]["com.openai"]["interface"].update(listing)
+builder.validate_plugin(plugin, listing)
 
 mcp = load_json(ROOT / "submission" / "mcp.template.json")
 mcp["mcpServers"]["zssh"]["url"] = "https://mcp.review.example/mcp"
@@ -43,22 +45,29 @@ builder.validate_mcp_config(mcp, "https://mcp.review.example/mcp")
 
 unknown_tool = copy.deepcopy(plugin)
 unknown_tool["extensions"]["com.openai"]["review"]["test_cases"]["positive"][0]["tools_triggered"] = "totally_unreviewed_tool"
-expect_failure(lambda: builder.validate_plugin(unknown_tool), "references unreviewed tools")
+expect_failure(lambda: builder.validate_plugin(unknown_tool, listing), "references unreviewed tools")
 
 missing_write = copy.deepcopy(plugin)
 positive = missing_write["extensions"]["com.openai"]["review"]["test_cases"]["positive"]
 for case in positive:
     if "zssh_write_file" in case["tools_triggered"]:
         case["tools_triggered"] = "zssh_read_file"
-expect_failure(lambda: builder.validate_plugin(missing_write), "exercise every public write tool")
+expect_failure(lambda: builder.validate_plugin(missing_write, listing), "exercise every public write tool")
 
 credentials_in_zip = copy.deepcopy(plugin)
 credentials_in_zip["extensions"]["com.openai"]["review"]["test_credentials"] = {"username": "reviewer"}
-expect_failure(lambda: builder.validate_plugin(credentials_in_zip), "must stay out of the public plugin ZIP")
+expect_failure(lambda: builder.validate_plugin(credentials_in_zip, listing), "must stay out of the public plugin ZIP")
 
 missing_release_notes = copy.deepcopy(plugin)
 missing_release_notes["extensions"]["com.openai"]["publication"]["release_notes"] = ""
-expect_failure(lambda: builder.validate_plugin(missing_release_notes), "publication.release_notes")
+expect_failure(lambda: builder.validate_plugin(missing_release_notes, listing), "publication.release_notes")
+
+cross_origin_listing = copy.deepcopy(plugin)
+cross_origin_listing["extensions"]["com.openai"]["interface"]["supportURL"] = "https://support.example.net/zssh"
+expect_failure(
+    lambda: builder.validate_plugin(cross_origin_listing, listing),
+    "canonical same-origin public review URL",
+)
 
 extra_server = copy.deepcopy(mcp)
 extra_server["mcpServers"]["other"] = {
