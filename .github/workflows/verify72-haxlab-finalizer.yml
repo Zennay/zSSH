@@ -1,4 +1,4 @@
-name: Finalize verify72 recovery via HaxLab-labelled VPS runner
+name: Verify72 fallback cleanup
 
 on:
   push:
@@ -12,106 +12,11 @@ permissions:
 
 concurrency:
   group: verify72-haxlab-finalizer-w2
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
-  finalize:
-    runs-on:
-      - self-hosted
-      - haxlab
-    timeout-minutes: 5
+  cleanup:
+    if: ${{ false }}
+    runs-on: self-hosted
     steps:
-      - name: Finalize exact verify72 Worker 2 assignment
-        shell: bash
-        run: |
-          set -euo pipefail
-          test "$(hostname)" = "vps-bb300bba"
-          test "$(id -un)" = "ubuntu"
-
-          SERVICE=actions.runner.Zennay-Ftmo.vps-bb300bba-ftmo.service
-          STATE="$(systemctl is-active "$SERVICE" || true)"
-          PID="$(systemctl show "$SERVICE" -p MainPID --value || true)"
-          test "$STATE" = "active"
-          [[ "$PID" =~ ^[1-9][0-9]*$ ]]
-          echo "FTMO_RUNNER_HEALTH service=$SERVICE state=$STATE pid=$PID"
-
-          python3 - <<'PY'
-          import json
-          import urllib.request
-
-          base = "http://127.0.0.1:8765"
-          queue_id = "zssh-ftmo-verify72-runner-recovery-20261002"
-          expected_slot = 2
-
-          def get(path):
-              with urllib.request.urlopen(base + path, timeout=10) as response:
-                  return json.load(response)
-
-          def post(payload):
-              req = urllib.request.Request(
-                  base + "/api/portfolio-queue",
-                  data=json.dumps(payload).encode(),
-                  method="POST",
-                  headers={
-                      "Content-Type": "application/json",
-                      "X-ZCloud-Actor": "zssh-verify72-haxlab-runner-finalizer",
-                  },
-              )
-              with urllib.request.urlopen(req, timeout=10) as response:
-                  return json.load(response)
-
-          payload = get("/api/portfolio-queue?all=1")
-          item = next((x for x in payload.get("items", []) if x.get("queue_id") == queue_id), None)
-          if not item:
-              raise RuntimeError("queue item missing")
-          if str(item.get("project_id") or "").lower() != "zssh":
-              raise RuntimeError("project mismatch")
-
-          status = str(item.get("status") or "").lower()
-          slot = item.get("worker_slot")
-          print("VERIFY72_BEFORE", json.dumps({
-              "status": status,
-              "eligible": item.get("eligible"),
-              "worker_slot": slot,
-              "updated_at": item.get("updated_at"),
-          }, sort_keys=True))
-
-          if status in {"claimed", "running", "verifying", "in_progress"}:
-              if int(slot or 0) != expected_slot:
-                  raise RuntimeError(f"refusing slot {slot!r}; expected 2")
-              result = post({
-                  "action": "result",
-                  "worker_slot": expected_slot,
-                  "queue_id": queue_id,
-                  "result": "CONTINUE",
-                  "evidence": (
-                      "Worker 2/5 verify72 recovery finalized through alternate HaxLab-labelled "
-                      "self-hosted lane on vps-bb300bba. Dedicated FTMO runner service verified "
-                      "active before write; post-recovery run 36994271969/job 110797282084 already "
-                      "proved successful scheduling on vps-bb300bba-ftmo. Historical attempt 2 "
-                      "of run 36987947126 remains terminal zero-step/cancelled by concurrency. "
-                      "No FTMO strategy/provider/preregistration/walk-forward/holdout/live/secret state changed."
-                  ),
-              })
-              if not result.get("ok"):
-                  raise RuntimeError("CONTINUE write rejected")
-              print("VERIFY72_WRITE", json.dumps(result, sort_keys=True))
-          elif status == "queued" and bool(item.get("eligible")) and slot is None:
-              print("VERIFY72_ALREADY_CONTINUED=1")
-          else:
-              raise RuntimeError(f"unexpected state: {status=} {slot=}")
-
-          final = get("/api/portfolio-queue?all=1")
-          after = next((x for x in final.get("items", []) if x.get("queue_id") == queue_id), None)
-          if not after:
-              raise RuntimeError("queue item disappeared")
-          print("VERIFY72_AFTER", json.dumps({
-              "status": after.get("status"),
-              "eligible": after.get("eligible"),
-              "worker_slot": after.get("worker_slot"),
-              "updated_at": after.get("updated_at"),
-          }, sort_keys=True))
-          if str(after.get("status") or "").lower() != "queued" or not bool(after.get("eligible")) or after.get("worker_slot") is not None:
-              raise RuntimeError("final queue state is not queued/eligible/unclaimed")
-          print("VERIFY72_HAXLAB_FINALIZE_GREEN=1")
-          PY
+      - run: echo "disabled after successful SQLite finalization"
