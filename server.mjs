@@ -9,7 +9,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { z } from "zod";
 import { bearerChallenge, oauthConfigFromEnv, protectedResourceMetadata, requireScopes, verifyOAuthAuthorizationHeader } from "./oauth.mjs";
-import { getPairingStatus, profileIdFromAuth } from "./pairing.mjs";
+import { getPairingStatus, profileIdFromAuth } from "./pairing.mjs";\nimport { publicSiteResponse } from "./public-site.mjs";
 import { VERSION } from "./version.mjs";
 const PORT = Number(process.env.PORT || 8788);
 const EXEC_MODE = process.env.ZSSH_EXEC_MODE === "full" ? "full" : "disabled";
