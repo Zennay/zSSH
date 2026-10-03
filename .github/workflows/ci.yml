@@ -37,6 +37,9 @@ jobs:
           node --check server.mjs
           node --check public-site.mjs
           node --check auth-store.mjs
+          node --check agent-auth-store.mjs
+          node --check agent-broker.mjs
+          node --check target-routing.mjs
           node --check bin/zssh.mjs
           node --check client-token-canary.mjs
       - name: Exercise authenticated MCP file roundtrip and policy canary
