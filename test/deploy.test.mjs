@@ -140,7 +140,8 @@ test("target agent installer is non-root, immutable, and never shell-evaluates a
 
   assert.match(installer, /Refusing to install zSSH target agent as root/);
   assert.match(installer, /ZSSH_EXPECTED_SHA/);
-  assert.match(installer, /BASE="\$HOME\/\.local\/share\/zssh-agent"/);\n  assert.match(installer, /RELEASES="\$BASE\/releases"/);
+  assert.match(installer, /BASE="\$HOME\/\.local\/share\/zssh-agent"/);
+  assert.match(installer, /RELEASES="\$BASE\/releases"/);
   assert.match(installer, /chmod 600 "\$ENV_FILE"/);
   assert.match(installer, /read_env_value/);
   assert.doesNotMatch(installer, /source "\$ENV_FILE"/);
