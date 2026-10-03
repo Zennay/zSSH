@@ -1,0 +1,42 @@
+name: zSSH scoped sudo exact-head VPS proof
+
+on:
+  push:
+    branches:
+      - feature/scoped-sudo-grants-20261003
+
+permissions:
+  contents: read
+
+jobs:
+  proof:
+    runs-on: [self-hosted, zcloud, vps]
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+      - name: Verify runner and exact head
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test "$(hostname)" = "vps-bb300bba"
+          test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
+          echo "ZSSH_SCOPED_SUDO_EXACT_HEAD=${GITHUB_SHA}"
+      - name: Install dependencies
+        run: npm install --ignore-scripts --no-audit --no-fund
+      - name: Run scoped sudo tests
+        run: node --test test/scoped-sudo.test.mjs
+      - name: Run full test suite
+        run: npm test
+      - name: Validate scripts and renderer
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          bash -n deploy/install-scoped-sudo.sh
+          node --check scripts/render-scoped-sudoers.mjs
+          policy="$(node scripts/render-scoped-sudoers.mjs             --user zssh             --inspect-service nginx.service             --restart-service my-app.service)"
+          grep -F '/usr/bin/systemctl status nginx.service --no-pager' <<<"$policy"
+          grep -F '/usr/bin/systemctl restart my-app.service' <<<"$policy"
+          ! grep -Eq 'NOPASSWD:[[:space:]]*ALL|[?*\[\]]|/bin/(ba)?sh' <<<"$policy"
+          echo "ZSSH_SCOPED_SUDO_VPS_PROOF_GREEN=1"
