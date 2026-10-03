@@ -184,6 +184,8 @@ test("systemd capabilities are exact, restart-implies-inspect, and shell-free", 
     assert.throws(() => systemdCommandFor("nginx.service", "restart"), /not allowed for restart/);
     assert.throws(() => systemdCommandFor("*.service", "status"), /exact \.service/);
     assert.throws(() => systemdCommandFor("nginx.service;sh", "status"), /exact \.service/);
+    process.env.ZSSH_SYSTEMD_INSPECT_SERVICES = "nginx.service,*.service";
+    assert.throws(() => getSystemdCapabilities(), /exact \.service unit names/);
   } finally {
     if (previousInspect === undefined) delete process.env.ZSSH_SYSTEMD_INSPECT_SERVICES;
     else process.env.ZSSH_SYSTEMD_INSPECT_SERVICES = previousInspect;
