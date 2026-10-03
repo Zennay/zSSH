@@ -1,9 +1,10 @@
 import crypto from "node:crypto";
-import { promises as fs } from "node:fs";
+import { promises as fs, readFileSync } from "node:fs";
 import { normalizeTargetId } from "./pairing.mjs";
 import { TargetSessionRegistry, newTargetSessionId } from "./target-routing.mjs";
 
 export const PUBLIC_TARGET_TOOLS = Object.freeze([
+  "zssh_server_info",
   "get_system_uptime",
   "get_system_identity",
   "get_kernel_info",
@@ -211,18 +212,157 @@ export function verifySignedAgentRequest({
   return { target_id: id, authenticated: true };
 }
 
+
+function parseAgentPublicKeys(raw) {
+  const parsed = typeof raw === "string" ? JSON.parse(raw) : raw;
+  const candidate = parsed?.targets && typeof parsed.targets === "object" ? parsed.targets : parsed;
+  if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) {
+    throw new Error("agent public key config must be an object keyed by target id");
+  }
+
+  const entries = Object.entries(candidate);
+  if (!entries.length || entries.length > 256) {
+    throw new Error("agent public key config must contain between 1 and 256 targets");
+  }
+
+  const trusted = new Map();
+  for (const [rawTargetId, record] of entries) {
+    const targetId = normalizeTargetId(rawTargetId);
+    if (record?.enabled === false) continue;
+    const pem = typeof record === "string"
+      ? record
+      : String(record?.public_key_pem || record?.public_key || "");
+    if (!pem.startsWith("-----BEGIN PUBLIC KEY-----")) {
+      throw new Error("agent public key must be PEM SubjectPublicKeyInfo");
+    }
+    const key = crypto.createPublicKey(pem);
+    if (key.asymmetricKeyType !== "ed25519") {
+      throw new Error("agent public key must use Ed25519");
+    }
+    trusted.set(targetId, key);
+  }
+  if (!trusted.size) throw new Error("agent public key config has no enabled targets");
+  return trusted;
+}
+
+export function agentPublicKeysFromEnv(env = process.env) {
+  const inline = String(env.ZSSH_AGENT_PUBLIC_KEYS_JSON || "").trim();
+  const file = String(env.ZSSH_AGENT_PUBLIC_KEYS_FILE || "").trim();
+  if (inline && file) {
+    throw new Error("configure only one of ZSSH_AGENT_PUBLIC_KEYS_JSON or ZSSH_AGENT_PUBLIC_KEYS_FILE");
+  }
+  if (!inline && !file) return new Map();
+  return parseAgentPublicKeys(inline || readFileSync(file, "utf8"));
+}
+
+export function signAgentRequest(privateKey, {
+  method = "POST",
+  pathname,
+  targetId,
+  timestamp,
+  nonce,
+  body = "",
+} = {}) {
+  const key = privateKey?.type === "private" && typeof privateKey?.export === "function"
+    ? privateKey
+    : crypto.createPrivateKey(privateKey);
+  if (key.type !== "private" || key.asymmetricKeyType !== "ed25519") {
+    throw new Error("agent private key must use Ed25519");
+  }
+  const numeric = Number(timestamp);
+  const unixSeconds = Number.isInteger(numeric) && numeric > 100000000000
+    ? Math.floor(numeric / 1000)
+    : numeric;
+  const canonical = canonicalAgentRequest({
+    method,
+    requestPath: pathname,
+    targetId,
+    timestamp: unixSeconds,
+    nonce,
+    body,
+  });
+  return crypto.sign(null, Buffer.from(canonical, "utf8"), key).toString("base64url");
+}
+
+export class AgentRequestVerifier {
+  #trustedKeys;
+  #replayCache = new AgentReplayCache();
+  #maxClockSkewSeconds;
+
+  constructor({ keys, maxSkewMs = 60000 } = {}) {
+    if (!(keys instanceof Map) || !keys.size) {
+      throw new Error("agent verifier requires at least one public key");
+    }
+    const skew = Number(maxSkewMs);
+    if (!Number.isInteger(skew) || skew < 5000 || skew > 300000) {
+      throw new Error("agent max clock skew must be between 5000 and 300000 ms");
+    }
+    this.#trustedKeys = keys;
+    this.#maxClockSkewSeconds = Math.ceil(skew / 1000);
+  }
+
+  verify({ method = "POST", pathname, headers = {}, body = "", now = Date.now() } = {}) {
+    return verifySignedAgentRequest({
+      method,
+      requestPath: pathname,
+      targetId: headers["x-zssh-agent-target"] || headers["X-ZSSH-Agent-Target"],
+      timestamp: headers["x-zssh-agent-timestamp"] || headers["X-ZSSH-Agent-Timestamp"],
+      nonce: headers["x-zssh-agent-nonce"] || headers["X-ZSSH-Agent-Nonce"],
+      signature: headers["x-zssh-agent-signature"] || headers["X-ZSSH-Agent-Signature"],
+      body,
+      trustedKeys: this.#trustedKeys,
+      replayCache: this.#replayCache,
+      now,
+      maxClockSkewSeconds: this.#maxClockSkewSeconds,
+    });
+  }
+}
+
+export function createAgentRequestVerifier(env = process.env) {
+  const keys = agentPublicKeysFromEnv(env);
+  return keys.size ? new AgentRequestVerifier({
+    keys,
+    maxSkewMs: Number(env.ZSSH_AGENT_MAX_CLOCK_SKEW_MS || 60000),
+  }) : null;
+}
+
+export async function readJsonBody(req, { maxBytes = 262144 } = {}) {
+  const chunks = [];
+  let bytes = 0;
+  for await (const chunk of req) {
+    bytes += chunk.length;
+    if (bytes > maxBytes) throw new Error("agent request body too large");
+    chunks.push(chunk);
+  }
+  const raw = Buffer.concat(chunks).toString("utf8");
+  const value = raw ? JSON.parse(raw) : {};
+  return { raw, value };
+}
+
+export const AGENT_ENDPOINTS = Object.freeze([
+  "/agent/v1/session",
+  "/agent/v1/poll",
+  "/agent/v1/result",
+  "/agent/v1/disconnect",
+]);
+
 export class OutboundAgentBroker {
   #sessions;
   #states = new Map();
   #allowedTools;
   #commandTimeoutMs;
+  #pollTimeoutMs;
   #maxPayloadBytes;
+  #maxPending;
 
   constructor({
     sessions,
     allowedTools = PUBLIC_TARGET_TOOLS,
-    commandTimeoutMs = 30000,
+    commandTimeoutMs,
+    requestTimeoutMs,
+    pollTimeoutMs = 25000,
     maxPayloadBytes = 131072,
+    maxPending = 16,
   } = {}) {
     if (!(sessions instanceof TargetSessionRegistry)) {
       throw new Error("target session registry is required");
@@ -233,19 +373,33 @@ export class OutboundAgentBroker {
       throw new Error("agent tool allowlist is invalid");
     }
 
-    const timeout = Number(commandTimeoutMs);
+    const timeout = Number(commandTimeoutMs ?? requestTimeoutMs ?? 30000);
+    const pollWait = Number(pollTimeoutMs);
     const maxBytes = Number(maxPayloadBytes);
+    const pendingLimit = Number(maxPending);
     if (!Number.isInteger(timeout) || timeout < 1000 || timeout > 300000) {
       throw new Error("agent command timeout must be between 1000 and 300000 ms");
     }
+    if (!Number.isInteger(pollWait) || pollWait < 1000 || pollWait > 30000) {
+      throw new Error("agent poll timeout must be between 1000 and 30000 ms");
+    }
     if (!Number.isInteger(maxBytes) || maxBytes < 4096 || maxBytes > 1048576) {
       throw new Error("agent payload limit must be between 4096 and 1048576 bytes");
+    }
+    if (!Number.isInteger(pendingLimit) || pendingLimit < 1 || pendingLimit > 128) {
+      throw new Error("agent pending limit must be between 1 and 128");
     }
 
     this.#sessions = sessions;
     this.#allowedTools = new Set(toolNames);
     this.#commandTimeoutMs = timeout;
+    this.#pollTimeoutMs = pollWait;
     this.#maxPayloadBytes = maxBytes;
+    this.#maxPending = pendingLimit;
+  }
+
+  open(targetId) {
+    return this.connect(targetId);
   }
 
   connect(targetId, { sessionId = newTargetSessionId(), now = Date.now() } = {}) {
@@ -292,6 +446,10 @@ export class OutboundAgentBroker {
       throw new Error("agent tool arguments must be an object");
     }
 
+    if (state.pending.size >= this.#maxPending) {
+      throw new Error("agent target has too many pending requests");
+    }
+
     const requestId = "rpc_" + crypto.randomBytes(18).toString("base64url");
     const command = {
       type: "tool_call",
@@ -321,6 +479,11 @@ export class OutboundAgentBroker {
     });
   }
 
+  async next(targetId, sessionId) {
+    const command = await this.pull(targetId, sessionId, { waitMs: this.#pollTimeoutMs });
+    return command?.type === "idle" ? null : command;
+  }
+
   async pull(targetId, sessionId, { waitMs = 25000 } = {}) {
     const state = this.#current(targetId, sessionId);
     if (state.queue.length) return state.queue.shift();
@@ -342,7 +505,10 @@ export class OutboundAgentBroker {
     });
   }
 
-  complete(targetId, sessionId, envelope) {
+  complete(targetId, sessionId, envelopeOrRequestId, directResult) {
+    const envelope = typeof envelopeOrRequestId === "string"
+      ? { request_id: envelopeOrRequestId, result: directResult }
+      : envelopeOrRequestId;
     const state = this.#current(targetId, sessionId);
     const requestId = normalizeRequestId(envelope?.request_id);
     const pending = state.pending.get(requestId);
@@ -351,12 +517,17 @@ export class OutboundAgentBroker {
     const response = envelope?.error
       ? { ok: false, error: String(envelope.error).slice(0, 2048) }
       : envelope?.result;
+    if (response === undefined) throw new Error("agent result is required");
     serializeBounded(response, this.#maxPayloadBytes, "agent response");
 
     clearTimeout(pending.timer);
     state.pending.delete(requestId);
     pending.resolve(response);
     return { accepted: true, request_id: requestId };
+  }
+
+  close(targetId, sessionId) {
+    return this.disconnect(targetId, sessionId);
   }
 
   disconnect(targetId, sessionId, reason = "target agent disconnected") {

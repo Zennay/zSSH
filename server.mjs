@@ -9,7 +9,9 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { z } from "zod";
 import { bearerChallenge, oauthConfigFromEnv, protectedResourceMetadata, requireScopes, verifyOAuthAuthorizationHeader } from "./oauth.mjs";
-import { getPairingStatus, profileIdFromAuth } from "./pairing.mjs";
+import { getPairingStatus, profileIdFromAuth, targetIdFromEnv } from "./pairing.mjs";
+import { TargetSessionRegistry, resolveAuthenticatedTarget } from "./target-routing.mjs";
+import { AGENT_ENDPOINTS, OutboundAgentBroker, createAgentRequestVerifier, readJsonBody } from "./agent-transport.mjs";
 import { publicSiteResponse } from "./public-site.mjs";
 import { verifyClientToken } from "./auth-store.mjs";
 import { VERSION } from "./version.mjs";
@@ -32,6 +34,15 @@ const PAIRING_REQUIRED = PLUGIN_PROFILE === "public" && process.env.ZSSH_PAIRING
 const TARGET_LABEL = String(process.env.ZSSH_TARGET_LABEL || "Linux target").trim().slice(0, 80) || "Linux target";
 const CONNECTION_UI_URI = "ui://zssh/connection-card-v1.html";
 const CONNECTION_UI_HTML = readFileSync(new URL("./ui/connection-card.html", import.meta.url), "utf8");
+const TARGET_SESSIONS = new TargetSessionRegistry();
+const AGENT_BROKER = new OutboundAgentBroker({
+  sessions: TARGET_SESSIONS,
+  requestTimeoutMs: Number(process.env.ZSSH_AGENT_REQUEST_TIMEOUT_MS || 30000),
+  pollTimeoutMs: Number(process.env.ZSSH_AGENT_POLL_TIMEOUT_MS || 25000),
+  maxPending: Number(process.env.ZSSH_AGENT_MAX_PENDING || 16),
+});
+const AGENT_VERIFIER = createAgentRequestVerifier(process.env);
+const OUTBOUND_AGENT_MODE = Boolean(AGENT_VERIFIER);
 const AUDIT_LOG = path.resolve(process.env.ZSSH_AUDIT_LOG || "./data/audit.jsonl");
 const SAFE_PROGRAM_PATHS = Object.freeze({
   uptime: "/usr/bin/uptime",
@@ -117,8 +128,9 @@ export function classifyCommand(command) {
   return "mutation";
 }
 
-function getAllowedRoots() {
-  const publicRoots = PLUGIN_PROFILE === "public" ? String(process.env.ZSSH_PUBLIC_ALLOWED_ROOTS || "").trim() : "";
+function getAllowedRoots({ publicOnly = PLUGIN_PROFILE === "public" } = {}) {
+  const publicRoots = publicOnly ? String(process.env.ZSSH_PUBLIC_ALLOWED_ROOTS || "").trim() : "";
+  if (publicOnly && !publicRoots) return [];
   const raw = publicRoots || process.env.ZSSH_ALLOWED_ROOTS || process.cwd();
   return raw.split(",").map(v => path.resolve(v.trim())).filter(Boolean);
 }
@@ -181,11 +193,11 @@ function isWithin(root, candidate) {
   return rel === "" || (!rel.startsWith("..") && !path.isAbsolute(rel));
 }
 
-export async function resolveAllowedPath(inputPath, { forWrite = false } = {}) {
+export async function resolveAllowedPath(inputPath, { forWrite = false, publicOnly = false } = {}) {
   if (!inputPath || typeof inputPath !== "string") throw new Error("path is required");
   const requested = path.resolve(inputPath);
   const roots = [];
-  for (const configured of getAllowedRoots()) {
+  for (const configured of getAllowedRoots({ publicOnly: publicOnly || PLUGIN_PROFILE === "public" })) {
     try {
       roots.push(await fs.realpath(configured));
     } catch {
@@ -224,7 +236,7 @@ async function audit(event) {
 }
 
 
-export async function runSafeProgram(program, args = [], cwd, timeoutSeconds) {
+export async function runSafeProgram(program, args = [], cwd, timeoutSeconds, { publicOnly = PLUGIN_PROFILE === "public" } = {}) {
   const name = String(program || "").trim();
   const enabled = getEnabledSafePrograms();
 
@@ -242,7 +254,7 @@ export async function runSafeProgram(program, args = [], cwd, timeoutSeconds) {
     throw new Error("args must contain at most 32 strings of at most 512 characters");
   }
 
-  const resolvedCwd = await resolveAllowedPath(cwd || getAllowedRoots()[0] || process.cwd());
+  const resolvedCwd = await resolveAllowedPath(cwd || getAllowedRoots({ publicOnly })[0] || process.cwd(), { publicOnly });
   const timeoutMs = clampInt(timeoutSeconds, 1, 300, COMMAND_TIMEOUT_SECONDS) * 1000;
   const startedAt = Date.now();
 
@@ -507,11 +519,11 @@ async function execute(command, cwd, timeoutSeconds) {
   });
 }
 
-async function readTextFile(filePath, { rejectSecrets = false } = {}) {
+export async function readTextFile(filePath, { rejectSecrets = false } = {}) {
   if (rejectSecrets && publicPathLooksSensitive(filePath)) {
     throw new Error("public plugin refuses secret or credential file paths");
   }
-  const resolved = await resolveAllowedPath(filePath);
+  const resolved = await resolveAllowedPath(filePath, { publicOnly: rejectSecrets });
   const stat = await fs.stat(resolved);
   if (!stat.isFile()) throw new Error("path is not a regular file");
   if (stat.size > MAX_FILE_BYTES) throw new Error("file exceeds ZSSH_MAX_FILE_BYTES");
@@ -523,7 +535,7 @@ async function readTextFile(filePath, { rejectSecrets = false } = {}) {
   return { path: resolved, bytes: stat.size, content: redactSecrets(content) };
 }
 
-async function writeTextFile(filePath, content, { rejectSecrets = false } = {}) {
+export async function writeTextFile(filePath, content, { rejectSecrets = false } = {}) {
   if (rejectSecrets && publicPathLooksSensitive(filePath)) {
     throw new Error("public plugin refuses secret or credential file paths");
   }
@@ -532,7 +544,7 @@ async function writeTextFile(filePath, content, { rejectSecrets = false } = {}) 
   }
   const bytes = Buffer.byteLength(content, "utf8");
   if (bytes > MAX_FILE_BYTES) throw new Error("content exceeds ZSSH_MAX_FILE_BYTES");
-  const resolved = await resolveAllowedPath(filePath, { forWrite: true });
+  const resolved = await resolveAllowedPath(filePath, { forWrite: true, publicOnly: rejectSecrets });
   const tmp = path.join(path.dirname(resolved), "." + path.basename(resolved) + ".zssh-" + crypto.randomUUID());
   await fs.writeFile(tmp, content, { encoding: "utf8", mode: 0o600, flag: "wx" });
   await fs.rename(tmp, resolved);
@@ -545,6 +557,29 @@ function result(value, isError = false) {
     content: [{ type: "text", text: JSON.stringify(value) }],
     isError
   };
+}
+
+async function forwardPublicAgentTool(extra, tool, args = {}) {
+  if (!OUTBOUND_AGENT_MODE) throw new Error("outbound agent mode is not configured");
+  const route = await resolveAuthenticatedTarget(authInfoFromExtra(extra), {
+    resource: OAUTH_CONFIG?.resource || "",
+    sessions: TARGET_SESSIONS,
+  });
+  if (!route.routable) {
+    const messages = {
+      pairing_pending: "Target pairing is still pending local approval.",
+      not_paired: "This OAuth profile is not paired to the configured target.",
+      target_offline: "The paired Linux target agent is offline.",
+    };
+    const error = new Error(messages[route.reason] || "The paired Linux target is unavailable.");
+    error.code = route.reason || "target_unavailable";
+    throw error;
+  }
+  return await route.send({ tool, args });
+}
+
+function agentToolResult(value) {
+  return result(value, value?.ok === false);
 }
 
 function authInfoFromExtra(extra) {
@@ -649,6 +684,13 @@ function createMcpServer() {
       const authError = await publicToolAuthorizationError(extra, OAUTH_CONFIG?.readScope || "zssh:read");
       if (authError) return authError;
       if (PLUGIN_PROFILE === "public") {
+        if (OUTBOUND_AGENT_MODE) {
+          try {
+            return agentToolResult(await forwardPublicAgentTool(extra, "zssh_server_info", {}));
+          } catch (err) {
+            return result({ ok: false, error: String(err?.message || err), code: err?.code || "target_unavailable" }, true);
+          }
+        }
         return result({
           version: VERSION,
           target_label: TARGET_LABEL,
@@ -693,6 +735,9 @@ function createMcpServer() {
       const authError = await publicToolAuthorizationError(extra, OAUTH_CONFIG?.readScope || "zssh:read");
       if (authError) return authError;
       try {
+        if (PLUGIN_PROFILE === "public" && OUTBOUND_AGENT_MODE) {
+          return agentToolResult(await forwardPublicAgentTool(extra, "zssh_read_file", { path: filePath }));
+        }
         return result(await readTextFile(filePath, { rejectSecrets: PLUGIN_PROFILE === "public" }));
       } catch (err) {
         return result({ ok: false, error: String(err?.message || err) }, true);
@@ -716,6 +761,9 @@ function createMcpServer() {
       const authError = await publicToolAuthorizationError(extra, OAUTH_CONFIG?.writeScope || "zssh:write");
       if (authError) return authError;
       try {
+        if (PLUGIN_PROFILE === "public" && OUTBOUND_AGENT_MODE) {
+          return agentToolResult(await forwardPublicAgentTool(extra, "zssh_write_file", { path: filePath, content }));
+        }
         return result({ ok: true, ...(await writeTextFile(filePath, content, { rejectSecrets: PLUGIN_PROFILE === "public" })) });
       } catch (err) {
         return result({ ok: false, error: String(err?.message || err) }, true);
@@ -850,6 +898,9 @@ function createMcpServer() {
           const authError = await publicToolAuthorizationError(extra, OAUTH_CONFIG?.readScope || "zssh:read");
           if (authError) return authError;
           try {
+            if (OUTBOUND_AGENT_MODE) {
+              return agentToolResult(await forwardPublicAgentTool(extra, name, {}));
+            }
             const value = await runSafeProgram(program, args);
             return result(value, !value.ok);
           } catch (err) {
@@ -1089,7 +1140,16 @@ export function start() {
   if (PLUGIN_PROFILE === "public" && EXEC_MODE === "full") {
     throw new Error("public plugin profile refuses ZSSH_EXEC_MODE=full; raw shell must stay disabled");
   }
-  if (PLUGIN_PROFILE === "public" && process.env.NODE_ENV === "production" && !String(process.env.ZSSH_PUBLIC_ALLOWED_ROOTS || "").trim()) {
+  if (OUTBOUND_AGENT_MODE && PLUGIN_PROFILE !== "public") {
+    throw new Error("outbound agent gateway mode is only supported by the public plugin profile");
+  }
+  if (OUTBOUND_AGENT_MODE && process.env.NODE_ENV === "production") {
+    const targetId = targetIdFromEnv(process.env);
+    if (targetId === "local") {
+      throw new Error("production outbound agent mode requires an opaque ZSSH_TARGET_ID, not local");
+    }
+  }
+  if (PLUGIN_PROFILE === "public" && !OUTBOUND_AGENT_MODE && process.env.NODE_ENV === "production" && !String(process.env.ZSSH_PUBLIC_ALLOWED_ROOTS || "").trim()) {
     throw new Error("production public profile requires explicit ZSSH_PUBLIC_ALLOWED_ROOTS; do not reuse broad private filesystem roots");
   }
   if (PLUGIN_PROFILE === "public" && PUBLIC_AUTH_MODE === "oauth" && !OAUTH_CONFIG) {
@@ -1113,6 +1173,52 @@ export function start() {
   const httpServer = createServer(async (req, res) => {
     if (!req.url) return res.writeHead(400).end("Missing URL");
     const url = new URL(req.url, "http://" + (req.headers.host || "localhost"));
+
+    if (AGENT_ENDPOINTS.includes(url.pathname)) {
+      if (!AGENT_VERIFIER) return res.writeHead(404).end("Not Found");
+      if (req.method !== "POST") return res.writeHead(405).end("Method Not Allowed");
+
+      let body;
+      try {
+        body = await readJsonBody(req);
+      } catch {
+        return res.writeHead(400, { "content-type": "application/json", "cache-control": "no-store" })
+          .end(JSON.stringify({ error: "invalid request body" }));
+      }
+
+      let verified;
+      try {
+        verified = AGENT_VERIFIER.verify({
+          method: req.method,
+          pathname: url.pathname,
+          headers: req.headers,
+          body: body.raw,
+        });
+      } catch {
+        return res.writeHead(401, { "content-type": "application/json", "cache-control": "no-store" })
+          .end(JSON.stringify({ error: "unauthorized" }));
+      }
+
+      try {
+        const targetId = verified.target_id;
+        const value = body.value;
+        let payload;
+        if (url.pathname === "/agent/v1/session") {
+          payload = AGENT_BROKER.open(targetId);
+        } else if (url.pathname === "/agent/v1/poll") {
+          const command = await AGENT_BROKER.next(targetId, value.session_id);
+          payload = { command };
+        } else if (url.pathname === "/agent/v1/result") {
+          payload = AGENT_BROKER.complete(targetId, value.session_id, value.request_id, value.result);
+        } else {
+          payload = { disconnected: AGENT_BROKER.close(targetId, value.session_id) };
+        }
+        return res.writeHead(200, { "content-type": "application/json", "cache-control": "no-store" }).end(JSON.stringify(payload));
+      } catch {
+        return res.writeHead(409, { "content-type": "application/json", "cache-control": "no-store" })
+          .end(JSON.stringify({ error: "agent request rejected" }));
+      }
+    }
 
     if (req.method === "GET" && PLUGIN_PROFILE === "public") {
       const publicPage = publicSiteResponse(url.pathname);

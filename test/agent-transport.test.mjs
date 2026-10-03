@@ -273,3 +273,53 @@ test("paired OAuth route reaches live outbound agent and revocation cuts it off"
     await rm(root, { recursive: true, force: true });
   }
 });
+
+
+test("HTTP verifier helper binds fixed endpoint and body, and broker aliases retain allowlist", async () => {
+  const { publicKey, privateKey } = crypto.generateKeyPairSync("ed25519");
+  const { AgentRequestVerifier, signAgentRequest } = await import("../agent-transport.mjs");
+  const verifier = new AgentRequestVerifier({
+    keys: new Map([["zt_agent12345", publicKey]]),
+    maxSkewMs: 60000,
+  });
+  const now = Date.parse("2026-10-03T23:55:00Z");
+  const timestamp = String(Math.floor(now / 1000));
+  const nonce = "nonce_httphelper123456";
+  const body = JSON.stringify({ session_id: "sess_abcdefghijklmnop" });
+  const signature = signAgentRequest(privateKey, {
+    method: "POST",
+    pathname: "/agent/v1/poll",
+    targetId: "zt_agent12345",
+    timestamp,
+    nonce,
+    body,
+  });
+
+  assert.deepEqual(verifier.verify({
+    method: "POST",
+    pathname: "/agent/v1/poll",
+    body,
+    now,
+    headers: {
+      "x-zssh-agent-target": "zt_agent12345",
+      "x-zssh-agent-timestamp": timestamp,
+      "x-zssh-agent-nonce": nonce,
+      "x-zssh-agent-signature": signature,
+    },
+  }), { target_id: "zt_agent12345", authenticated: true });
+
+  const sessions = new TargetSessionRegistry();
+  const broker = new OutboundAgentBroker({
+    sessions,
+    requestTimeoutMs: 2000,
+    pollTimeoutMs: 1000,
+    maxPending: 2,
+  });
+  const opened = broker.open("zt_agent12345");
+  const live = sessions.resolve("zt_agent12345");
+  await assert.rejects(
+    live.send({ tool: "zssh_exec", args: { command: "id" } }),
+    /not allowed/,
+  );
+  assert.equal(broker.close(opened.target_id, opened.session_id), true);
+});
