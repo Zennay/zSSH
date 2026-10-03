@@ -89,6 +89,7 @@ PORT=8788
 ZSSH_DEV_BEARER_TOKEN=$TOKEN
 ZSSH_API_KEY=$API_KEY
 ZSSH_MCP_CAPABILITY_TOKEN=$CAPABILITY_TOKEN
+ZSSH_CLIENT_TOKENS_FILE=$CONFIG/clients.json
 ZSSH_TRUST_LOCAL_TUNNEL=0
 ZSSH_ALLOWED_ROOTS=$ALLOWED_ROOTS
 ZSSH_EXEC_MODE=disabled
@@ -105,6 +106,9 @@ if ! grep -q '^ZSSH_API_KEY=' "$ENV_FILE"; then
 fi
 if ! grep -q '^ZSSH_MCP_CAPABILITY_TOKEN=' "$ENV_FILE"; then
   printf '\nZSSH_MCP_CAPABILITY_TOKEN=%s\n' "$(random_hex_32)" >> "$ENV_FILE"
+fi
+if ! grep -q '^ZSSH_CLIENT_TOKENS_FILE=' "$ENV_FILE"; then
+  printf '\nZSSH_CLIENT_TOKENS_FILE=%s\n' "$CONFIG/clients.json" >> "$ENV_FILE"
 fi
 chmod 600 "$ENV_FILE"
 
@@ -178,4 +182,14 @@ else
 fi
 
 systemctl --user is-active --quiet zssh.service
-printf 'ZSSH_INSTALL_GREEN sha=%s release=%s\n' "$REPO_SHA" "$RELEASE"
+
+CLI_DIR="$HOME/.local/bin"
+CLI="$CLI_DIR/zssh"
+mkdir -p "$CLI_DIR"
+cat > "$CLI" <<EOF
+#!/usr/bin/env bash
+exec "$NODE_BIN" "$CURRENT/bin/zssh.mjs" "\$@"
+EOF
+chmod 700 "$CLI"
+
+printf 'ZSSH_INSTALL_GREEN sha=%s release=%s cli=%s\n' "$REPO_SHA" "$RELEASE" "$CLI"
