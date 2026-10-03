@@ -1,0 +1,53 @@
+name: zSSH agent transport exact-head VPS proof
+
+on:
+  push:
+    branches:
+      - proof/zssh-agent-transport-vps-20261003-2352
+
+permissions:
+  contents: read
+
+concurrency:
+  group: zssh-agent-transport-vps-proof-20261003-2352
+  cancel-in-progress: true
+
+jobs:
+  proof:
+    runs-on: self-hosted
+    timeout-minutes: 15
+    env:
+      TARGET_SHA: 7b9003b7e6ac780fcce0b020304c6f3a3e7a6708
+    steps:
+      - name: Verify VPS identity and fetch exact zSSH head
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(hostname)" = "vps-bb300bba"
+          src="$RUNNER_TEMP/zssh-agent-transport-exact-head"
+          rm -rf "$src"
+          gh repo clone Zennay/zSSH "$src" -- --filter=blob:none --no-checkout >/dev/null
+          git -C "$src" checkout --detach "$TARGET_SHA" >/dev/null
+          test "$(git -C "$src" rev-parse HEAD)" = "$TARGET_SHA"
+          echo "ZSSH_AGENT_TARGET_SHA=$TARGET_SHA"
+
+      - name: Install dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          src="$RUNNER_TEMP/zssh-agent-transport-exact-head"
+          cd "$src"
+          npm install --ignore-scripts --no-audit --no-fund
+
+      - name: Prove outbound agent transport and full suite
+        shell: bash
+        run: |
+          set -euo pipefail
+          src="$RUNNER_TEMP/zssh-agent-transport-exact-head"
+          cd "$src"
+          node --check agent-transport.mjs
+          node --check agent-runtime.mjs
+          node --check agent.mjs
+          node --test test/agent-runtime.test.mjs test/agent-transport.test.mjs
+          npm test
+          echo "ZSSH_AGENT_TRANSPORT_VPS_GREEN=1"
