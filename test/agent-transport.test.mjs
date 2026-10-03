@@ -84,30 +84,55 @@ test("agent request signature binds target, endpoint, timestamp, nonce and body"
 test("agent request verifier rejects replay and stale timestamps", () => {
   const { verifier, privateKey, targetId } = keys();
   const now = Date.parse("2026-10-03T23:45:00Z");
-  const args = {
-    verifier,
-    privateKey,
+  const body = "{}";
+  const pathname = "/agent/v1/session";
+  const nonce = "n_replaynonce123456";
+  const timestamp = String(Math.floor(now / 1000));
+  const signature = signAgentRequest(privateKey, {
+    method: "POST",
+    pathname,
     targetId,
-    pathname: "/agent/v1/session",
-    body: "{}",
+    timestamp,
+    nonce,
+    body,
+  });
+  const request = {
+    method: "POST",
+    pathname,
+    body,
     now,
-    nonce: "n_replaynonce123456",
+    headers: {
+      "x-zssh-agent-target": targetId,
+      "x-zssh-agent-timestamp": timestamp,
+      "x-zssh-agent-nonce": nonce,
+      "x-zssh-agent-signature": signature,
+    },
   };
 
-  signed(args);
-  assert.throws(() => signed(args), /replay detected/);
+  verifier.verify(request);
+  assert.throws(() => verifier.verify(request), /replay detected/);
 
+  const staleTimestamp = String(Math.floor((now - 120_000) / 1000));
+  const staleNonce = "n_stalenonce1234567";
+  const staleSignature = signAgentRequest(privateKey, {
+    method: "POST",
+    pathname,
+    targetId,
+    timestamp: staleTimestamp,
+    nonce: staleNonce,
+    body,
+  });
   assert.throws(
-    () => signed({
-      ...args,
-      nonce: "n_stalenonce1234567",
-      now,
-      // Sign a request that is two minutes old.
-      privateKey: {
-        type: "private",
+    () => verifier.verify({
+      ...request,
+      headers: {
+        "x-zssh-agent-target": targetId,
+        "x-zssh-agent-timestamp": staleTimestamp,
+        "x-zssh-agent-nonce": staleNonce,
+        "x-zssh-agent-signature": staleSignature,
       },
     }),
-    /Invalid key object type|key must be/,
+    /clock-skew window/,
   );
 });
 
