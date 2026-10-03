@@ -131,3 +131,30 @@ test("hosted MCP auth avoids browser OAuth and accepts no-sign-in capability URL
   assert.match(server, /authorization/);
   assert.doesNotMatch(server, /oauth\/approve|claude-auth\.mjs|mcpAuthRouter/);
 });
+
+
+test("target agent installer is non-root, immutable, and never shell-evaluates agent.env", async () => {
+  const installer = await readFile(path.join(ROOT, "deploy", "install-target-agent.sh"), "utf8");
+  const unit = await readFile(path.join(ROOT, "deploy", "zssh-agent.service.in"), "utf8");
+  const agent = await readFile(path.join(ROOT, "target-agent.mjs"), "utf8");
+
+  assert.match(installer, /Refusing to install zSSH target agent as root/);
+  assert.match(installer, /ZSSH_EXPECTED_SHA/);
+  assert.match(installer, /\.local\/share\/zssh-agent\/releases/);
+  assert.match(installer, /chmod 600 "\$ENV_FILE"/);
+  assert.match(installer, /read_env_value/);
+  assert.doesNotMatch(installer, /source "\$ENV_FILE"/);
+  assert.match(installer, /https:\/\//);
+  assert.match(installer, /agent private key must not be group\/world accessible/);
+
+  assert.match(unit, /EnvironmentFile=%h\/\.config\/zssh\/agent\.env/);
+  assert.match(unit, /Restart=always/);
+  assert.match(unit, /NoNewPrivileges=true/);
+  assert.match(unit, /PrivateTmp=true/);
+
+  assert.match(agent, /refuses to run as root/);
+  assert.match(agent, /ZSSH_PUBLIC_ALLOWED_ROOTS/);
+  assert.match(agent, /ZSSH_EXEC_MODE = "disabled"/);
+  assert.doesNotMatch(agent, /zssh_exec/);
+  assert.doesNotMatch(agent, /createServer|listen\(/);
+});
