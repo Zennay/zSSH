@@ -3,6 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { createClientToken, listClientTokens, revokeClientToken } from "../auth-store.mjs";
+import { createAgentToken, listAgentTokens, revokeAgentToken } from "../agent-auth-store.mjs";
 
 const ENV_FILE = process.env.ZSSH_ENV_FILE || path.join(os.homedir(), ".config", "zssh", "gateway.env");
 
@@ -26,11 +27,16 @@ Usage:
   zssh token create [label]
   zssh token list
   zssh token revoke <id>
+  zssh agent-token create <zt_target_id> [label]
+  zssh agent-token list
+  zssh agent-token revoke <id>
   zssh connect [label]
 
-Local client tokens are private/self-hosted credentials. They are not used by
-the public OpenAI OAuth profile. "connect" prints a token once, or a private
-HTTPS capability URL when ZSSH_PUBLIC_URL is configured.
+Local client tokens are private/self-hosted credentials. Agent tokens are
+separate target-to-gateway credentials bound to one opaque zt_ target ID.
+Neither is used as the public OpenAI user OAuth credential. Tokens are printed
+once; only hashes are stored. "connect" prints a private client token once, or
+a private HTTPS capability URL when ZSSH_PUBLIC_URL is configured.
 `);
 }
 
@@ -50,7 +56,7 @@ function capabilityUrl(token) {
 
 loadEnvFile();
 
-const [command, subcommand, value] = process.argv.slice(2);
+const [command, subcommand, value, extra] = process.argv.slice(2);
 
 try {
   if (command === "token" && subcommand === "create") {
@@ -70,6 +76,27 @@ try {
     if (!value) throw new Error("token id is required");
     const revoked = await revokeClientToken(value);
     console.log(revoked ? "ZSSH_CLIENT_TOKEN_REVOKED" : "ZSSH_CLIENT_TOKEN_NOT_FOUND");
+    process.exitCode = revoked ? 0 : 3;
+  } else if (command === "agent-token" && subcommand === "create") {
+    if (!value) throw new Error("target id is required");
+    const created = await createAgentToken(value, extra || "target-agent");
+    console.log("ZSSH_AGENT_TOKEN_CREATED");
+    console.log("id=" + created.id);
+    console.log("target_id=" + created.target_id);
+    console.log("label=" + created.label);
+    console.log("token=" + created.token);
+    console.log("Store this token only on the target agent; it will not be shown again.");
+  } else if (command === "agent-token" && subcommand === "list") {
+    const agents = await listAgentTokens();
+    if (!agents.length) {
+      console.log("No revocable zSSH agent tokens.");
+    } else {
+      for (const agent of agents) console.log(`${agent.id}\t${agent.target_id}\t${agent.label}\t${agent.created_at}`);
+    }
+  } else if (command === "agent-token" && subcommand === "revoke") {
+    if (!value) throw new Error("agent token id is required");
+    const revoked = await revokeAgentToken(value);
+    console.log(revoked ? "ZSSH_AGENT_TOKEN_REVOKED" : "ZSSH_AGENT_TOKEN_NOT_FOUND");
     process.exitCode = revoked ? 0 : 3;
   } else if (command === "connect") {
     const created = await createClientToken(subcommand || "chatgpt");
