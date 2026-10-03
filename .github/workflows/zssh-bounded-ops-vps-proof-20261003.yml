@@ -1,4 +1,4 @@
-name: zSSH bounded ops exact-head VPS proof
+name: zSSH bounded ops proof carrier retired
 
 on:
   push:
@@ -15,44 +15,10 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  proof:
-    runs-on: self-hosted
-    timeout-minutes: 12
-    env:
-      TARGET_SHA: af9ad9422d294f223bc3627943cc1876eb245cf1
+  retire:
+    runs-on: ubuntu-latest
     steps:
-      - name: Verify VPS identity and checkout exact merged zSSH head
-        shell: bash
+      - name: Retire unavailable repo-scoped VPS carrier
         run: |
-          set -Eeuo pipefail
-          test "$(hostname)" = "vps-bb300bba"
-          src="$RUNNER_TEMP/zssh-bounded-ops-exact-head"
-          rm -rf "$src"
-          gh repo clone Zennay/zSSH "$src" -- --filter=blob:none --no-checkout >/dev/null
-          git -C "$src" checkout --detach "$TARGET_SHA" >/dev/null
-          test "$(git -C "$src" rev-parse HEAD)" = "$TARGET_SHA"
-          echo "ZSSH_EXACT_HEAD_GREEN=1"
-
-      - name: Install dependencies
-        shell: bash
-        run: |
-          set -Eeuo pipefail
-          cd "$RUNNER_TEMP/zssh-bounded-ops-exact-head"
-          npm install --ignore-scripts --no-audit --no-fund
-
-      - name: Prove bounded Git and systemd contracts
-        shell: bash
-        run: |
-          set -Eeuo pipefail
-          cd "$RUNNER_TEMP/zssh-bounded-ops-exact-head"
-          node --check server.mjs
-          node --test test/security.test.mjs test/scoped-sudo.test.mjs
-          echo "ZSSH_BOUNDED_OPS_TARGETED_GREEN=1"
-
-      - name: Prove full zSSH suite on VPS
-        shell: bash
-        run: |
-          set -Eeuo pipefail
-          cd "$RUNNER_TEMP/zssh-bounded-ops-exact-head"
-          node --test
-          echo "ZSSH_BOUNDED_OPS_FULL_SUITE_GREEN=1"
+          echo "VPS proof moved to Zennay/Haxlab run 37162077163."
+          echo "This branch performs no deployment or runtime mutation."
