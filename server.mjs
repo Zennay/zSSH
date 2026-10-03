@@ -43,6 +43,10 @@ const SAFE_PROGRAM_PATHS = Object.freeze({
   free: "/usr/bin/free"
 });
 const SAFE_PROGRAM_NAMES = Object.freeze(Object.keys(SAFE_PROGRAM_PATHS));
+const GIT_BIN = process.env.ZSSH_GIT_BIN || "/usr/bin/git";
+const SUDO_BIN = process.env.ZSSH_SUDO_BIN || "/usr/bin/sudo";
+const SYSTEMCTL_BIN = process.env.ZSSH_SYSTEMCTL_BIN || "/usr/bin/systemctl";
+const SERVICE_UNIT_RE = /^[A-Za-z0-9][A-Za-z0-9_.@:-]{0,126}\.service$/;
 
 function clampInt(value, min, max, fallback) {
   const n = Number(value);
@@ -123,6 +127,53 @@ function getEnabledSafePrograms() {
   const raw = process.env.ZSSH_SAFE_PROGRAMS || SAFE_PROGRAM_NAMES.join(",");
   const requested = raw.split(",").map(v => v.trim()).filter(Boolean);
   return [...new Set(requested)].filter(name => Object.hasOwn(SAFE_PROGRAM_PATHS, name));
+}
+
+function parseServiceUnits(raw) {
+  const units = [...new Set(String(raw || "").split(",").map(v => v.trim()).filter(Boolean))];
+  for (const unit of units) {
+    if (!SERVICE_UNIT_RE.test(unit)) {
+      throw new Error("configured systemd services must be exact .service unit names");
+    }
+  }
+  return units;
+}
+
+export function getSystemdCapabilities() {
+  const restart = parseServiceUnits(process.env.ZSSH_SYSTEMD_RESTART_SERVICES);
+  const inspect = [...new Set([
+    ...parseServiceUnits(process.env.ZSSH_SYSTEMD_INSPECT_SERVICES),
+    ...restart,
+  ])].sort();
+  return { inspect, restart: [...restart].sort() };
+}
+
+export function systemdCommandFor(service, action) {
+  const unit = String(service || "").trim();
+  if (!SERVICE_UNIT_RE.test(unit)) throw new Error("service must be an exact .service unit name");
+  const capabilities = getSystemdCapabilities();
+  if (action === "status") {
+    if (!capabilities.inspect.includes(unit)) throw new Error("service is not allowed for inspection");
+    return { executable: SUDO_BIN, args: ["-n", SYSTEMCTL_BIN, "status", unit, "--no-pager"] };
+  }
+  if (action === "restart") {
+    if (!capabilities.restart.includes(unit)) throw new Error("service is not allowed for restart");
+    return { executable: SUDO_BIN, args: ["-n", SYSTEMCTL_BIN, "restart", unit] };
+  }
+  throw new Error("unsupported systemd action");
+}
+
+export async function gitCommandFor(repoPath, action) {
+  const resolved = await resolveAllowedPath(repoPath);
+  const stat = await fs.stat(resolved);
+  if (!stat.isDirectory()) throw new Error("repository path is not a directory");
+  if (action === "status") {
+    return { executable: GIT_BIN, args: ["-C", resolved, "status", "--short", "--branch"], cwd: resolved };
+  }
+  if (action === "pull") {
+    return { executable: GIT_BIN, args: ["-C", resolved, "pull", "--ff-only"], cwd: resolved };
+  }
+  throw new Error("unsupported git action");
 }
 
 function isWithin(root, candidate) {
@@ -275,6 +326,90 @@ export async function runSafeProgram(program, args = [], cwd, timeoutSeconds) {
       error: timedOut ? "program timed out" : limited ? "output limit exceeded" : code === 0 ? null : "program exited non-zero"
     }));
   });
+}
+
+async function runFixedProgram(executable, args, cwd, action, timeoutSeconds = COMMAND_TIMEOUT_SECONDS) {
+  if (!path.isAbsolute(executable)) throw new Error("fixed executable path must be absolute");
+  if (!Array.isArray(args) || args.length > 32 || args.some(arg => typeof arg !== "string" || arg.length > 1024)) {
+    throw new Error("fixed program args must contain at most 32 strings of at most 1024 characters");
+  }
+  const resolvedCwd = await resolveAllowedPath(cwd || getAllowedRoots()[0] || process.cwd());
+  const timeoutMs = clampInt(timeoutSeconds, 1, 300, COMMAND_TIMEOUT_SECONDS) * 1000;
+  const startedAt = Date.now();
+  return await new Promise(resolve => {
+    const child = spawn(executable, args, {
+      cwd: resolvedCwd,
+      env: { ...safeEnvironment(), GIT_TERMINAL_PROMPT: "0" },
+      shell: false,
+      stdio: ["ignore", "pipe", "pipe"]
+    });
+    let stdout = Buffer.alloc(0);
+    let stderr = Buffer.alloc(0);
+    let limited = false;
+    let timedOut = false;
+    let settled = false;
+    const append = (target, chunk) => {
+      const next = Buffer.concat([target, chunk]);
+      if (next.length > MAX_OUTPUT_BYTES) { limited = true; return next.subarray(0, MAX_OUTPUT_BYTES); }
+      return next;
+    };
+    child.stdout.on("data", chunk => { stdout = append(stdout, chunk); if (limited) child.kill("SIGTERM"); });
+    child.stderr.on("data", chunk => { stderr = append(stderr, chunk); if (limited) child.kill("SIGTERM"); });
+    const timer = setTimeout(() => {
+      timedOut = true;
+      child.kill("SIGTERM");
+      setTimeout(() => child.kill("SIGKILL"), 1500).unref();
+    }, timeoutMs);
+    const finish = async payload => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      const durationMs = Date.now() - startedAt;
+      const value = {
+        ...payload,
+        timed_out: timedOut,
+        output_limited: limited,
+        duration_ms: durationMs,
+        stdout: redactSecrets(stdout.toString("utf8")),
+        stderr: redactSecrets(stderr.toString("utf8"))
+      };
+      try {
+        await audit({
+          action, executable, args: args.map(redactSecrets), cwd: resolvedCwd,
+          outcome: value.ok ? "ok" : "error", exit_code: value.exit_code,
+          timed_out: timedOut, output_limited: limited, duration_ms: durationMs
+        });
+      } catch {}
+      resolve(value);
+    };
+    child.on("error", err => finish({ ok: false, exit_code: null, error: err.message }));
+    child.on("close", (code, signal) => finish({
+      ok: code === 0 && !timedOut && !limited,
+      exit_code: code,
+      signal: signal || null,
+      error: timedOut ? "program timed out" : limited ? "output limit exceeded" : code === 0 ? null : "program exited non-zero"
+    }));
+  });
+}
+
+export async function gitStatus(repoPath) {
+  const command = await gitCommandFor(repoPath, "status");
+  return { repo: command.cwd, ...(await runFixedProgram(command.executable, command.args, command.cwd, "git_status")) };
+}
+
+export async function gitPull(repoPath) {
+  const command = await gitCommandFor(repoPath, "pull");
+  return { repo: command.cwd, ...(await runFixedProgram(command.executable, command.args, command.cwd, "git_pull")) };
+}
+
+export async function serviceStatus(service) {
+  const command = systemdCommandFor(service, "status");
+  return { service: String(service).trim(), ...(await runFixedProgram(command.executable, command.args, getAllowedRoots()[0], "service_status")) };
+}
+
+export async function restartService(service) {
+  const command = systemdCommandFor(service, "restart");
+  return { service: String(service).trim(), ...(await runFixedProgram(command.executable, command.args, getAllowedRoots()[0], "restart_service")) };
 }
 
 async function execute(command, cwd, timeoutSeconds) {
@@ -535,6 +670,8 @@ function createMcpServer() {
         plugin_profile: PLUGIN_PROFILE,
         safe_programs: getEnabledSafePrograms(),
         allowed_roots: getAllowedRoots(),
+        systemd_capabilities: getSystemdCapabilities(),
+        git_operations: ["status", "pull --ff-only"],
         timeout_seconds: COMMAND_TIMEOUT_SECONDS,
         max_output_bytes: MAX_OUTPUT_BYTES,
         auth_mode: "private",
@@ -756,6 +893,58 @@ function createMcpServer() {
       ["-h"]
     );
   } else {
+    server.registerTool(
+      "zssh_git_status",
+      {
+        title: "Git status",
+        description: "Read concise branch and working-tree status for a Git repository inside configured zSSH allowed roots.",
+        inputSchema: { path: z.string().min(1) },
+        annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }
+      },
+      async ({ path: repoPath }) => {
+        try { const value = await gitStatus(repoPath); return result(value, !value.ok); }
+        catch (err) { return result({ ok: false, error: String(err?.message || err) }, true); }
+      }
+    );
+    server.registerTool(
+      "zssh_git_pull",
+      {
+        title: "Git fast-forward pull",
+        description: "Update a Git repository inside configured zSSH allowed roots using only git pull --ff-only. Diverged histories are refused.",
+        inputSchema: { path: z.string().min(1) },
+        annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true }
+      },
+      async ({ path: repoPath }) => {
+        try { const value = await gitPull(repoPath); return result(value, !value.ok); }
+        catch (err) { return result({ ok: false, error: String(err?.message || err) }, true); }
+      }
+    );
+    server.registerTool(
+      "zssh_service_status",
+      {
+        title: "Service status",
+        description: "Inspect one exact system service granted through zSSH's scoped sudo capability policy.",
+        inputSchema: { service: z.string().min(1).max(128) },
+        annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }
+      },
+      async ({ service }) => {
+        try { const value = await serviceStatus(service); return result(value, !value.ok); }
+        catch (err) { return result({ ok: false, error: String(err?.message || err) }, true); }
+      }
+    );
+    server.registerTool(
+      "zssh_restart_service",
+      {
+        title: "Restart service",
+        description: "Restart one exact system service granted through zSSH's scoped sudo capability policy. No other systemctl arguments are accepted.",
+        inputSchema: { service: z.string().min(1).max(128) },
+        annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false }
+      },
+      async ({ service }) => {
+        try { const value = await restartService(service); return result(value, !value.ok); }
+        catch (err) { return result({ ok: false, error: String(err?.message || err) }, true); }
+      }
+    );
     server.registerTool(
       "zssh_run_safe",
       {
