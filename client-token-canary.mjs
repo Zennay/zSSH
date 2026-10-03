@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { createClientToken, revokeClientToken } from "./auth-store.mjs";
@@ -16,7 +17,7 @@ const created = await createClientToken("ci-revocation-canary");
 const endpoint = new URL(`http://127.0.0.1:${port}/mcp/${created.token}`);
 
 const server = spawn(process.execPath, ["server.mjs"], {
-  cwd: path.dirname(new URL(import.meta.url).pathname),
+  cwd: path.dirname(fileURLToPath(import.meta.url)),
   env: {
     ...process.env,
     NODE_ENV: "production",
