@@ -195,7 +195,11 @@ export async function getPairingStatus(authInfo, {
   });
 }
 
-export async function approvePairing(requestId, { env = process.env, now = Date.now() } = {}) {
+export async function approvePairing(requestId, {
+  targetId,
+  env = process.env,
+  now = Date.now(),
+} = {}) {
   const id = String(requestId || "").trim();
   if (!id) throw new Error("pairing request id is required");
   const file = pairingPath(env);
@@ -206,11 +210,16 @@ export async function approvePairing(requestId, { env = process.env, now = Date.
     const request = registry.requests[id];
     if (!request) throw new Error("pairing request not found or expired");
 
-    const targetId = normalizeTargetId(request.target_id || "local");
-    const key = pairingKey(request.profile_id, targetId);
+    const requestTargetId = normalizeTargetId(request.target_id || "local");
+    const scopedTargetId = targetId ? normalizeTargetId(targetId) : null;
+    if (scopedTargetId && requestTargetId !== scopedTargetId) {
+      throw new Error("pairing request belongs to a different target");
+    }
+
+    const key = pairingKey(request.profile_id, requestTargetId);
     registry.pairings[key] = {
       profile_id: request.profile_id,
-      target_id: targetId,
+      target_id: requestTargetId,
       paired_at: nowIso(now),
       revoked_at: null,
     };
@@ -219,7 +228,7 @@ export async function approvePairing(requestId, { env = process.env, now = Date.
     return {
       paired: true,
       profile_id: request.profile_id,
-      target_id: targetId,
+      target_id: requestTargetId,
       paired_at: registry.pairings[key].paired_at,
     };
   });
@@ -263,27 +272,36 @@ export async function revokePairing(profileId, {
   });
 }
 
-export async function listPairings({ env = process.env, now = Date.now() } = {}) {
+export async function listPairings({
+  targetId,
+  env = process.env,
+  now = Date.now(),
+} = {}) {
+  const requestedTarget = targetId ? normalizeTargetId(targetId) : null;
   const file = pairingPath(env);
   return serialized(async () => {
     const registry = await readRegistry(file);
     const changed = pruneExpired(registry, now);
     if (changed) await writeRegistry(file, registry);
     return {
-      pairings: Object.entries(registry.pairings).map(([key, value]) => ({
-        profile_id: pairingProfileId(key, value),
-        target_id: pairingTargetId(key, value),
-        paired_at: value.paired_at || null,
-        revoked_at: value.revoked_at || null,
-        active: !value.revoked_at,
-      })),
-      requests: Object.entries(registry.requests).map(([request_id, value]) => ({
-        request_id,
-        profile_id: value.profile_id,
-        target_id: normalizeTargetId(value.target_id || "local"),
-        created_at: value.created_at,
-        expires_at: value.expires_at,
-      })),
+      pairings: Object.entries(registry.pairings)
+        .map(([key, value]) => ({
+          profile_id: pairingProfileId(key, value),
+          target_id: pairingTargetId(key, value),
+          paired_at: value.paired_at || null,
+          revoked_at: value.revoked_at || null,
+          active: !value.revoked_at,
+        }))
+        .filter(value => !requestedTarget || value.target_id === requestedTarget),
+      requests: Object.entries(registry.requests)
+        .map(([request_id, value]) => ({
+          request_id,
+          profile_id: value.profile_id,
+          target_id: normalizeTargetId(value.target_id || "local"),
+          created_at: value.created_at,
+          expires_at: value.expires_at,
+        }))
+        .filter(value => !requestedTarget || value.target_id === requestedTarget),
     };
   });
 }
