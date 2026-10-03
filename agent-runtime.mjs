@@ -56,7 +56,7 @@ export async function executeAgentCommand(command, { targetLabel = process.env.Z
 
   const fixed = PUBLIC_PROGRAMS[tool];
   if (fixed) {
-    const value = await runSafeProgram(fixed[0], fixed[1], publicRootFromEnv());
+    const value = await runSafeProgram(fixed[0], fixed[1], publicRootFromEnv(), undefined, { publicOnly: true });
     return value;
   }
 
