@@ -1,4 +1,5 @@
 name: zSSH recover zCloud production runner
+# One-shot fallback transport for the 2026-10-03 production rollout.
 
 on:
   push:
