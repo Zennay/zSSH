@@ -58,6 +58,7 @@ export function redactSecrets(input) {
   text = text.replace(/-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z0-9 ]*PRIVATE KEY-----/g, "[REDACTED_PRIVATE_KEY]");
   text = text.replace(/\bBearer\s+[A-Za-z0-9._~+\/-]+=*/gi, "Bearer [REDACTED]");
   text = text.replace(/\b(api[_-]?key|access[_-]?token|refresh[_-]?token|token|secret|password|passwd)\b\s*[:=]\s*([^\s"'\\]+)/gi, "$1=[REDACTED]");
+  text = text.replace(/\bzssh_agent_[0-9a-f]{16}_[A-Za-z0-9_-]{40,}\b/g, "[REDACTED_ZSSH_AGENT_TOKEN]");
   text = text.replace(/\bzssh_[0-9a-f]{16}_[A-Za-z0-9_-]{40,}\b/g, "[REDACTED_ZSSH_TOKEN]");
 
   // High-confidence raw credential formats. Public file tools fail closed when
