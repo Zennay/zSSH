@@ -15,7 +15,8 @@
     "review:fixture": "node scripts/prepare-review-target.mjs",
     "submission:probe": "node production-submission-probe.mjs",
     "mcp:client-token-canary": "node client-token-canary.mjs",
-    "agent:start": "node target-agent.mjs"
+    "agent:start": "node target-agent.mjs",
+    "agent:init": "node scripts/create-agent-identity.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.20.2",
