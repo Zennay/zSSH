@@ -511,7 +511,7 @@ async function execute(command, cwd, timeoutSeconds) {
   });
 }
 
-async function readTextFile(filePath, { rejectSecrets = false } = {}) {
+export async function readTextFile(filePath, { rejectSecrets = false } = {}) {
   if (rejectSecrets && publicPathLooksSensitive(filePath)) {
     throw new Error("public plugin refuses secret or credential file paths");
   }
@@ -527,7 +527,7 @@ async function readTextFile(filePath, { rejectSecrets = false } = {}) {
   return { path: resolved, bytes: stat.size, content: redactSecrets(content) };
 }
 
-async function writeTextFile(filePath, content, { rejectSecrets = false } = {}) {
+export async function writeTextFile(filePath, content, { rejectSecrets = false } = {}) {
   if (rejectSecrets && publicPathLooksSensitive(filePath)) {
     throw new Error("public plugin refuses secret or credential file paths");
   }
