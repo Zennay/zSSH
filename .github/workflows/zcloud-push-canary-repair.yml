@@ -10,9 +10,13 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: zcloud-push-canary-repair
+  cancel-in-progress: true
+
 jobs:
   repair:
-    runs-on: self-hosted
+    runs-on: [self-hosted, haxlab]
     timeout-minutes: 8
     steps:
       - name: Verify VPS and fetch pinned zCloud repair source
