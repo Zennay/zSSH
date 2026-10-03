@@ -21,7 +21,7 @@ jobs:
     timeout-minutes: 6
     env:
       ZCLOUD_RUNNER_SERVICE: actions.runner.Zennay-zCloud.zcloud-vps-1.service
-      PRODUCTION_RUN_ID: "37163173461"
+      PRODUCTION_RUN_ID: "37163079533"
     steps:
       - name: Recover only idle zCloud Actions listener
         id: recovery
@@ -81,7 +81,7 @@ jobs:
           echo "ZCLOUD_RUNNER_RECOVERY action=$action state=$post_state pid=$post_pid"
           echo "action=$action" >> "$GITHUB_OUTPUT"
 
-      - name: Verify queued production deploy leaves queue
+      - name: Verify queued HaxLab receipt backfill leaves queue
         shell: bash
         run: |
           set -euo pipefail
@@ -99,5 +99,5 @@ jobs:
             fi
             sleep 4
           done
-          echo "Production deploy stayed queued after bounded listener recovery" >&2
+          echo "HaxLab receipt backfill stayed queued after bounded listener recovery" >&2
           exit 1
