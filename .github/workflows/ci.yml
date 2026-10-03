@@ -28,6 +28,7 @@ jobs:
           bash -n deploy/bootstrap-vps.sh
           bash -n deploy/bootstrap-linux.sh
           bash -n deploy/install-scoped-sudo.sh
+          bash -n deploy/install-target-agent.sh
           bash -n deploy/configure-tunnel.sh
           bash -n ops/diagnose-vps.sh
           bash -n ops/diagnose.sh
@@ -42,6 +43,7 @@ jobs:
           node --check target-routing.mjs
           node --check target-agent-client.mjs
           node --check target-agent.mjs
+          node --check scripts/create-agent-identity.mjs
           node --check bin/zssh.mjs
           node --check client-token-canary.mjs
       - name: Exercise authenticated MCP file roundtrip and policy canary
