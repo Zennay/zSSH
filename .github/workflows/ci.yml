@@ -35,6 +35,9 @@ jobs:
       - name: Validate server syntax
         run: |
           node --check server.mjs
+          node --check agent-transport.mjs
+          node --check agent-runtime.mjs
+          node --check agent.mjs
           node --check public-site.mjs
           node --check auth-store.mjs
           node --check bin/zssh.mjs
