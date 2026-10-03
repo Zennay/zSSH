@@ -226,7 +226,6 @@ export class OutboundAgentBroker {
         state.pending.delete(requestId);
         reject(new Error("agent request timed out"));
       }, this.#requestTimeoutMs);
-      timer.unref?.();
       state.pending.set(requestId, { resolve, reject, timer });
     });
 
@@ -251,7 +250,6 @@ export class OutboundAgentBroker {
         if (state.poll_waiter?.resolve === resolve) state.poll_waiter = null;
         resolve(null);
       }, this.#pollTimeoutMs);
-      timer.unref?.();
       state.poll_waiter = { resolve, timer };
     });
   }
