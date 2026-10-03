@@ -128,9 +128,9 @@ export function classifyCommand(command) {
   return "mutation";
 }
 
-function getAllowedRoots() {
-  const publicRoots = PLUGIN_PROFILE === "public" ? String(process.env.ZSSH_PUBLIC_ALLOWED_ROOTS || "").trim() : "";
-  const raw = publicRoots || process.env.ZSSH_ALLOWED_ROOTS || process.cwd();
+function getAllowedRoots({ publicOnly = PLUGIN_PROFILE === "public" } = {}) {
+  const publicRoots = publicOnly ? String(process.env.ZSSH_PUBLIC_ALLOWED_ROOTS || "").trim() : "";
+  const raw = publicRoots || (!publicOnly ? process.env.ZSSH_ALLOWED_ROOTS : "") || process.cwd();
   return raw.split(",").map(v => path.resolve(v.trim())).filter(Boolean);
 }
 
@@ -192,11 +192,11 @@ function isWithin(root, candidate) {
   return rel === "" || (!rel.startsWith("..") && !path.isAbsolute(rel));
 }
 
-export async function resolveAllowedPath(inputPath, { forWrite = false } = {}) {
+export async function resolveAllowedPath(inputPath, { forWrite = false, publicOnly = false } = {}) {
   if (!inputPath || typeof inputPath !== "string") throw new Error("path is required");
   const requested = path.resolve(inputPath);
   const roots = [];
-  for (const configured of getAllowedRoots()) {
+  for (const configured of getAllowedRoots({ publicOnly: publicOnly || PLUGIN_PROFILE === "public" })) {
     try {
       roots.push(await fs.realpath(configured));
     } catch {
@@ -522,7 +522,7 @@ export async function readTextFile(filePath, { rejectSecrets = false } = {}) {
   if (rejectSecrets && publicPathLooksSensitive(filePath)) {
     throw new Error("public plugin refuses secret or credential file paths");
   }
-  const resolved = await resolveAllowedPath(filePath);
+  const resolved = await resolveAllowedPath(filePath, { publicOnly: rejectSecrets });
   const stat = await fs.stat(resolved);
   if (!stat.isFile()) throw new Error("path is not a regular file");
   if (stat.size > MAX_FILE_BYTES) throw new Error("file exceeds ZSSH_MAX_FILE_BYTES");
@@ -543,7 +543,7 @@ export async function writeTextFile(filePath, content, { rejectSecrets = false }
   }
   const bytes = Buffer.byteLength(content, "utf8");
   if (bytes > MAX_FILE_BYTES) throw new Error("content exceeds ZSSH_MAX_FILE_BYTES");
-  const resolved = await resolveAllowedPath(filePath, { forWrite: true });
+  const resolved = await resolveAllowedPath(filePath, { forWrite: true, publicOnly: rejectSecrets });
   const tmp = path.join(path.dirname(resolved), "." + path.basename(resolved) + ".zssh-" + crypto.randomUUID());
   await fs.writeFile(tmp, content, { encoding: "utf8", mode: 0o600, flag: "wx" });
   await fs.rename(tmp, resolved);
@@ -1148,7 +1148,7 @@ export function start() {
       throw new Error("production outbound agent mode requires an opaque ZSSH_TARGET_ID, not local");
     }
   }
-  if (PLUGIN_PROFILE === "public" && process.env.NODE_ENV === "production" && !String(process.env.ZSSH_PUBLIC_ALLOWED_ROOTS || "").trim()) {
+  if (PLUGIN_PROFILE === "public" && !OUTBOUND_AGENT_MODE && process.env.NODE_ENV === "production" && !String(process.env.ZSSH_PUBLIC_ALLOWED_ROOTS || "").trim()) {
     throw new Error("production public profile requires explicit ZSSH_PUBLIC_ALLOWED_ROOTS; do not reuse broad private filesystem roots");
   }
   if (PLUGIN_PROFILE === "public" && PUBLIC_AUTH_MODE === "oauth" && !OAUTH_CONFIG) {
