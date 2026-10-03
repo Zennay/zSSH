@@ -26,10 +26,45 @@ test("redacts common secrets", () => {
   assert.doesNotMatch(value, /abc123|hunter2|eyJ\.secret/);
 });
 
+test("redacts high-confidence raw credential formats without labels", () => {
+  const samples = [
+    ["sk-", "proj-", "abcdefghijklmnopqrstuvwxyz0123456789"].join(""),
+    ["ghp_", "abcdefghijklmnopqrstuvwxyz0123456789"].join(""),
+    ["github_pat_", "abcdefghijklmnopqrstuvwxyz0123456789"].join(""),
+    ["AKIA", "1234567890ABCDEF"].join(""),
+    ["AIza", "SyA1234567890abcdefghijklmnopqrstuvwxyz"].join(""),
+    ["xox", "b-", "1234567890-abcdefghijklmnop"].join(""),
+    ["eyJhbGciOiJIUzI1NiJ9", ".", "eyJzdWIiOiJkZW1vIn0", ".", "signaturevalue"].join(""),
+    ["https://operator:", "supersecret", "@example.invalid/path"].join(""),
+  ];
+
+  for (const sample of samples) {
+    assert.equal(containsCredentialLikeSecret(sample), true, sample);
+    assert.notEqual(redactSecrets(sample), sample, sample);
+  }
+});
+
+test("does not flag ordinary identifiers as raw credentials", () => {
+  const samples = [
+    "sk-short",
+    "github_pattern_matching_notes",
+    "AKIA is a documentation prefix",
+    "https://example.invalid/path",
+    "release-tokenizer-design",
+    "eyJ-not-a-jwt",
+  ];
+
+  for (const sample of samples) {
+    assert.equal(containsCredentialLikeSecret(sample), false, sample);
+  }
+});
+
 test("public file policy rejects credential-like paths and contents", () => {
   assert.equal(publicPathLooksSensitive("/srv/zssh-review/.env"), true);
   assert.equal(publicPathLooksSensitive("/srv/zssh-review/.ssh/id_ed25519"), true);
   assert.equal(publicPathLooksSensitive("/srv/zssh-review/client.pem"), true);
+  assert.equal(publicPathLooksSensitive("/srv/zssh-review/id_ed25519"), true);
+  assert.equal(publicPathLooksSensitive("/srv/zssh-review/id_rsa"), true);
   assert.equal(publicPathLooksSensitive("/srv/zssh-review/notes.txt"), false);
   assert.equal(containsCredentialLikeSecret("api_key=abc123"), true);
   assert.equal(containsCredentialLikeSecret("Authorization: Bearer eyJ.demo"), true);

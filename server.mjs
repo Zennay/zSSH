@@ -55,6 +55,17 @@ export function redactSecrets(input) {
   text = text.replace(/\bBearer\s+[A-Za-z0-9._~+\/-]+=*/gi, "Bearer [REDACTED]");
   text = text.replace(/\b(api[_-]?key|access[_-]?token|refresh[_-]?token|token|secret|password|passwd)\b\s*[:=]\s*([^\s"'\\]+)/gi, "$1=[REDACTED]");
   text = text.replace(/\bzssh_[0-9a-f]{16}_[A-Za-z0-9_-]{40,}\b/g, "[REDACTED_ZSSH_TOKEN]");
+
+  // High-confidence raw credential formats. Public file tools fail closed when
+  // any of these patterns appear even without a nearby "token=" label.
+  text = text.replace(/\bsk-(?:proj-)?[A-Za-z0-9_-]{20,}\b/g, "[REDACTED_OPENAI_KEY]");
+  text = text.replace(/\bgh[pousr]_[A-Za-z0-9]{20,}\b/g, "[REDACTED_GITHUB_TOKEN]");
+  text = text.replace(/\bgithub_pat_[A-Za-z0-9_]{20,}\b/g, "[REDACTED_GITHUB_TOKEN]");
+  text = text.replace(/\b(?:AKIA|ASIA)[A-Z0-9]{16}\b/g, "[REDACTED_AWS_ACCESS_KEY_ID]");
+  text = text.replace(/\bAIza[0-9A-Za-z_-]{30,}\b/g, "[REDACTED_GOOGLE_API_KEY]");
+  text = text.replace(/\bxox[baprs]-[A-Za-z0-9-]{10,}\b/g, "[REDACTED_SLACK_TOKEN]");
+  text = text.replace(/\beyJ[A-Za-z0-9_-]{6,}\.[A-Za-z0-9_-]{6,}\.[A-Za-z0-9_-]{6,}\b/g, "[REDACTED_JWT]");
+  text = text.replace(/\b([a-z][a-z0-9+.-]*:\/\/[^:\s\/@]+:)[^@\s\/]+@/gi, "$1[REDACTED]@");
   return text;
 }
 
@@ -70,7 +81,7 @@ export function publicPathLooksSensitive(inputPath) {
 
   if (segments.some(segment => [".ssh", ".gnupg", ".aws", ".azure", ".kube"].includes(segment))) return true;
   if (basename === ".env" || basename.startsWith(".env.")) return true;
-  if ([".netrc", ".npmrc", ".pypirc", "credentials", "credentials.json"].includes(basename)) return true;
+  if ([".netrc", ".npmrc", ".pypirc", "credentials", "credentials.json", "id_rsa", "id_dsa", "id_ecdsa", "id_ed25519"].includes(basename)) return true;
   if (/\.(pem|key|p12|pfx|jks|keystore|kdbx)$/.test(basename)) return true;
   if (/(^|[-_.])(secret|secrets|credential|credentials|token|tokens|password|passwords)([-_.]|$)/.test(basename)) return true;
   return false;
