@@ -172,6 +172,40 @@ The registry stores opaque hashed profile IDs rather than the raw OAuth subject.
 
 Pairing records are now target-aware. Existing single-target installs use the reserved opaque target ID `local`; universal-gateway targets use stable opaque `zt_...` IDs configured with `ZSSH_TARGET_ID`. The public MCP URL never carries a target hostname, URL, or target query parameter. OAuth profile → target resolution happens internally, and a paired target without a live authenticated outbound-agent session fails closed as offline. See `docs/research/universal-endpoint-routing-2026-10-03.md`.
 
+### Outbound target agent transport
+
+A universal public gateway can now keep the MCP endpoint separate from the Linux target. The target initiates outbound HTTPS requests to the gateway; the gateway never receives the target's Ed25519 private key and does not store SSH credentials.
+
+Gateway setup:
+
+1. Generate one Ed25519 keypair per target. Keep the private key mode 0600 on that target.
+2. Put only the public key in a gateway JSON file keyed by the opaque `ZSSH_TARGET_ID`.
+3. Configure `ZSSH_AGENT_PUBLIC_KEYS_FILE` on the public gateway. In production, agent mode refuses the reserved `local` target ID.
+4. Start the target agent with `ZSSH_GATEWAY_URL`, `ZSSH_TARGET_ID`, `ZSSH_AGENT_PRIVATE_KEY_FILE`, and the same narrow target-side `ZSSH_PUBLIC_ALLOWED_ROOTS`.
+
+Example key generation:
+
+```bash
+install -d -m 700 ~/.config/zssh
+openssl genpkey -algorithm ED25519 -out ~/.config/zssh/agent-ed25519.pem
+chmod 600 ~/.config/zssh/agent-ed25519.pem
+openssl pkey -in ~/.config/zssh/agent-ed25519.pem -pubout > ~/.config/zssh/agent-ed25519.pub.pem
+```
+
+The gateway's agent endpoints use signed POST requests with a target ID, timestamp, nonce, and SHA-256 body binding. Replays and stale timestamps fail closed. A new authenticated agent session replaces only the previous session for the same target. Tool forwarding is bounded to the existing public zSSH surface; raw shell, private Git/systemd operations, and arbitrary target URLs are not exposed through this transport.
+
+Run the target-side agent with:
+
+```bash
+ZSSH_GATEWAY_URL=https://mcp.example.com \
+ZSSH_TARGET_ID=zt_replace_with_random_id \
+ZSSH_AGENT_PRIVATE_KEY_FILE="$HOME/.config/zssh/agent-ed25519.pem" \
+ZSSH_PUBLIC_ALLOWED_ROOTS="$HOME/zssh-workspace" \
+node agent.mjs
+```
+
+The target makes only outbound connections. The public OAuth profile still requires local pairing before the gateway can route a tool call to a live target session.
+
 
 ## Claude MCP compatibility
 
