@@ -87,8 +87,12 @@ export function canonicalAgentRequest({
 }
 
 export function signAgentRequest(privateKey, fields) {
-  const key = crypto.createPrivateKey(privateKey);
-  if (key.asymmetricKeyType !== "ed25519") throw new Error("agent private key must be Ed25519");
+  const key = privateKey?.type === "private" && typeof privateKey?.export === "function"
+    ? privateKey
+    : crypto.createPrivateKey(privateKey);
+  if (key.type !== "private" || key.asymmetricKeyType !== "ed25519") {
+    throw new Error("agent private key must be Ed25519");
+  }
   const message = canonicalAgentRequest(fields);
   return crypto.sign(null, Buffer.from(message), key).toString("base64url");
 }
