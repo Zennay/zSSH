@@ -1,0 +1,84 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+CONFIG="/etc/zssh/sudo-services"
+SYSTEMCTL="/usr/bin/systemctl"
+
+valid_service_name() {
+  [[ "${1:-}" =~ ^[A-Za-z0-9][A-Za-z0-9@_.:-]{0,127}$ ]]
+}
+
+operation="${1:-}"
+
+if [[ "$operation" == "validate-name" ]]; then
+  [[ "$#" -eq 2 ]] || exit 64
+  valid_service_name "$2"
+  exit
+fi
+
+if [[ "$(id -u)" -ne 0 ]]; then
+  echo "zssh-sudo must run as root via the scoped sudo rule" >&2
+  exit 77
+fi
+
+if [[ ! -x "$SYSTEMCTL" ]]; then
+  echo "systemctl unavailable at expected path" >&2
+  exit 69
+fi
+if [[ ! -f "$CONFIG" || -L "$CONFIG" ]]; then
+  echo "zSSH sudo service allowlist missing or unsafe" >&2
+  exit 78
+fi
+
+config_uid="$(stat -c '%u' "$CONFIG")"
+config_mode="$(stat -c '%a' "$CONFIG")"
+if [[ "$config_uid" != "0" ]]; then
+  echo "zSSH sudo service allowlist must be root-owned" >&2
+  exit 78
+fi
+# Reject group/other writable modes.
+mode_value=$((8#$config_mode))
+if (( (mode_value & 0022) != 0 )); then
+  echo "zSSH sudo service allowlist must not be group/other writable" >&2
+  exit 78
+fi
+
+service_allowed() {
+  local requested="$1"
+  while IFS= read -r allowed || [[ -n "$allowed" ]]; do
+    [[ -z "$allowed" ]] && continue
+    [[ "$allowed" == "$requested" ]] && return 0
+  done < "$CONFIG"
+  return 1
+}
+
+case "$operation" in
+  list)
+    [[ "$#" -eq 1 ]] || exit 64
+    while IFS= read -r service || [[ -n "$service" ]]; do
+      [[ -z "$service" ]] && continue
+      valid_service_name "$service" || {
+        echo "invalid service entry in root-owned allowlist" >&2
+        exit 78
+      }
+      printf '%s\n' "$service"
+    done < "$CONFIG"
+    ;;
+  restart)
+    [[ "$#" -eq 2 ]] || exit 64
+    service="$2"
+    valid_service_name "$service" || {
+      echo "invalid service name" >&2
+      exit 64
+    }
+    service_allowed "$service" || {
+      echo "service is not granted to zSSH" >&2
+      exit 77
+    }
+    exec /usr/bin/env -i PATH=/usr/bin:/bin LANG=C LC_ALL=C "$SYSTEMCTL" restart "$service"
+    ;;
+  *)
+    echo "unsupported scoped sudo operation" >&2
+    exit 64
+    ;;
+esac
