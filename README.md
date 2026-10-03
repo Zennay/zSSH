@@ -85,6 +85,38 @@ For normal M1 inspection, `zssh_run_safe` uses a fixed read-only binary allowlis
 
 Production hardening still requires a dedicated service account, scoped sudo/capabilities, stronger approval semantics, rate limiting, agent pairing, and review against current hosted-MCP requirements. The private single-owner deployment intentionally avoids a browser OAuth flow. Hosted clients can use a high-entropy capability URL over HTTPS; clients that support custom headers can instead use `x-zssh-key`.
 
+## Private revocable client credentials
+
+Private/self-hosted zSSH installations can create independent client credentials instead of sharing one long-lived global bearer token. These credentials are **not** part of the public OpenAI OAuth profile and cannot bypass its OAuth + pairing checks.
+
+After installation, ensure `~/.local/bin` is on your `PATH`, then create a private client:
+
+```bash
+zssh connect chatgpt-private
+```
+
+If `ZSSH_PUBLIC_URL=https://server.example.com` is configured, the command prints a private capability URL shaped like:
+
+```text
+https://server.example.com/mcp/zssh_<client-id>_<secret>
+```
+
+Treat that full URL as a credential. zSSH stores only a SHA-256 hash of the token in `~/.config/zssh/clients.json` (or `ZSSH_CLIENT_TOKENS_FILE`).
+
+List active client identities without revealing secrets:
+
+```bash
+zssh token list
+```
+
+Revoke one client immediately:
+
+```bash
+zssh token revoke <client-id>
+```
+
+Revocation affects that client only. Existing static private credentials remain supported for backwards compatibility.
+
 ## ChatGPT integration status
 
 OpenAI public review uses a separate fail-closed profile so the existing private operator workflow remains available. The public profile now includes a compact MCP Apps connection card for profile/pairing status; the operational tools continue to work without UI.
