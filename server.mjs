@@ -12,6 +12,9 @@ import { bearerChallenge, oauthConfigFromEnv, protectedResourceMetadata, require
 import { getPairingStatus, profileIdFromAuth } from "./pairing.mjs";
 import { publicSiteResponse } from "./public-site.mjs";
 import { verifyClientToken } from "./auth-store.mjs";
+import { TargetSessionRegistry } from "./target-routing.mjs";
+import { AgentReplayCache, OutboundAgentBroker, loadAgentTrustFileSync } from "./agent-transport.mjs";
+import { createAgentHttpHandler } from "./agent-http.mjs";
 import { VERSION } from "./version.mjs";
 const PORT = Number(process.env.PORT || 8788);
 const EXEC_MODE = process.env.ZSSH_EXEC_MODE === "full" ? "full" : "disabled";
@@ -29,6 +32,7 @@ const OPENAI_APPS_CHALLENGE_TOKEN = process.env.OPENAI_APPS_CHALLENGE_TOKEN || "
 const PUBLIC_AUTH_MODE = process.env.ZSSH_PUBLIC_AUTH_MODE === "legacy" ? "legacy" : "oauth";
 const OAUTH_CONFIG = oauthConfigFromEnv();
 const PAIRING_REQUIRED = PLUGIN_PROFILE === "public" && process.env.ZSSH_PAIRING_REQUIRED !== "0";
+const AGENT_TRUST_FILE = String(process.env.ZSSH_AGENT_TRUST_FILE || "").trim();
 const TARGET_LABEL = String(process.env.ZSSH_TARGET_LABEL || "Linux target").trim().slice(0, 80) || "Linux target";
 const CONNECTION_UI_URI = "ui://zssh/connection-card-v1.html";
 const CONNECTION_UI_HTML = readFileSync(new URL("./ui/connection-card.html", import.meta.url), "utf8");
@@ -1110,6 +1114,25 @@ export function start() {
     throw new Error("production requires authentication; configure revocable client tokens, a capability token, ZSSH_API_KEY, a bearer token, or explicitly trust the loopback tunnel");
   }
 
+  let agentHttpHandler = null;
+  if (AGENT_TRUST_FILE) {
+    if (PLUGIN_PROFILE !== "public") {
+      throw new Error("ZSSH_AGENT_TRUST_FILE is supported only by the public universal-gateway profile");
+    }
+    const trustedKeys = loadAgentTrustFileSync(AGENT_TRUST_FILE);
+    const agentSessions = new TargetSessionRegistry();
+    const agentBroker = new OutboundAgentBroker({
+      sessions: agentSessions,
+      commandTimeoutMs: COMMAND_TIMEOUT_SECONDS * 1000,
+      maxPayloadBytes: MAX_OUTPUT_BYTES,
+    });
+    agentHttpHandler = createAgentHttpHandler({
+      trustedKeys,
+      replayCache: new AgentReplayCache(),
+      broker: agentBroker,
+    });
+  }
+
   const httpServer = createServer(async (req, res) => {
     if (!req.url) return res.writeHead(400).end("Missing URL");
     const url = new URL(req.url, "http://" + (req.headers.host || "localhost"));
@@ -1132,7 +1155,17 @@ export function start() {
     }
 
     if (req.method === "GET" && url.pathname === "/health") {
-      return res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ ok: true, service: "zssh", version: VERSION }));
+      return res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({
+        ok: true,
+        service: "zssh",
+        version: VERSION,
+        agent_gateway_enabled: Boolean(agentHttpHandler),
+      }));
+    }
+
+    if (agentHttpHandler && url.pathname.startsWith("/agent/")) {
+      const handled = await agentHttpHandler(req, res, url);
+      if (handled) return;
     }
 
     const capabilityAuth = capabilityAuthorized(url.pathname);
