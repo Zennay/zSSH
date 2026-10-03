@@ -55,6 +55,29 @@ test("onboarding scripts preserve secure defaults and loopback-only tunnel setup
   assert.match(server, /httpServer\.listen\(PORT, "127\.0\.0\.1"/);
 });
 
+
+
+test("generic Linux bootstrap is provider-agnostic and diagnostics stay secret-safe", async () => {
+  const bootstrap = await readFile(path.join(ROOT, "deploy", "bootstrap-linux.sh"), "utf8");
+  const diagnose = await readFile(path.join(ROOT, "ops", "diagnose.sh"), "utf8");
+
+  assert.match(bootstrap, /Refusing to bootstrap zSSH as root/);
+  assert.match(bootstrap, /Node\.js >=20 required/);
+  assert.match(bootstrap, /ZSSH_EXPECTED_SHA/);
+  assert.match(bootstrap, /zssh-workspace/);
+  assert.match(bootstrap, /deploy\/install-live\.sh/);
+  assert.doesNotMatch(bootstrap, /\/home\/ubuntu|zennay-cloud/);
+
+  assert.match(diagnose, /systemctl --user status zssh\.service/);
+  assert.match(diagnose, /127\.0\.0\.1:\$PORT\/health/);
+  assert.match(diagnose, /ZSSH_PLUGIN_PROFILE/);
+  assert.match(diagnose, /ZSSH_PUBLIC_AUTH_MODE/);
+  assert.match(diagnose, /ZSSH_ALLOWED_ROOTS/);
+  assert.doesNotMatch(diagnose, /ZSSH_DEV_BEARER_TOKEN|ZSSH_API_KEY|ZSSH_MCP_CAPABILITY_TOKEN|OPENAI_APPS_CHALLENGE_TOKEN/);
+  assert.doesNotMatch(diagnose, /cat .*gateway\.env/);
+  assert.doesNotMatch(diagnose, /\/home\/ubuntu|zennay-cloud/);
+});
+
 test("Claude configuration uses remote HTTP with explicit auth", async () => {
   const config = await readFile(path.join(ROOT, "deploy", "claude-code.example.json"), "utf8");
   assert.match(config, /"type": "http"/);
