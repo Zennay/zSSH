@@ -172,6 +172,32 @@ The registry stores opaque hashed profile IDs rather than the raw OAuth subject.
 
 Pairing records are now target-aware. Existing single-target installs use the reserved opaque target ID `local`; universal-gateway targets use stable opaque `zt_...` IDs configured with `ZSSH_TARGET_ID`. The public MCP URL never carries a target hostname, URL, or target query parameter. OAuth profile → target resolution happens internally, and a paired target without a live authenticated outbound-agent session fails closed as offline. See `docs/research/universal-endpoint-routing-2026-10-03.md`.
 
+### Signed outbound target-agent transport
+
+Universal gateway mode can enable the target transport by setting `ZSSH_AGENT_TRUST_FILE` to a JSON file containing opaque `zt_...` IDs and Ed25519 public keys. The gateway then exposes four **agent-only** POST endpoints outside the MCP/CORS surface:
+
+- `/agent/v1/connect`
+- `/agent/v1/poll`
+- `/agent/v1/result`
+- `/agent/v1/disconnect`
+
+Every request signs the method, exact path, target ID, timestamp, one-use nonce and exact body hash. Replay, stale timestamps, untrusted keys, body/path tampering and superseded sessions fail closed. The trust file contains public keys only.
+
+On the Linux target, configure:
+
+```bash
+export ZSSH_TARGET_ID=zt_example1234
+export ZSSH_AGENT_GATEWAY_URL=https://mcp.example.com
+export ZSSH_AGENT_PRIVATE_KEY_FILE=~/.config/zssh/agent-ed25519.pem
+export ZSSH_PUBLIC_ALLOWED_ROOTS=~/zssh-public
+npm run agent:start
+```
+
+The target agent refuses root, requires the private key file to be inaccessible to group/world, requires HTTPS in production, listens on no inbound port, and executes only the seven existing public target capabilities. It never sends the private key, environment, arbitrary shell commands or SSH credentials to the gateway.
+
+This transport is deliberately separate from user OAuth: OAuth authenticates/authorizes the ChatGPT user; Ed25519 identifies the paired target. See `docs/research/agent-http-transport-2026-10-03.md`. Public MCP handlers still use the existing local adapter until the dedicated remote-forwarding cutover is proven in a later increment.
+
+
 
 ## Claude MCP compatibility
 
