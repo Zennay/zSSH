@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import crypto from "node:crypto";
-import { readFile } from "node:fs/promises";
+import { lstat, readFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 import { signAgentRequest } from "./agent-transport.mjs";
 import { executeAgentCommand } from "./agent-runtime.mjs";
@@ -30,6 +30,13 @@ function gatewayBase(env = process.env) {
 
 async function loadPrivateKey(env = process.env) {
   const file = required("ZSSH_AGENT_PRIVATE_KEY_FILE", env);
+  const stat = await lstat(file);
+  if (!stat.isFile() || stat.isSymbolicLink()) {
+    throw new Error("agent private key must be a regular non-symlink file");
+  }
+  if ((stat.mode & 0o077) !== 0) {
+    throw new Error("agent private key must not be group/world accessible");
+  }
   const key = crypto.createPrivateKey(await readFile(file, "utf8"));
   if (key.asymmetricKeyType !== "ed25519") throw new Error("agent private key must be Ed25519");
   return key;
@@ -38,6 +45,7 @@ async function loadPrivateKey(env = process.env) {
 export async function createAgentClient({ env = process.env, fetchImpl = fetch } = {}) {
   const base = gatewayBase(env);
   const targetId = normalizeTargetId(required("ZSSH_TARGET_ID", env));
+  if (targetId === "local") throw new Error("outbound target agent requires an explicit opaque zt_ target id");
   const privateKey = await loadPrivateKey(env);
 
   async function post(pathname, value) {
