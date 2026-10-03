@@ -14,7 +14,8 @@
     "plugin:build": "python3 scripts/build-openai-plugin.py",
     "review:fixture": "node scripts/prepare-review-target.mjs",
     "submission:probe": "node production-submission-probe.mjs",
-    "mcp:client-token-canary": "node client-token-canary.mjs"
+    "mcp:client-token-canary": "node client-token-canary.mjs",
+    "agent:start": "node target-agent.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.20.2",
