@@ -74,23 +74,37 @@ EOF
 fi
 chmod 600 "$ENV_FILE"
 
-set -a
-# shellcheck disable=SC1090
-source "$ENV_FILE"
-set +a
-
-[[ "$ZSSH_TARGET_ID" == zt_* ]] || { echo "agent.env must contain an opaque zt_ target id" >&2; exit 2; }
-[[ "$ZSSH_AGENT_GATEWAY_URL" == https://* ]] || { echo "production target agent gateway must use https://" >&2; exit 2; }
-[[ -f "$ZSSH_AGENT_PRIVATE_KEY_FILE" && ! -L "$ZSSH_AGENT_PRIVATE_KEY_FILE" ]] || {
-  echo "agent private key must be a regular non-symlink file" >&2
-  exit 2
+read_env_value() {
+  local key="$1"
+  local line
+  line="$(grep -m1 "^$key=" "$ENV_FILE" || true)"
+  [[ -n "$line" ]] || { echo "Missing $key in $ENV_FILE" >&2; exit 2; }
+  printf '%s' "${line#*=}"
 }
-key_mode="$(stat -c '%a' "$ZSSH_AGENT_PRIVATE_KEY_FILE")"
-(( (8#$key_mode & 077) == 0 )) || { echo "agent private key must not be group/world accessible" >&2; exit 2; }
 
-"$NODE_BIN" --input-type=module - "$ZSSH_AGENT_PRIVATE_KEY_FILE" <<'NODE'
-import { loadAgentPrivateKey } from "./target-agent-client.mjs";
-const key = await loadAgentPrivateKey(process.argv[2]);
+ZSSH_TARGET_ID="$(read_env_value ZSSH_TARGET_ID)"
+ZSSH_AGENT_GATEWAY_URL="$(read_env_value ZSSH_AGENT_GATEWAY_URL)"
+ZSSH_AGENT_PRIVATE_KEY_FILE="$(read_env_value ZSSH_AGENT_PRIVATE_KEY_FILE)"
+ZSSH_PUBLIC_ALLOWED_ROOTS="$(read_env_value ZSSH_PUBLIC_ALLOWED_ROOTS)"
+
+for value in "$ZSSH_TARGET_ID" "$ZSSH_AGENT_GATEWAY_URL" "$ZSSH_AGENT_PRIVATE_KEY_FILE"; do
+  [[ "$value" != *[[:space:]#\\"\']* ]] || {
+    echo "Target ID, gateway URL, and private-key path must not contain whitespace, quotes, backslashes, or #" >&2
+    exit 2
+  }
+done
+
+"$NODE_BIN" --input-type=module - "$ZSSH_TARGET_ID" "$ZSSH_AGENT_GATEWAY_URL" "$ZSSH_AGENT_PRIVATE_KEY_FILE" "$SOURCE_ROOT" <<'NODE'
+import { pathToFileURL } from "node:url";
+const [targetId, gatewayUrl, privateKeyFile, sourceRoot] = process.argv.slice(2);
+const { normalizeTargetId } = await import(pathToFileURL(sourceRoot + "/pairing.mjs"));
+const { loadAgentPrivateKey } = await import(pathToFileURL(sourceRoot + "/target-agent-client.mjs"));
+if (normalizeTargetId(targetId) === "local") throw new Error("outbound agent requires opaque zt_ target id");
+const url = new URL(gatewayUrl);
+if (url.protocol !== "https:" || url.username || url.password || url.search || url.hash || (url.pathname !== "/" && url.pathname !== "")) {
+  throw new Error("production target agent gateway must be an HTTPS origin without credentials/query/fragment/path");
+}
+const key = await loadAgentPrivateKey(privateKeyFile);
 if (key.asymmetricKeyType !== "ed25519") throw new Error("expected Ed25519 private key");
 NODE
 
