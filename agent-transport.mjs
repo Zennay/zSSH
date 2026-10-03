@@ -257,6 +257,7 @@ export class OutboundAgentBroker {
   complete(targetId, sessionId, requestId, result) {
     const state = this.#requireSession(targetId, sessionId);
     const id = safeRequestId(requestId);
+    if (result === undefined) throw new Error("agent result is required");
     safePayloadSize(result);
     const pending = state.pending.get(id);
     if (!pending) throw new Error("unknown or expired agent request");
