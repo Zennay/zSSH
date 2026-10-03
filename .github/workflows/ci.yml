@@ -27,6 +27,8 @@ jobs:
           bash -n deploy/install-live.sh
           bash -n deploy/bootstrap-vps.sh
           bash -n deploy/bootstrap-linux.sh
+          bash -n deploy/zssh-sudo-helper
+          bash -n deploy/install-sudo-capabilities.sh
           bash -n deploy/configure-tunnel.sh
           bash -n ops/diagnose-vps.sh
           bash -n ops/diagnose.sh
