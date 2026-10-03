@@ -1,4 +1,3 @@
-import os from "node:os";
 import { runSafeProgram, readTextFile, writeTextFile } from "./server.mjs";
 import { VERSION } from "./version.mjs";
 
@@ -32,8 +31,6 @@ export async function executeAgentCommand(command, { targetLabel = process.env.Z
       target_label: String(targetLabel).slice(0, 80),
       platform: process.platform,
       arch: process.arch,
-      uid: typeof process.getuid === "function" ? process.getuid() : null,
-      hostname: os.hostname(),
       exec_mode: "disabled",
       transport: "outbound-agent",
     };
