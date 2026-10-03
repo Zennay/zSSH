@@ -4,9 +4,11 @@ on:
   push:
     branches:
       - proof/zssh-agent-transport-vps-20261003-2352
+    paths-ignore:
+      - runtime-evidence/zssh-agent-transport-vps-proof-latest.json
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: zssh-agent-transport-vps-proof-20261003-2352
@@ -51,3 +53,29 @@ jobs:
           node --test test/agent-runtime.test.mjs test/agent-transport.test.mjs
           npm test
           echo "ZSSH_AGENT_TRANSPORT_VPS_GREEN=1"
+
+      - name: Persist sanitized proof receipt
+        if: success()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          receipt="$RUNNER_TEMP/zssh-agent-transport-vps-proof.json"
+          python3 - <<'PY' > "$receipt"
+          import json, os, socket
+          print(json.dumps({
+              "project": "zssh",
+              "proof": "outbound-agent-transport-exact-head",
+              "target_sha": os.environ["TARGET_SHA"],
+              "workflow_run_id": os.environ["GITHUB_RUN_ID"],
+              "workflow_run_attempt": os.environ["GITHUB_RUN_ATTEMPT"],
+              "runner_name": os.environ.get("RUNNER_NAME"),
+              "hostname": socket.gethostname(),
+              "tests": ["agent-runtime", "agent-transport", "full-npm-test"],
+              "result": "success"
+          }, sort_keys=True))
+          PY
+          encoded="$(base64 -w0 "$receipt")"
+          gh api --method PUT "repos/Zennay/zSSH/contents/runtime-evidence/zssh-agent-transport-vps-proof-latest.json"             -f message="Record zSSH outbound agent VPS proof $GITHUB_RUN_ID"             -f content="$encoded"             -f branch="$GITHUB_REF_NAME" >/dev/null
+          echo "ZSSH_AGENT_TRANSPORT_VPS_RECEIPT=runtime-evidence/zssh-agent-transport-vps-proof-latest.json"
