@@ -145,7 +145,7 @@ test("target agent installer is non-root, immutable, and never shell-evaluates a
   assert.match(installer, /chmod 600 "\$ENV_FILE"/);
   assert.match(installer, /read_env_value/);
   assert.doesNotMatch(installer, /source "\$ENV_FILE"/);
-  assert.match(installer, /https:\/\//);
+  assert.match(installer, /url\.protocol !== "https:"/);
   assert.match(installer, /agent private key must not be group\/world accessible/);
 
   assert.match(unit, /EnvironmentFile=%h\/\.config\/zssh\/agent\.env/);
