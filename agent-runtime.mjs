@@ -17,6 +17,13 @@ function argsObject(value) {
   return value;
 }
 
+function publicRootFromEnv(env = process.env) {
+  const raw = String(env.ZSSH_PUBLIC_ALLOWED_ROOTS || "").trim();
+  const first = raw.split(",").map(v => v.trim()).find(Boolean);
+  if (!first) throw new Error("target agent requires ZSSH_PUBLIC_ALLOWED_ROOTS");
+  return first;
+}
+
 export async function executeAgentCommand(command, { targetLabel = process.env.ZSSH_TARGET_LABEL || "Linux target" } = {}) {
   if (!command || typeof command !== "object" || Array.isArray(command)) {
     throw new Error("agent command must be an object");
@@ -49,7 +56,7 @@ export async function executeAgentCommand(command, { targetLabel = process.env.Z
 
   const fixed = PUBLIC_PROGRAMS[tool];
   if (fixed) {
-    const value = await runSafeProgram(fixed[0], fixed[1]);
+    const value = await runSafeProgram(fixed[0], fixed[1], publicRootFromEnv());
     return value;
   }
 
