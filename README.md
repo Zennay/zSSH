@@ -172,6 +172,25 @@ The registry stores opaque hashed profile IDs rather than the raw OAuth subject.
 
 Pairing records are now target-aware. Existing single-target installs use the reserved opaque target ID `local`; universal-gateway targets use stable opaque `zt_...` IDs configured with `ZSSH_TARGET_ID`. The public MCP URL never carries a target hostname, URL, or target query parameter. OAuth profile → target resolution happens internally, and a paired target without a live authenticated outbound-agent session fails closed as offline. See `docs/research/universal-endpoint-routing-2026-10-03.md`.
 
+### Outbound target-agent credentials and broker
+
+Universal routing keeps target execution on the owner-controlled Linux machine. The gateway has a separate revocable agent credential for each opaque target ID; this credential is **not** user OAuth and is never accepted as a ChatGPT login token.
+
+Create an agent credential on the gateway:
+
+```bash
+zssh agent-token create zt_example1234 "home-vps"
+```
+
+The raw `zssh_agent_...` token is printed once. Copy it only into the target-agent's protected local configuration. The gateway stores only its SHA-256 hash in `ZSSH_AGENT_TOKENS_FILE` (0600). Inventory and revocation:
+
+```bash
+zssh agent-token list
+zssh agent-token revoke <agent-token-id>
+```
+
+The in-memory request broker is target-isolated, bounded by per-target/global pending limits and hard timeouts, and never exposes request arguments in diagnostic snapshots. Agent credentials must travel only in the HTTPS `Authorization: Bearer` header; they must not appear in URLs, logs, MCP results, or plugin packages. The next transport increment wires this broker to outbound agent long-poll/result endpoints.
+
 
 ## Claude MCP compatibility
 
