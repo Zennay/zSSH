@@ -1,0 +1,22 @@
+[Unit]
+Description=zSSH outbound target agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=%h/.config/zssh/agent.env
+WorkingDirectory=%h/.local/share/zssh-agent/current
+ExecStart=@NODE_BIN@ %h/.local/share/zssh-agent/current/target-agent.mjs
+Restart=always
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectControlGroups=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+LockPersonality=true
+
+[Install]
+WantedBy=default.target
