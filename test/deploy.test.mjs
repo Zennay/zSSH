@@ -78,6 +78,30 @@ test("generic Linux bootstrap is provider-agnostic and diagnostics stay secret-s
   assert.doesNotMatch(diagnose, /\/home\/ubuntu|zennay-cloud/);
 });
 
+
+
+test("private client-token auth is revocable and cannot bypass public OAuth", async () => {
+  const server = await readFile(path.join(ROOT, "server.mjs"), "utf8");
+  const installer = await readFile(path.join(ROOT, "deploy", "install-live.sh"), "utf8");
+  const cli = await readFile(path.join(ROOT, "bin", "zssh.mjs"), "utf8");
+  const authStore = await readFile(path.join(ROOT, "auth-store.mjs"), "utf8");
+
+  assert.match(server, /verifyClientToken/);
+  assert.match(server, /CLIENT_TOKEN_AUTH_CONFIGURED/);
+  assert.match(server, /PLUGIN_PROFILE === "public".*CLIENT_TOKEN_AUTH_CONFIGURED/s);
+  assert.match(server, /Public OAuth is deliberately exclusive/);
+  assert.match(server, /REDACTED_ZSSH_TOKEN/);
+  assert.match(installer, /ZSSH_CLIENT_TOKENS_FILE=\$CONFIG\/clients\.json/);
+  assert.match(installer, /\.local\/bin/);
+  assert.match(installer, /bin\/zssh\.mjs/);
+  assert.match(cli, /zssh token revoke/);
+  assert.match(cli, /ZSSH_PUBLIC_URL must use https:\/\//);
+  assert.match(authStore, /sha256/);
+  assert.match(authStore, /timingSafeEqual/);
+  assert.match(authStore, /mode: 0o600/);
+  assert.doesNotMatch(authStore, /token[^\n]*JSON\.stringify/);
+});
+
 test("Claude configuration uses remote HTTP with explicit auth", async () => {
   const config = await readFile(path.join(ROOT, "deploy", "claude-code.example.json"), "utf8");
   assert.match(config, /"type": "http"/);

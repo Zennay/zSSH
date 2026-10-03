@@ -11,6 +11,7 @@ import { z } from "zod";
 import { bearerChallenge, oauthConfigFromEnv, protectedResourceMetadata, requireScopes, verifyOAuthAuthorizationHeader } from "./oauth.mjs";
 import { getPairingStatus, profileIdFromAuth } from "./pairing.mjs";
 import { publicSiteResponse } from "./public-site.mjs";
+import { verifyClientToken } from "./auth-store.mjs";
 import { VERSION } from "./version.mjs";
 const PORT = Number(process.env.PORT || 8788);
 const EXEC_MODE = process.env.ZSSH_EXEC_MODE === "full" ? "full" : "disabled";
@@ -20,8 +21,10 @@ const MAX_FILE_BYTES = clampInt(process.env.ZSSH_MAX_FILE_BYTES, 1024, 1048576, 
 const DEV_TOKEN = process.env.ZSSH_DEV_BEARER_TOKEN || "";
 const API_KEY = process.env.ZSSH_API_KEY || "";
 const CAPABILITY_TOKEN = process.env.ZSSH_MCP_CAPABILITY_TOKEN || "";
+const CLIENT_TOKEN_AUTH_CONFIGURED = Boolean(String(process.env.ZSSH_CLIENT_TOKENS_FILE || "").trim());
 const TRUST_LOCAL_TUNNEL = process.env.ZSSH_TRUST_LOCAL_TUNNEL === "1";
 const PLUGIN_PROFILE = process.env.ZSSH_PLUGIN_PROFILE === "public" ? "public" : "private";
+const PRIVATE_CLIENT_TOKEN_AUTH_CONFIGURED = PLUGIN_PROFILE !== "public" && CLIENT_TOKEN_AUTH_CONFIGURED;
 const OPENAI_APPS_CHALLENGE_TOKEN = process.env.OPENAI_APPS_CHALLENGE_TOKEN || "";
 const PUBLIC_AUTH_MODE = process.env.ZSSH_PUBLIC_AUTH_MODE === "legacy" ? "legacy" : "oauth";
 const OAUTH_CONFIG = oauthConfigFromEnv();
@@ -51,6 +54,7 @@ export function redactSecrets(input) {
   text = text.replace(/-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z0-9 ]*PRIVATE KEY-----/g, "[REDACTED_PRIVATE_KEY]");
   text = text.replace(/\bBearer\s+[A-Za-z0-9._~+\/-]+=*/gi, "Bearer [REDACTED]");
   text = text.replace(/\b(api[_-]?key|access[_-]?token|refresh[_-]?token|token|secret|password|passwd)\b\s*[:=]\s*([^\s"'\\]+)/gi, "$1=[REDACTED]");
+  text = text.replace(/\bzssh_[0-9a-f]{16}_[A-Za-z0-9_-]{40,}\b/g, "[REDACTED_ZSSH_TOKEN]");
   return text;
 }
 
@@ -803,10 +807,30 @@ function secureEqual(actual, expected) {
 }
 
 function capabilityAuthorized(pathname) {
+  if (PLUGIN_PROFILE === "public" && PUBLIC_AUTH_MODE === "oauth") return false;
   return Boolean(CAPABILITY_TOKEN) && secureEqual(pathname, "/mcp/" + CAPABILITY_TOKEN);
 }
 
-async function authorizeRequest(req) {
+function clientTokenFromPath(pathname) {
+  if (!PRIVATE_CLIENT_TOKEN_AUTH_CONFIGURED) return "";
+  const match = /^\/mcp\/(zssh_[0-9a-f]{16}_[A-Za-z0-9_-]{40,})$/.exec(String(pathname || ""));
+  return match?.[1] || "";
+}
+
+function bearerToken(req) {
+  const value = String(req.headers.authorization || "");
+  return value.startsWith("Bearer ") ? value.slice(7) : "";
+}
+
+function isMcpPath(pathname) {
+  if (pathname === "/mcp") return true;
+  if (capabilityAuthorized(pathname)) return true;
+  return Boolean(clientTokenFromPath(pathname));
+}
+
+async function authorizeRequest(req, pathname) {
+  // Public OAuth is deliberately exclusive: private local client tokens never
+  // become a fallback around the reviewed OAuth + pairing boundary.
   if (PLUGIN_PROFILE === "public" && PUBLIC_AUTH_MODE === "oauth") {
     const authInfo = await verifyOAuthAuthorizationHeader(req.headers.authorization, OAUTH_CONFIG);
     // MCP SDK v1 reads req.auth and forwards it to tool callbacks as extra.authInfo.
@@ -820,7 +844,21 @@ async function authorizeRequest(req) {
   if (secureEqual(req.headers["x-zssh-key"], API_KEY)) return { mode: "api-key" };
   if (secureEqual(req.headers.authorization, DEV_TOKEN ? "Bearer " + DEV_TOKEN : "")) return { mode: "bearer" };
 
-  if (!API_KEY && !DEV_TOKEN && process.env.NODE_ENV !== "production") return { mode: "development" };
+  if (PRIVATE_CLIENT_TOKEN_AUTH_CONFIGURED) {
+    const candidates = [clientTokenFromPath(pathname), bearerToken(req)].filter(Boolean);
+    for (const token of candidates) {
+      try {
+        const client = await verifyClientToken(token);
+        if (client) return { mode: "client-token", client_id: client.id, client_label: client.label };
+      } catch {
+        // Corrupt/missing token-store state fails closed and does not weaken auth.
+      }
+    }
+  }
+
+  if (!API_KEY && !DEV_TOKEN && !CAPABILITY_TOKEN && !PRIVATE_CLIENT_TOKEN_AUTH_CONFIGURED && process.env.NODE_ENV !== "production") {
+    return { mode: "development" };
+  }
   const error = new Error("unauthorized");
   error.code = "invalid_token";
   throw error;
@@ -868,8 +906,8 @@ export function start() {
   if (PLUGIN_PROFILE === "public" && !PAIRING_REQUIRED && process.env.NODE_ENV === "production" && process.env.ZSSH_ALLOW_UNPAIRED_PUBLIC !== "1") {
     throw new Error("production public profile requires target pairing; disabling it requires explicit ZSSH_ALLOW_UNPAIRED_PUBLIC=1");
   }
-  if (process.env.NODE_ENV === "production" && !(PLUGIN_PROFILE === "public" && PUBLIC_AUTH_MODE === "oauth") && !CAPABILITY_TOKEN && !API_KEY && !DEV_TOKEN && !TRUST_LOCAL_TUNNEL) {
-    throw new Error("production requires authentication; configure a capability token, ZSSH_API_KEY, a bearer token, or explicitly trust the loopback tunnel");
+  if (process.env.NODE_ENV === "production" && !(PLUGIN_PROFILE === "public" && PUBLIC_AUTH_MODE === "oauth") && !CAPABILITY_TOKEN && !API_KEY && !DEV_TOKEN && !PRIVATE_CLIENT_TOKEN_AUTH_CONFIGURED && !TRUST_LOCAL_TUNNEL) {
+    throw new Error("production requires authentication; configure revocable client tokens, a capability token, ZSSH_API_KEY, a bearer token, or explicitly trust the loopback tunnel");
   }
 
   const httpServer = createServer(async (req, res) => {
@@ -898,13 +936,13 @@ export function start() {
     }
 
     const capabilityAuth = capabilityAuthorized(url.pathname);
-    if (url.pathname !== "/mcp" && !capabilityAuth) return res.writeHead(404).end("Not Found");
+    if (!isMcpPath(url.pathname)) return res.writeHead(404).end("Not Found");
     cors(res);
 
     if (req.method === "OPTIONS") return res.writeHead(204).end();
     if (!capabilityAuth) {
       try {
-        await authorizeRequest(req);
+        await authorizeRequest(req, url.pathname);
       } catch (err) {
         return unauthorizedResponse(res, err);
       }
