@@ -289,6 +289,23 @@ The helper sets `ZSSH_TRUST_LOCAL_TUNNEL=1` only for the loopback tunnel path. I
 
 For a private target where `zssh_exec` must be able to call `sudo`, the user service intentionally runs with `NoNewPrivileges=false`. This only permits privilege escalation; it does not grant it by itself. The operating-system sudoers policy remains the authorization boundary, so only configure `NOPASSWD` privileges you deliberately want zSSH to have.
 
+## Scoped sudo grants
+
+zSSH runs unprivileged by default. When one narrowly scoped root-level service action is genuinely required, generate an exact sudoers policy instead of granting a generic root shell or argument-less `systemctl`.
+
+Example: allow the zSSH service user to inspect `nginx.service` and inspect/restart `my-app.service`:
+
+```bash
+sudo bash deploy/install-scoped-sudo.sh \
+  --user zssh \
+  --inspect-service nginx.service \
+  --restart-service my-app.service
+```
+
+The installer renders exact fully-qualified `systemctl` command+argument tuples, validates them with `visudo -cf`, refuses wildcard service names and symlink destinations, then installs a `0440` file under `/etc/sudoers.d/for-zssh-<user>`. Restart permission is separate from read-only inspection permission.
+
+It deliberately never emits `NOPASSWD: ALL`, shell-interpreter grants, directory grants, wildcard arguments, or argument-less `systemctl` access. See `docs/research/scoped-sudo-grants-2026-10-03.md` for the security decision and source references.
+
 ## Canonical project docs
 
 - Project HQ: https://app.notion.com/p/3e89e19ac955811a9008d420e3e2a634
