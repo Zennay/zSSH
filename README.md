@@ -195,6 +195,26 @@ npm run agent:start
 
 The target agent refuses root, requires the private key file to be inaccessible to group/world, requires HTTPS in production, listens on no inbound port, and executes only the seven existing public target capabilities. It never sends the private key, environment, arbitrary shell commands or SSH credentials to the gateway.
 
+Provision an identity **on the target** so the private key is never created on the gateway:
+
+```bash
+npm run agent:init -- zt_example1234 ~/.config/zssh/agent-ed25519.pem
+```
+
+If you omit the target ID, the helper generates an opaque `zt_...` ID. It prints a JSON `gateway_trust_record` containing only the public key. Copy that public record to the gateway trust file configured by `ZSSH_AGENT_TRUST_FILE`; the private key is never printed.
+
+For a persistent non-root target service, export the four required settings once and install the pinned source revision:
+
+```bash
+export ZSSH_TARGET_ID=zt_example1234
+export ZSSH_AGENT_GATEWAY_URL=https://mcp.example.com
+export ZSSH_AGENT_PRIVATE_KEY_FILE="$HOME/.config/zssh/agent-ed25519.pem"
+export ZSSH_PUBLIC_ALLOWED_ROOTS="$HOME/zssh-public"
+bash deploy/install-target-agent.sh
+```
+
+The installer writes `~/.config/zssh/agent.env` mode 0600, validates it without shell-evaluating the file, installs an immutable release under `~/.local/share/zssh-agent/releases/<sha>`, and enables the user-level `zssh-agent.service`.
+
 This transport is deliberately separate from user OAuth: OAuth authenticates/authorizes the ChatGPT user; Ed25519 identifies the paired target. See `docs/research/agent-http-transport-2026-10-03.md`. Public MCP handlers still use the existing local adapter until the dedicated remote-forwarding cutover is proven in a later increment.
 
 
