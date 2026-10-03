@@ -197,6 +197,33 @@ Request header: x-zssh-key: <ZSSH_API_KEY>
 Existing bearer authentication remains available for Claude Code and other
 clients that can set an `Authorization: Bearer ...` header.
 
+## Generic Linux installation
+
+zSSH can also be bootstrapped on a generic Linux target without the legacy zCloud/VPS workspace assumption. Run as a dedicated unprivileged user with Node.js 20+, npm, Git, user-level systemd, and curl:
+
+```bash
+curl --proto '=https' --tlsv1.2 -fsSL \
+  https://raw.githubusercontent.com/Zennay/zSSH/main/deploy/bootstrap-linux.sh | bash
+```
+
+The generic bootstrap checks out the requested `ZSSH_REF`, installs that exact revision through the existing immutable release installer, and defaults `ZSSH_ALLOWED_ROOTS` to `~/zssh-workspace` when no operator root is configured. It does not enable raw shell or change the public OAuth/pairing model.
+
+For a reproducible install, pin the revision:
+
+```bash
+ZSSH_REF=<40-character-commit-sha> \
+  bash <(curl --proto '=https' --tlsv1.2 -fsSL \
+  https://raw.githubusercontent.com/Zennay/zSSH/main/deploy/bootstrap-linux.sh)
+```
+
+Run secret-safe diagnostics with:
+
+```bash
+bash ~/.local/src/zssh/ops/diagnose.sh
+```
+
+The diagnostic helper deliberately prints only whitelisted non-secret configuration values.
+
 ## Easy VPS installation
 
 Run this as the dedicated unprivileged VPS user (never as root):
