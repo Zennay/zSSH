@@ -16,7 +16,7 @@ concurrency:
 
 jobs:
   proof:
-    runs-on: [self-hosted, haxlab]
+    runs-on: self-hosted
     timeout-minutes: 12
     env:
       TARGET_SHA: af9ad9422d294f223bc3627943cc1876eb245cf1
