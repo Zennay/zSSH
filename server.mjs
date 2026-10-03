@@ -130,8 +130,13 @@ function getEnabledSafePrograms() {
 }
 
 function parseServiceUnits(raw) {
-  return [...new Set(String(raw || "").split(",").map(v => v.trim()).filter(Boolean))]
-    .filter(name => SERVICE_UNIT_RE.test(name));
+  const units = [...new Set(String(raw || "").split(",").map(v => v.trim()).filter(Boolean))];
+  for (const unit of units) {
+    if (!SERVICE_UNIT_RE.test(unit)) {
+      throw new Error("configured systemd services must be exact .service unit names");
+    }
+  }
+  return units;
 }
 
 export function getSystemdCapabilities() {
