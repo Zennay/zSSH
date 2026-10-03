@@ -1177,15 +1177,31 @@ export function start() {
     if (AGENT_ENDPOINTS.includes(url.pathname)) {
       if (!AGENT_VERIFIER) return res.writeHead(404).end("Not Found");
       if (req.method !== "POST") return res.writeHead(405).end("Method Not Allowed");
+
+      let body;
       try {
-        const { raw, value } = await readJsonBody(req);
-        const verified = AGENT_VERIFIER.verify({
+        body = await readJsonBody(req);
+      } catch {
+        return res.writeHead(400, { "content-type": "application/json", "cache-control": "no-store" })
+          .end(JSON.stringify({ error: "invalid request body" }));
+      }
+
+      let verified;
+      try {
+        verified = AGENT_VERIFIER.verify({
           method: req.method,
           pathname: url.pathname,
           headers: req.headers,
-          body: raw,
+          body: body.raw,
         });
+      } catch {
+        return res.writeHead(401, { "content-type": "application/json", "cache-control": "no-store" })
+          .end(JSON.stringify({ error: "unauthorized" }));
+      }
+
+      try {
         const targetId = verified.target_id;
+        const value = body.value;
         let payload;
         if (url.pathname === "/agent/v1/session") {
           payload = AGENT_BROKER.open(targetId);
@@ -1198,11 +1214,9 @@ export function start() {
           payload = { disconnected: AGENT_BROKER.close(targetId, value.session_id) };
         }
         return res.writeHead(200, { "content-type": "application/json", "cache-control": "no-store" }).end(JSON.stringify(payload));
-      } catch (err) {
-        const message = String(err?.message || err);
-        const unauthorized = /signature|timestamp|nonce|unknown agent target|base64url|replay/i.test(message);
-        return res.writeHead(unauthorized ? 401 : 409, { "content-type": "application/json", "cache-control": "no-store" })
-          .end(JSON.stringify({ error: unauthorized ? "unauthorized" : "agent request rejected" }));
+      } catch {
+        return res.writeHead(409, { "content-type": "application/json", "cache-control": "no-store" })
+          .end(JSON.stringify({ error: "agent request rejected" }));
       }
     }
 
