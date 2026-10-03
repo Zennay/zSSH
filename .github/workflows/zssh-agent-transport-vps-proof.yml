@@ -19,7 +19,7 @@ jobs:
     runs-on: self-hosted
     timeout-minutes: 15
     env:
-      TARGET_SHA: 7b9003b7e6ac780fcce0b020304c6f3a3e7a6708
+      TARGET_SHA: e919fb8678b7a742a4c924fae2b37839034ac4a3
     steps:
       - name: Verify VPS identity and fetch exact zSSH head
         shell: bash
