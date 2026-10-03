@@ -24,6 +24,7 @@ const CAPABILITY_TOKEN = process.env.ZSSH_MCP_CAPABILITY_TOKEN || "";
 const CLIENT_TOKEN_AUTH_CONFIGURED = Boolean(String(process.env.ZSSH_CLIENT_TOKENS_FILE || "").trim());
 const TRUST_LOCAL_TUNNEL = process.env.ZSSH_TRUST_LOCAL_TUNNEL === "1";
 const PLUGIN_PROFILE = process.env.ZSSH_PLUGIN_PROFILE === "public" ? "public" : "private";
+const PRIVATE_CLIENT_TOKEN_AUTH_CONFIGURED = PLUGIN_PROFILE !== "public" && CLIENT_TOKEN_AUTH_CONFIGURED;
 const OPENAI_APPS_CHALLENGE_TOKEN = process.env.OPENAI_APPS_CHALLENGE_TOKEN || "";
 const PUBLIC_AUTH_MODE = process.env.ZSSH_PUBLIC_AUTH_MODE === "legacy" ? "legacy" : "oauth";
 const OAUTH_CONFIG = oauthConfigFromEnv();
@@ -806,11 +807,12 @@ function secureEqual(actual, expected) {
 }
 
 function capabilityAuthorized(pathname) {
+  if (PLUGIN_PROFILE === "public" && PUBLIC_AUTH_MODE === "oauth") return false;
   return Boolean(CAPABILITY_TOKEN) && secureEqual(pathname, "/mcp/" + CAPABILITY_TOKEN);
 }
 
 function clientTokenFromPath(pathname) {
-  if (PLUGIN_PROFILE === "public" || !CLIENT_TOKEN_AUTH_CONFIGURED) return "";
+  if (!PRIVATE_CLIENT_TOKEN_AUTH_CONFIGURED) return "";
   const match = /^\/mcp\/(zssh_[0-9a-f]{16}_[A-Za-z0-9_-]{40,})$/.exec(String(pathname || ""));
   return match?.[1] || "";
 }
@@ -842,7 +844,7 @@ async function authorizeRequest(req, pathname) {
   if (secureEqual(req.headers["x-zssh-key"], API_KEY)) return { mode: "api-key" };
   if (secureEqual(req.headers.authorization, DEV_TOKEN ? "Bearer " + DEV_TOKEN : "")) return { mode: "bearer" };
 
-  if (PLUGIN_PROFILE !== "public" && CLIENT_TOKEN_AUTH_CONFIGURED) {
+  if (PRIVATE_CLIENT_TOKEN_AUTH_CONFIGURED) {
     const candidates = [clientTokenFromPath(pathname), bearerToken(req)].filter(Boolean);
     for (const token of candidates) {
       try {
@@ -854,7 +856,7 @@ async function authorizeRequest(req, pathname) {
     }
   }
 
-  if (!API_KEY && !DEV_TOKEN && !CAPABILITY_TOKEN && !CLIENT_TOKEN_AUTH_CONFIGURED && process.env.NODE_ENV !== "production") {
+  if (!API_KEY && !DEV_TOKEN && !CAPABILITY_TOKEN && !PRIVATE_CLIENT_TOKEN_AUTH_CONFIGURED && process.env.NODE_ENV !== "production") {
     return { mode: "development" };
   }
   const error = new Error("unauthorized");
@@ -904,7 +906,7 @@ export function start() {
   if (PLUGIN_PROFILE === "public" && !PAIRING_REQUIRED && process.env.NODE_ENV === "production" && process.env.ZSSH_ALLOW_UNPAIRED_PUBLIC !== "1") {
     throw new Error("production public profile requires target pairing; disabling it requires explicit ZSSH_ALLOW_UNPAIRED_PUBLIC=1");
   }
-  if (process.env.NODE_ENV === "production" && !(PLUGIN_PROFILE === "public" && PUBLIC_AUTH_MODE === "oauth") && !CAPABILITY_TOKEN && !API_KEY && !DEV_TOKEN && !CLIENT_TOKEN_AUTH_CONFIGURED && !TRUST_LOCAL_TUNNEL) {
+  if (process.env.NODE_ENV === "production" && !(PLUGIN_PROFILE === "public" && PUBLIC_AUTH_MODE === "oauth") && !CAPABILITY_TOKEN && !API_KEY && !DEV_TOKEN && !PRIVATE_CLIENT_TOKEN_AUTH_CONFIGURED && !TRUST_LOCAL_TUNNEL) {
     throw new Error("production requires authentication; configure revocable client tokens, a capability token, ZSSH_API_KEY, a bearer token, or explicitly trust the loopback tunnel");
   }
 
