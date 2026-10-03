@@ -170,6 +170,8 @@ node pairing-cli.mjs revoke zssh_<profile-id>
 
 The registry stores opaque hashed profile IDs rather than the raw OAuth subject. Pairing is required by default for the public profile and cannot be disabled in production without an explicit unsafe test override.
 
+Pairing records are now target-aware. Existing single-target installs use the reserved opaque target ID `local`; universal-gateway targets use stable opaque `zt_...` IDs configured with `ZSSH_TARGET_ID`. The public MCP URL never carries a target hostname, URL, or target query parameter. OAuth profile → target resolution happens internally, and a paired target without a live authenticated outbound-agent session fails closed as offline. See `docs/research/universal-endpoint-routing-2026-10-03.md`.
+
 
 ## Claude MCP compatibility
 
