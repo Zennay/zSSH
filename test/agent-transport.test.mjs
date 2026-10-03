@@ -169,6 +169,11 @@ test("broker forwards a request only through the current live agent session", as
   assert.equal(command.payload.tool, "get_system_uptime");
   assert.deepEqual(command.payload.args, {});
 
+  assert.throws(
+    () => broker.complete("zt_forward1234", opened.session_id, command.request_id, undefined),
+    /result is required/,
+  );
+
   const accepted = broker.complete(
     "zt_forward1234",
     opened.session_id,
