@@ -41,8 +41,8 @@ try {
     if (!names.has(name)) throw new Error(`missing public plugin tool: ${name}`);
   }
 
-  for (const forbidden of ["zssh_exec", "zssh_run_safe"]) {
-    if (names.has(forbidden)) throw new Error(`unsafe generic tool exposed in public profile: ${forbidden}`);
+  for (const forbidden of ["zssh_exec", "zssh_run_safe", "zssh_list_sudo_services", "zssh_restart_system_service"]) {
+    if (names.has(forbidden)) throw new Error(`private-only tool exposed in public profile: ${forbidden}`);
   }
 
   assertPublicToolScopeContract(tools);
