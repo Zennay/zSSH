@@ -60,7 +60,7 @@ test("agent request signature binds target, endpoint, timestamp, nonce and body"
     pathname: "/agent/v1/poll",
     targetId: second.targetId,
     timestamp,
-    nonce: "n_qrstuvwxyzABCDE",
+    nonce: "n_qrstuvwxyzABCDEF",
     body,
   });
 
@@ -73,7 +73,7 @@ test("agent request signature binds target, endpoint, timestamp, nonce and body"
       headers: {
         "x-zssh-agent-target": targetId,
         "x-zssh-agent-timestamp": timestamp,
-        "x-zssh-agent-nonce": "n_qrstuvwxyzABCDE",
+        "x-zssh-agent-nonce": "n_qrstuvwxyzABCDEF",
         "x-zssh-agent-signature": signature,
       },
     }),
