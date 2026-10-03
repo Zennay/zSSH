@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import crypto from "node:crypto";
 import { readFile } from "node:fs/promises";
+import { pathToFileURL } from "node:url";
 import { signAgentRequest } from "./agent-transport.mjs";
 import { executeAgentCommand } from "./agent-runtime.mjs";
 import { normalizeTargetId } from "./pairing.mjs";
@@ -127,7 +128,7 @@ async function main() {
   await runAgent({ signal: controller.signal });
 }
 
-if (import.meta.url === new URL(process.argv[1], "file:").href) {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   main().catch(err => {
     console.error("zSSH agent failed:", String(err?.message || err));
     process.exitCode = 1;
