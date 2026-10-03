@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   proof:
-    runs-on: [self-hosted, haxlab]
+    runs-on: self-hosted
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
