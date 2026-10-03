@@ -43,6 +43,8 @@ const SAFE_PROGRAM_PATHS = Object.freeze({
   free: "/usr/bin/free"
 });
 const SAFE_PROGRAM_NAMES = Object.freeze(Object.keys(SAFE_PROGRAM_PATHS));
+const SUDO_BIN = "/usr/bin/sudo";
+const SCOPED_SUDO_HELPER = "/usr/local/libexec/zssh-sudo";
 
 function clampInt(value, min, max, fallback) {
   const n = Number(value);
@@ -262,6 +264,96 @@ export async function runSafeProgram(program, args = [], cwd, timeoutSeconds) {
       exit_code: code,
       signal: signal || null,
       error: timedOut ? "program timed out" : limited ? "output limit exceeded" : code === 0 ? null : "program exited non-zero"
+    }));
+  });
+}
+
+export function validScopedServiceName(service) {
+  return /^[A-Za-z0-9][A-Za-z0-9@_.:-]{0,127}$/.test(String(service || ""));
+}
+
+export async function runScopedSudo(operation, service = "") {
+  const op = String(operation || "");
+  if (!["list", "restart"].includes(op)) throw new Error("unsupported scoped sudo operation");
+  if (op === "restart" && !validScopedServiceName(service)) throw new Error("invalid system service name");
+
+  const args = ["-n", "--", SCOPED_SUDO_HELPER, op];
+  if (op === "restart") args.push(String(service));
+  const timeoutMs = Math.min(COMMAND_TIMEOUT_SECONDS, 60) * 1000;
+  const startedAt = Date.now();
+
+  return await new Promise(resolve => {
+    const child = spawn(SUDO_BIN, args, {
+      env: safeEnvironment(),
+      shell: false,
+      stdio: ["ignore", "pipe", "pipe"]
+    });
+
+    let stdout = Buffer.alloc(0);
+    let stderr = Buffer.alloc(0);
+    let limited = false;
+    let timedOut = false;
+    let settled = false;
+
+    const append = (target, chunk) => {
+      const next = Buffer.concat([target, chunk]);
+      if (next.length > MAX_OUTPUT_BYTES) {
+        limited = true;
+        return next.subarray(0, MAX_OUTPUT_BYTES);
+      }
+      return next;
+    };
+
+    child.stdout.on("data", chunk => {
+      stdout = append(stdout, chunk);
+      if (limited) child.kill("SIGTERM");
+    });
+    child.stderr.on("data", chunk => {
+      stderr = append(stderr, chunk);
+      if (limited) child.kill("SIGTERM");
+    });
+
+    const timer = setTimeout(() => {
+      timedOut = true;
+      child.kill("SIGTERM");
+      setTimeout(() => child.kill("SIGKILL"), 1500).unref();
+    }, timeoutMs);
+
+    const finish = async payload => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      const value = {
+        ...payload,
+        operation: op,
+        service: op === "restart" ? String(service) : null,
+        timed_out: timedOut,
+        output_limited: limited,
+        duration_ms: Date.now() - startedAt,
+        stdout: redactSecrets(stdout.toString("utf8")),
+        stderr: redactSecrets(stderr.toString("utf8"))
+      };
+      try {
+        await audit({
+          action: "scoped_sudo",
+          operation: op,
+          service: value.service,
+          outcome: value.ok ? "ok" : "error",
+          exit_code: value.exit_code,
+          timed_out: timedOut,
+          output_limited: limited,
+          duration_ms: value.duration_ms
+        });
+      } catch {}
+      resolve(value);
+    };
+
+    child.on("error", err => finish({ ok: false, exit_code: null, error: err.message }));
+    child.on("close", (code, signal) => finish({
+      ok: code === 0 && !timedOut && !limited,
+      exit_code: code,
+      signal: signal || null,
+      error: timedOut ? "scoped sudo timed out" : limited ? "output limit exceeded" : code === 0 ? null : "scoped sudo helper rejected the request"
     }));
   });
 }
@@ -761,6 +853,49 @@ function createMcpServer() {
       async ({ program, args, cwd, timeout_seconds }) => {
         try {
           const value = await runSafeProgram(program, args || [], cwd, timeout_seconds);
+          return result(value, !value.ok);
+        } catch (err) {
+          return result({ ok: false, error: String(err?.message || err) }, true);
+        }
+      }
+    );
+
+    server.registerTool(
+      "zssh_list_sudo_services",
+      {
+        title: "List granted sudo services",
+        description: "List the exact systemd service names the Linux owner granted to zSSH through the root-owned scoped sudo helper.",
+        inputSchema: {},
+        annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }
+      },
+      async () => {
+        try {
+          const value = await runScopedSudo("list");
+          if (!value.ok) return result(value, true);
+          const services = value.stdout.split(/\r?\n/).map(v => v.trim()).filter(Boolean);
+          if (services.some(service => !validScopedServiceName(service))) {
+            return result({ ok: false, error: "root-owned scoped sudo allowlist returned an invalid service name" }, true);
+          }
+          return result({ ok: true, services });
+        } catch (err) {
+          return result({ ok: false, error: String(err?.message || err) }, true);
+        }
+      }
+    );
+
+    server.registerTool(
+      "zssh_restart_system_service",
+      {
+        title: "Restart granted system service",
+        description: "Restart one systemd system service that the Linux owner explicitly granted through the root-owned zSSH scoped sudo helper. Cannot target ungranted services or run arbitrary sudo commands.",
+        inputSchema: {
+          service: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9@_.:-]{0,127}$/)
+        },
+        annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false }
+      },
+      async ({ service }) => {
+        try {
+          const value = await runScopedSudo("restart", service);
           return result(value, !value.ok);
         } catch (err) {
           return result({ ok: false, error: String(err?.message || err) }, true);
