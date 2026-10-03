@@ -130,7 +130,8 @@ export function classifyCommand(command) {
 
 function getAllowedRoots({ publicOnly = PLUGIN_PROFILE === "public" } = {}) {
   const publicRoots = publicOnly ? String(process.env.ZSSH_PUBLIC_ALLOWED_ROOTS || "").trim() : "";
-  const raw = publicRoots || (!publicOnly ? process.env.ZSSH_ALLOWED_ROOTS : "") || process.cwd();
+  if (publicOnly && !publicRoots) return [];
+  const raw = publicRoots || process.env.ZSSH_ALLOWED_ROOTS || process.cwd();
   return raw.split(",").map(v => path.resolve(v.trim())).filter(Boolean);
 }
 
