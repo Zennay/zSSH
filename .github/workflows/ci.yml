@@ -35,6 +35,9 @@ jobs:
         run: |
           node --check server.mjs
           node --check public-site.mjs
+          node --check auth-store.mjs
+          node --check bin/zssh.mjs
+          node --check client-token-canary.mjs
       - name: Exercise authenticated MCP file roundtrip and policy canary
         shell: bash
         run: |
@@ -54,6 +57,9 @@ jobs:
           done
           curl --fail --silent "http://127.0.0.1:$PORT/health" >/dev/null
           node live-canary.mjs
+
+      - name: Exercise private revocable client-token lifecycle
+        run: node client-token-canary.mjs
 
       - name: Exercise public plugin profile and OpenAI challenge
         shell: bash
