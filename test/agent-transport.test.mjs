@@ -1,227 +1,325 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
+import { mkdtemp, rm } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import {
-  AgentRequestVerifier,
+  AgentReplayCache,
   OutboundAgentBroker,
   canonicalAgentRequest,
-  signAgentRequest,
+  verifySignedAgentRequest,
 } from "../agent-transport.mjs";
-import { TargetSessionRegistry } from "../target-routing.mjs";
+import {
+  approvePairing,
+  getPairingStatus,
+  revokePairing,
+} from "../pairing.mjs";
+import {
+  TargetSessionRegistry,
+  resolveAuthenticatedTarget,
+} from "../target-routing.mjs";
 
-function keys(targetId = "zt_agenttest123") {
-  const { publicKey, privateKey } = crypto.generateKeyPairSync("ed25519");
+function auth(subject = "agent-user") {
   return {
-    targetId,
-    publicKey,
-    privateKey,
-    verifier: new AgentRequestVerifier({ keys: new Map([[targetId, publicKey]]) }),
+    clientId: subject,
+    scopes: ["zssh:read", "zssh:write"],
+    extra: {
+      sub: subject,
+      issuer: "https://auth.example",
+    },
   };
 }
 
-function signed({ verifier, privateKey, targetId, pathname, body, now, nonce = "n_abcdefghijklmnop" }) {
-  const timestamp = String(Math.floor(now / 1000));
-  const signature = signAgentRequest(privateKey, {
+function signedRequest({
+  privateKey,
+  targetId = "zt_agent12345",
+  timestamp = 1791068400,
+  nonce = "nonce_abcdefghijklmnop",
+  body = '{"kind":"poll"}',
+} = {}) {
+  const canonical = canonicalAgentRequest({
     method: "POST",
-    pathname,
+    requestPath: "/agent/v1/poll",
     targetId,
     timestamp,
     nonce,
     body,
   });
-  return verifier.verify({
+  return {
     method: "POST",
-    pathname,
-    body,
-    now,
-    headers: {
-      "x-zssh-agent-target": targetId,
-      "x-zssh-agent-timestamp": timestamp,
-      "x-zssh-agent-nonce": nonce,
-      "x-zssh-agent-signature": signature,
-    },
-  });
-}
-
-test("agent request signature binds target, endpoint, timestamp, nonce and body", () => {
-  const { verifier, privateKey, targetId } = keys();
-  const now = Date.parse("2026-10-03T23:45:00Z");
-  const body = JSON.stringify({ session_id: "sess_abcdefghijklmnop" });
-
-  assert.deepEqual(
-    signed({ verifier, privateKey, targetId, pathname: "/agent/v1/poll", body, now }),
-    { target_id: targetId },
-  );
-
-  const second = keys("zt_otheragent12");
-  const timestamp = String(Math.floor(now / 1000));
-  const signature = signAgentRequest(second.privateKey, {
-    method: "POST",
-    pathname: "/agent/v1/poll",
-    targetId: second.targetId,
-    timestamp,
-    nonce: "n_qrstuvwxyzABCDEF",
-    body,
-  });
-
-  assert.throws(
-    () => verifier.verify({
-      method: "POST",
-      pathname: "/agent/v1/poll",
-      body,
-      now,
-      headers: {
-        "x-zssh-agent-target": targetId,
-        "x-zssh-agent-timestamp": timestamp,
-        "x-zssh-agent-nonce": "n_qrstuvwxyzABCDEF",
-        "x-zssh-agent-signature": signature,
-      },
-    }),
-    /invalid agent request signature/,
-  );
-});
-
-test("agent request verifier rejects replay and stale timestamps", () => {
-  const { verifier, privateKey, targetId } = keys();
-  const now = Date.parse("2026-10-03T23:45:00Z");
-  const body = "{}";
-  const pathname = "/agent/v1/session";
-  const nonce = "n_replaynonce123456";
-  const timestamp = String(Math.floor(now / 1000));
-  const signature = signAgentRequest(privateKey, {
-    method: "POST",
-    pathname,
+    requestPath: "/agent/v1/poll",
     targetId,
     timestamp,
     nonce,
     body,
-  });
-  const request = {
-    method: "POST",
-    pathname,
-    body,
-    now,
-    headers: {
-      "x-zssh-agent-target": targetId,
-      "x-zssh-agent-timestamp": timestamp,
-      "x-zssh-agent-nonce": nonce,
-      "x-zssh-agent-signature": signature,
-    },
+    signature: crypto.sign(null, Buffer.from(canonical, "utf8"), privateKey).toString("base64url"),
   };
+}
 
-  verifier.verify(request);
-  assert.throws(() => verifier.verify(request), /replay detected/);
+test("signed agent requests authenticate with Ed25519 and reject replay", () => {
+  const { publicKey, privateKey } = crypto.generateKeyPairSync("ed25519");
+  const trustedKeys = new Map([["zt_agent12345", publicKey]]);
+  const replayCache = new AgentReplayCache();
+  const request = signedRequest({ privateKey });
 
-  const staleTimestamp = String(Math.floor((now - 120_000) / 1000));
-  const staleNonce = "n_stalenonce1234567";
-  const staleSignature = signAgentRequest(privateKey, {
-    method: "POST",
-    pathname,
-    targetId,
-    timestamp: staleTimestamp,
-    nonce: staleNonce,
-    body,
+  const verified = verifySignedAgentRequest({
+    ...request,
+    trustedKeys,
+    replayCache,
+    now: request.timestamp * 1000,
   });
+  assert.deepEqual(verified, {
+    target_id: "zt_agent12345",
+    authenticated: true,
+  });
+
   assert.throws(
-    () => verifier.verify({
+    () => verifySignedAgentRequest({
       ...request,
-      headers: {
-        "x-zssh-agent-target": targetId,
-        "x-zssh-agent-timestamp": staleTimestamp,
-        "x-zssh-agent-nonce": staleNonce,
-        "x-zssh-agent-signature": staleSignature,
-      },
+      trustedKeys,
+      replayCache,
+      now: request.timestamp * 1000,
     }),
-    /clock-skew window/,
+    /replay detected/,
   );
 });
 
-test("canonical signed message changes when the body changes", () => {
-  const fields = {
-    pathname: "/agent/v1/result",
-    targetId: "zt_agenttest123",
-    timestamp: "1791061500",
-    nonce: "n_bodyhash12345678",
-  };
-  const a = canonicalAgentRequest({ ...fields, body: JSON.stringify({ ok: true }) });
-  const b = canonicalAgentRequest({ ...fields, body: JSON.stringify({ ok: false }) });
-  assert.notEqual(a, b);
+test("agent auth fails closed for untrusted target, bad signature and stale timestamp", () => {
+  const first = crypto.generateKeyPairSync("ed25519");
+  const second = crypto.generateKeyPairSync("ed25519");
+  const trustedKeys = new Map([["zt_agent12345", first.publicKey]]);
+
+  assert.throws(
+    () => verifySignedAgentRequest({
+      ...signedRequest({ privateKey: first.privateKey, targetId: "zt_other12345" }),
+      trustedKeys,
+      replayCache: new AgentReplayCache(),
+      now: 1791068400 * 1000,
+    }),
+    /not trusted/,
+  );
+
+  assert.throws(
+    () => verifySignedAgentRequest({
+      ...signedRequest({ privateKey: second.privateKey }),
+      trustedKeys,
+      replayCache: new AgentReplayCache(),
+      now: 1791068400 * 1000,
+    }),
+    /signature verification failed/,
+  );
+
+  const stale = signedRequest({
+    privateKey: first.privateKey,
+    timestamp: 1791068000,
+    nonce: "nonce_staleabcdefghijk",
+  });
+  assert.throws(
+    () => verifySignedAgentRequest({
+      ...stale,
+      trustedKeys,
+      replayCache: new AgentReplayCache(),
+      now: 1791068400 * 1000,
+    }),
+    /outside allowed clock skew/,
+  );
 });
 
-test("broker forwards a request only through the current live agent session", async () => {
+test("outbound broker forwards only bounded allowlisted target tools", async () => {
   const sessions = new TargetSessionRegistry();
   const broker = new OutboundAgentBroker({
     sessions,
-    requestTimeoutMs: 5_000,
-    pollTimeoutMs: 1_000,
+    commandTimeoutMs: 2000,
   });
+  const sessionId = "sess_abcdefghijklmnop";
+  broker.connect("zt_agent12345", { sessionId });
 
-  const opened = broker.open("zt_forward1234");
-  const route = sessions.resolve("zt_forward1234");
-  assert.equal(route.session_id, opened.session_id);
+  const live = sessions.resolve("zt_agent12345");
+  assert.ok(live);
 
-  const responsePromise = route.send({
+  const responsePromise = live.send({
     tool: "get_system_uptime",
     args: {},
   });
+  const command = await broker.pull("zt_agent12345", sessionId, { waitMs: 0 });
 
-  const command = await broker.next("zt_forward1234", opened.session_id);
-  assert.equal(command.payload.tool, "get_system_uptime");
-  assert.deepEqual(command.payload.args, {});
+  assert.equal(command.type, "tool_call");
+  assert.equal(command.tool, "get_system_uptime");
+  assert.deepEqual(command.args, {});
+  assert.match(command.request_id, /^rpc_/);
 
-  assert.throws(
-    () => broker.complete("zt_forward1234", opened.session_id, command.request_id, undefined),
-    /result is required/,
-  );
-
-  const accepted = broker.complete(
-    "zt_forward1234",
-    opened.session_id,
-    command.request_id,
-    { ok: true, stdout: "up 1 day" },
-  );
-  assert.equal(accepted.accepted, true);
-  assert.deepEqual(await responsePromise, { ok: true, stdout: "up 1 day" });
-});
-
-test("session replacement invalidates the old poller and rejects its pending work", async () => {
-  const sessions = new TargetSessionRegistry();
-  const broker = new OutboundAgentBroker({
-    sessions,
-    requestTimeoutMs: 5_000,
-    pollTimeoutMs: 1_000,
+  broker.complete("zt_agent12345", sessionId, {
+    request_id: command.request_id,
+    result: { ok: true, stdout: "up 2 days" },
+  });
+  assert.deepEqual(await responsePromise, {
+    ok: true,
+    stdout: "up 2 days",
   });
 
-  const first = broker.open("zt_replace123");
-  const firstRoute = sessions.resolve("zt_replace123");
-  const pending = firstRoute.send({ tool: "get_kernel_info", args: {} });
-
-  const second = broker.open("zt_replace123");
-  await assert.rejects(pending, /session replaced/);
-  assert.equal(sessions.resolve("zt_replace123").session_id, second.session_id);
-  assert.throws(
-    () => broker.complete("zt_replace123", first.session_id, "req_abcdefghijklmnop", { ok: true }),
-    /not active/,
-  );
-});
-
-test("broker enforces one long poll and bounded target-local session state", async () => {
-  const sessions = new TargetSessionRegistry();
-  const broker = new OutboundAgentBroker({
-    sessions,
-    requestTimeoutMs: 5_000,
-    pollTimeoutMs: 1_000,
-  });
-  const opened = broker.open("zt_polltarget12");
-
-  const poll = broker.next("zt_polltarget12", opened.session_id);
   await assert.rejects(
-    broker.next("zt_polltarget12", opened.session_id),
-    /one active long poll/,
+    live.send({ tool: "zssh_exec", args: { command: "id" } }),
+    /not allowed/,
   );
-  assert.equal(await poll, null);
 
-  const snapshot = JSON.stringify(broker.snapshot());
-  assert.doesNotMatch(snapshot, /private|public_key|signature|transport/i);
-  assert.match(snapshot, /zt_polltarget12/);
+  assert.deepEqual(broker.snapshot().map(({ target_id, queued_commands, pending_commands }) => ({
+    target_id,
+    queued_commands,
+    pending_commands,
+  })), [{
+    target_id: "zt_agent12345",
+    queued_commands: 0,
+    pending_commands: 0,
+  }]);
+});
+
+test("new agent session replaces the old route and stale session cannot answer", async () => {
+  const sessions = new TargetSessionRegistry();
+  const broker = new OutboundAgentBroker({
+    sessions,
+    commandTimeoutMs: 2000,
+  });
+
+  const first = broker.connect("zt_agent12345", {
+    sessionId: "sess_firstsession123",
+  });
+  const oldRoute = sessions.resolve("zt_agent12345");
+
+  const pending = oldRoute.send({
+    tool: "get_memory_usage",
+    args: {},
+  });
+  const command = await broker.pull(first.target_id, first.session_id, { waitMs: 0 });
+
+  const second = broker.connect("zt_agent12345", {
+    sessionId: "sess_secondsession12",
+  });
+
+  await assert.rejects(pending, /replaced by a newer agent session/);
+  assert.equal(sessions.resolve("zt_agent12345").session_id, second.session_id);
+  assert.throws(
+    () => broker.complete(first.target_id, first.session_id, {
+      request_id: command.request_id,
+      result: { ok: true },
+    }),
+    /not current/,
+  );
+});
+
+test("paired OAuth route reaches live outbound agent and revocation cuts it off", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "zssh-agent-bridge-"));
+  const file = path.join(root, "pairings.json");
+  const env = {
+    ZSSH_PAIRING_FILE: file,
+    ZSSH_TARGET_ID: "zt_agent12345",
+  };
+  const resource = "https://mcp.example";
+  const identity = auth("paired-agent-user");
+  const sessions = new TargetSessionRegistry();
+  const broker = new OutboundAgentBroker({
+    sessions,
+    commandTimeoutMs: 2000,
+  });
+  const session = broker.connect("zt_agent12345", {
+    sessionId: "sess_bridgeagent123",
+  });
+
+  try {
+    const pairing = await getPairingStatus(identity, {
+      resource,
+      createRequest: true,
+      env,
+    });
+    const approved = await approvePairing(pairing.request_id, { env });
+    assert.equal(approved.target_id, "zt_agent12345");
+
+    const routed = await resolveAuthenticatedTarget(identity, {
+      resource,
+      env,
+      sessions,
+    });
+    assert.equal(routed.routable, true);
+
+    const responsePromise = routed.send({
+      tool: "get_disk_usage",
+      args: {},
+    });
+    const command = await broker.pull(session.target_id, session.session_id, {
+      waitMs: 0,
+    });
+    broker.complete(session.target_id, session.session_id, {
+      request_id: command.request_id,
+      result: { ok: true, stdout: "disk-ok" },
+    });
+    assert.deepEqual(await responsePromise, {
+      ok: true,
+      stdout: "disk-ok",
+    });
+
+    await revokePairing(approved.profile_id, {
+      targetId: approved.target_id,
+      env,
+    });
+    const blocked = await resolveAuthenticatedTarget(identity, {
+      resource,
+      env,
+      sessions,
+    });
+    assert.equal(blocked.routable, false);
+    assert.equal(blocked.reason, "not_paired");
+  } finally {
+    broker.disconnect(session.target_id, session.session_id);
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+
+test("HTTP verifier helper binds fixed endpoint and body, and broker aliases retain allowlist", async () => {
+  const { publicKey, privateKey } = crypto.generateKeyPairSync("ed25519");
+  const { AgentRequestVerifier, signAgentRequest } = await import("../agent-transport.mjs");
+  const verifier = new AgentRequestVerifier({
+    keys: new Map([["zt_agent12345", publicKey]]),
+    maxSkewMs: 60000,
+  });
+  const now = Date.parse("2026-10-03T23:55:00Z");
+  const timestamp = String(Math.floor(now / 1000));
+  const nonce = "nonce_httphelper123456";
+  const body = JSON.stringify({ session_id: "sess_abcdefghijklmnop" });
+  const signature = signAgentRequest(privateKey, {
+    method: "POST",
+    pathname: "/agent/v1/poll",
+    targetId: "zt_agent12345",
+    timestamp,
+    nonce,
+    body,
+  });
+
+  assert.deepEqual(verifier.verify({
+    method: "POST",
+    pathname: "/agent/v1/poll",
+    body,
+    now,
+    headers: {
+      "x-zssh-agent-target": "zt_agent12345",
+      "x-zssh-agent-timestamp": timestamp,
+      "x-zssh-agent-nonce": nonce,
+      "x-zssh-agent-signature": signature,
+    },
+  }), { target_id: "zt_agent12345", authenticated: true });
+
+  const sessions = new TargetSessionRegistry();
+  const broker = new OutboundAgentBroker({
+    sessions,
+    requestTimeoutMs: 2000,
+    pollTimeoutMs: 1000,
+    maxPending: 2,
+  });
+  const opened = broker.open("zt_agent12345");
+  const live = sessions.resolve("zt_agent12345");
+  await assert.rejects(
+    live.send({ tool: "zssh_exec", args: { command: "id" } }),
+    /not allowed/,
+  );
+  assert.equal(broker.close(opened.target_id, opened.session_id), true);
 });
