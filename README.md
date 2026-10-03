@@ -306,6 +306,19 @@ The installer renders exact fully-qualified `systemctl` command+argument tuples,
 
 It deliberately never emits `NOPASSWD: ALL`, shell-interpreter grants, directory grants, wildcard arguments, or argument-less `systemctl` access. See `docs/research/scoped-sudo-grants-2026-10-03.md` for the security decision and source references.
 
+## Bounded private operations
+
+The private/self-hosted profile now prefers fixed capability tools over raw shell for common repository and service work:
+
+- `zssh_git_status` runs only `git -C <allowed-root-repo> status --short --branch`.
+- `zssh_git_pull` runs only `git -C <allowed-root-repo> pull --ff-only`; diverged histories fail instead of creating a merge commit.
+- `zssh_service_status` runs one exact allowlisted system service through non-interactive scoped sudo.
+- `zssh_restart_service` can restart only units named in `ZSSH_SYSTEMD_RESTART_SERVICES`.
+
+For system services, first install matching grants with `deploy/install-scoped-sudo.sh`. The environment allowlists and sudoers policy must agree; neither layer accepts wildcard units or arbitrary systemctl arguments.
+
+These tools are currently private-profile only. They do not widen the reviewed public OpenAI tool contract.
+
 ## Canonical project docs
 
 - Project HQ: https://app.notion.com/p/3e89e19ac955811a9008d420e3e2a634
