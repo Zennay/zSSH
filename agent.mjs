@@ -42,8 +42,8 @@ export async function createAgentClient({ env = process.env, fetchImpl = fetch }
 
   async function post(pathname, value) {
     const body = JSON.stringify(value ?? {});
-    const timestamp = String(Date.now());
-    const nonce = "n_" + crypto.randomBytes(18).toString("base64url");
+    const timestamp = String(Math.floor(Date.now() / 1000));
+    const nonce = "nonce_" + crypto.randomBytes(18).toString("base64url");
     const signature = signAgentRequest(privateKey, {
       method: "POST",
       pathname,
@@ -109,7 +109,7 @@ export async function runAgent({ env = process.env, fetchImpl = fetch, signal } 
 
       let value;
       try {
-        value = await executeAgentCommand(command.payload);
+        value = await executeAgentCommand(command);
       } catch (err) {
         value = { ok: false, error: String(err?.message || err) };
       }
