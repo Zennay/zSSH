@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import { promises as fs } from "node:fs";
+import { readFileSync, promises as fs } from "node:fs";
 import { normalizeTargetId } from "./pairing.mjs";
 import { TargetSessionRegistry, newTargetSessionId } from "./target-routing.mjs";
 
@@ -115,11 +115,8 @@ export class AgentReplayCache {
   }
 }
 
-export async function loadAgentTrustFile(file) {
-  const filename = String(file || "").trim();
-  if (!filename) throw new Error("agent trust file is required");
-
-  const parsed = JSON.parse(await fs.readFile(filename, "utf8"));
+function parseAgentTrustFile(raw) {
+  const parsed = JSON.parse(String(raw || ""));
   if (parsed?.version !== 1 || !parsed.targets || typeof parsed.targets !== "object" || Array.isArray(parsed.targets)) {
     throw new Error("invalid agent trust file");
   }
@@ -146,6 +143,18 @@ export async function loadAgentTrustFile(file) {
 
   if (!trusted.size) throw new Error("agent trust file has no enabled targets");
   return trusted;
+}
+
+export async function loadAgentTrustFile(file) {
+  const filename = String(file || "").trim();
+  if (!filename) throw new Error("agent trust file is required");
+  return parseAgentTrustFile(await fs.readFile(filename, "utf8"));
+}
+
+export function loadAgentTrustFileSync(file) {
+  const filename = String(file || "").trim();
+  if (!filename) throw new Error("agent trust file is required");
+  return parseAgentTrustFile(readFileSync(filename, "utf8"));
 }
 
 export function verifySignedAgentRequest({
