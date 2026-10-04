@@ -15,9 +15,10 @@ This checklist tracks the production path from the current review-ready MCP prof
 - [ ] Verify Domain is green for the exact production MCP origin; only then set `ZSSH_OPENAI_DOMAIN_VERIFIED=1` and `ZSSH_OPENAI_VERIFIED_MCP_ORIGIN=<scheme://hostname[:port]>`
 - [ ] Reviewer account exists without private user data
 - [ ] Dedicated paired target fixture is available
-- [ ] Production connection card exercised successfully in ChatGPT desktop; only then set `ZSSH_CHATGPT_DESKTOP_REVIEWED=1`
-- [ ] Production connection card exercised successfully in ChatGPT mobile; only then set `ZSSH_CHATGPT_MOBILE_REVIEWED=1`
 - [ ] OpenAI Scan Tools is green for the exact production tool contract; set `ZSSH_OPENAI_TOOL_SCAN_VERIFIED=1` and `ZSSH_OPENAI_TOOL_SCAN_SHA256=<live tool_scan_sha256>` only after that exact scan
+- [ ] Compute the current host-surface fingerprint with `ZSSH_PLUGIN_MCP_URL=<production /mcp URL> ZSSH_OPENAI_TOOL_SCAN_SHA256=<live tool_scan_sha256> node scripts/check-host-surface-review-binding.mjs --compute`
+- [ ] Production connection card exercised successfully in ChatGPT desktop against that exact fingerprint; only then set `ZSSH_CHATGPT_DESKTOP_REVIEWED=1`
+- [ ] Production connection card exercised successfully in ChatGPT mobile against that same exact fingerprint; only then set `ZSSH_CHATGPT_MOBILE_REVIEWED=1` and `ZSSH_CHATGPT_REVIEW_SHA256=<computed fingerprint>`
 
 ## Canonical release provenance
 
@@ -64,6 +65,7 @@ Record:
 - reviewer walkthrough result;
 - live ChatGPT desktop connection-card result;
 - live ChatGPT mobile connection-card result;
+- `ZSSH_CHATGPT_REVIEW_SHA256` proving those two checks were performed against the exact production MCP origin/path, current tool contract, and committed connection-card HTML;
 - portal scan findings and resolutions;
 - exact MCP origin bound to the successful Verify Domain portal result.
 

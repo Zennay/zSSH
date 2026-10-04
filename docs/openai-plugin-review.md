@@ -102,7 +102,9 @@ Before pressing Submit:
 - connect the production OAuth reviewer account and pair it to the dedicated sample target;
 - run `npm run submission:probe` against that production endpoint;
 - record the required reviewer walkthrough;
-- check the compact connection card on both ChatGPT desktop and mobile;
+- after the current Scan Tools result is green, compute the exact host-surface fingerprint for the production MCP endpoint, live tool contract, and committed connection-card HTML;
+- check the compact connection card on both ChatGPT desktop and mobile against that exact fingerprint;
+- set `ZSSH_CHATGPT_REVIEW_SHA256` to that fingerprint only after both checks pass;
 - run the protected production release gate, then use the uploaded `zssh-openai-plugin.zip` whose SHA-256 is recorded in the paired evidence JSON;
 - submit the current five positive and three negative cases.
 
@@ -121,6 +123,7 @@ npm run submission:probe
 # The protected GitHub openai-production release environment additionally requires:
 # ZSSH_CHATGPT_DESKTOP_REVIEWED=1
 # ZSSH_CHATGPT_MOBILE_REVIEWED=1
+# ZSSH_CHATGPT_REVIEW_SHA256=<exact reviewed host-surface fingerprint>
 # ZSSH_OPENAI_DOMAIN_VERIFIED=1
 # ZSSH_OPENAI_TOOL_SCAN_VERIFIED=1
 ```
@@ -129,4 +132,4 @@ The probe checks the health endpoint, OAuth protected-resource metadata, unauthe
 
 ## Release rule
 
-A green local or CI canary is not enough to call the plugin submitted or accepted. Submission readiness requires the production endpoint, production OAuth flow, current portal scan, reviewer credentials, domain verification, reviewer-facing test cases, and a successful live production connection-card check in both ChatGPT desktop and mobile to be green together. Keep `ZSSH_CHATGPT_DESKTOP_REVIEWED` and `ZSSH_CHATGPT_MOBILE_REVIEWED` unset until those real host-surface checks have passed.
+A green local or CI canary is not enough to call the plugin submitted or accepted. Submission readiness requires the production endpoint, production OAuth flow, current portal scan, reviewer credentials, domain verification, reviewer-facing test cases, and a successful live production connection-card check in both ChatGPT desktop and mobile to be green together. Keep `ZSSH_CHATGPT_DESKTOP_REVIEWED`, `ZSSH_CHATGPT_MOBILE_REVIEWED`, and `ZSSH_CHATGPT_REVIEW_SHA256` unset until those real host-surface checks have passed against the exact endpoint/tool/UI fingerprint. Any relevant production endpoint, tool-contract, or connection-card change requires a fresh desktop/mobile review and a new fingerprint.
