@@ -56,7 +56,7 @@ complete.ZSSH_CHATGPT_REVIEW_SHA256 = computeHostSurfaceReviewFingerprint({
 
 test("classifies an empty production environment into actionable M5 lanes", () => {
   const result = buildProductionReadinessAudit({});
-  assert.equal(result.schema_version, 2);
+  assert.equal(result.schema_version, 3);
   assert.equal(result.phase, "M5");
   assert.equal(result.execution_state, "internal_action_available");
   assert.deepEqual(result.internal_action_gates, ["repository_governance"]);
