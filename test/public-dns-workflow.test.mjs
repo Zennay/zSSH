@@ -135,12 +135,17 @@ test("production DNS apply is bound to the exact dry-run record-state fingerprin
   assert.match(plan, /refusing to enter the mutation-capable step/);
   assert.match(plan, /new Set\(\["noop", "would_create", "would_update"\]\)/);
   assert.match(plan, /action === "would_update"[\s\S]*\^\[a-f0-9\]\{64\}\$/);
+  assert.match(plan, /plan_action=\$\{action\}/);
   assert.match(plan, /current_state_sha256=\$\{fingerprint\}/);
   assert.match(plan, /"\$GITHUB_OUTPUT"/);
 
   const applyTail = workflow.split("      - name: Publish exact DNS-only A record")[1];
   assert.ok(applyTail, "missing DNS apply step");
   const apply = applyTail.split("\n      - name:")[0];
+  assert.match(
+    apply,
+    /if: steps\.dns_plan\.outputs\.plan_action == 'would_create' \|\| steps\.dns_plan\.outputs\.plan_action == 'would_update'/,
+  );
   assert.match(
     apply,
     /ZSSH_DNS_EXPECTED_CURRENT_STATE_SHA256: \$\{\{ steps\.dns_plan\.outputs\.current_state_sha256 \}\}/,
@@ -152,6 +157,19 @@ test("production DNS apply is bound to the exact dry-run record-state fingerprin
 
   assert.match(runbook, /plan-to-apply/);
   assert.match(runbook, /state fingerprint/i);
+});
+
+test("production DNS skips the mutation-capable apply step for an already-converged noop plan", () => {
+  const applyTail = workflow.split("      - name: Publish exact DNS-only A record")[1];
+  assert.ok(applyTail, "missing DNS apply step");
+  const apply = applyTail.split("\n      - name:")[0];
+
+  assert.match(
+    apply,
+    /if: steps\.dns_plan\.outputs\.plan_action == 'would_create' \|\| steps\.dns_plan\.outputs\.plan_action == 'would_update'/,
+  );
+  assert.doesNotMatch(apply, /plan_action == 'noop'/);
+  assert.match(runbook, /noop.*apply step.*skipped/i);
 });
 
 test("production DNS never enters the apply step when human replacement review is missing", () => {
