@@ -148,7 +148,7 @@ test("merged PRs autonomously attempt canonical protection only after provenance
   );
   assert.match(
     workflow,
-    /provenance:\n    name: Require canonical merged-PR provenance\n    if: github\.event_name == 'workflow_dispatch' \|\| github\.event_name == 'push' \|\| github\.event\.pull_request\.merged == true/,
+    /provenance:\n    name: Require canonical merged-PR provenance\n    if: github\.event_name == 'workflow_dispatch' \|\| github\.event\.pull_request\.merged == true/,
   );
   assert.match(
     workflow,
