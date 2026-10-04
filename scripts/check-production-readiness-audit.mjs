@@ -316,7 +316,9 @@ export function buildProductionReadinessAudit(env = process.env) {
   if (!lanes.repository_governance.ready) {
     nextActions.push({
       lane: "repository_governance",
-      action: "GitHub must report main as protected, then require PR-based changes plus the zSSH CI/repository-hygiene check, run a controlled rejected-direct-push proof, and only then set ZSSH_MAIN_PROTECTION_VERIFIED=1.",
+      gate_kind: "derived_evidence",
+      requires_external_input: false,
+      action: "Re-run immutable GitHub governance verification: main must be protected and the canonical issue #100 rejected-direct-write evidence plus canary ancestry must verify. Do not configure a persistent governance attestation.",
       missing: lanes.repository_governance.missing,
       invalid: lanes.repository_governance.invalid,
     });
@@ -324,7 +326,9 @@ export function buildProductionReadinessAudit(env = process.env) {
   if (!lanes.dns_publication.ready) {
     nextActions.push({
       lane: "dns_publication",
-      action: "Configure valid protected Cloudflare zone ID/token, then run zSSH production DNS publish.",
+      gate_kind: "provider_credentials",
+      requires_external_input: true,
+      action: "Provision valid protected Cloudflare zone ID/token, then run zSSH production DNS publish.",
       missing: lanes.dns_publication.missing,
       invalid: lanes.dns_publication.invalid,
     });
@@ -332,7 +336,9 @@ export function buildProductionReadinessAudit(env = process.env) {
   if (!lanes.auth0_preflight.ready) {
     nextActions.push({
       lane: "auth0_preflight",
-      action: "Configure valid production Auth0 issuer/management inputs, then run Auth0 production readiness.",
+      gate_kind: "provider_configuration",
+      requires_external_input: true,
+      action: "Provision valid production Auth0 issuer/management inputs, then run Auth0 production readiness.",
       missing: lanes.auth0_preflight.missing,
       invalid: lanes.auth0_preflight.invalid,
     });
@@ -340,7 +346,9 @@ export function buildProductionReadinessAudit(env = process.env) {
   if (!lanes.reviewer_fixture.ready) {
     nextActions.push({
       lane: "reviewer_fixture",
-      action: "Finish the reviewer-facing demo/login/token/file fixture inputs before the final production probe.",
+      gate_kind: "reviewer_configuration",
+      requires_external_input: true,
+      action: "Provision the reviewer-facing demo/login/token inputs before the final production probe.",
       missing: lanes.reviewer_fixture.missing,
       invalid: lanes.reviewer_fixture.invalid,
     });
@@ -348,6 +356,8 @@ export function buildProductionReadinessAudit(env = process.env) {
   if (!lanes.portal_and_host_attestations.ready) {
     nextActions.push({
       lane: "portal_and_host_attestations",
+      gate_kind: "portal_attestation",
+      requires_external_input: true,
       action: "Complete Verify Domain, Scan Tools, reviewer-login verification, and live desktop/mobile review before setting attestations.",
       missing: lanes.portal_and_host_attestations.missing,
       invalid: lanes.portal_and_host_attestations.invalid,
@@ -360,6 +370,8 @@ export function buildProductionReadinessAudit(env = process.env) {
   ) {
     nextActions.push({
       lane: "final_release_config",
+      gate_kind: "internal_validation",
+      requires_external_input: false,
       action: "Repair the remaining cross-lane or stale release binding before the protected production probe.",
       missing: releaseConfig.missing,
       invalid: releaseConfig.invalid,
@@ -380,6 +392,9 @@ export function buildProductionReadinessAudit(env = process.env) {
     },
     lanes,
     final_release_config: releaseConfig,
+    external_input_gates: nextActions
+      .filter(item => item.requires_external_input)
+      .map(item => item.lane),
     next_actions: nextActions,
   };
 }

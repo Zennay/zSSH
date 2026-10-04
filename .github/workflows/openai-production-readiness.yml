@@ -172,6 +172,8 @@ jobs:
             "## Next actions",
             ...result.next_actions.flatMap(item => [
               `- **${item.lane}** — ${item.action}`,
+              `  - Gate kind: ${item.gate_kind}`,
+              `  - Requires external input: ${item.requires_external_input ? "yes" : "no"}`,
               `  - Missing: ${item.missing.join(", ") || "none"}`,
               `  - Invalid: ${(item.invalid || []).map(issue => `${issue.name}: ${issue.reason}`).join("; ") || "none"}`,
             ]),
