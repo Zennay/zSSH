@@ -7,6 +7,13 @@ function fail(message) {
   throw new Error(message);
 }
 
+function failUserTokenVerification(status) {
+  fail(
+    `Cloudflare user-owned API token verification failed: HTTP ${status}; ` +
+    "CLOUDFLARE_API_TOKEN must be a user-owned token from My Profile > API Tokens",
+  );
+}
+
 export async function verifyCloudflareApiToken({
   apiToken,
   fetchImpl = fetch,
@@ -32,6 +39,10 @@ export async function verifyCloudflareApiToken({
     fail("Cloudflare token verification failed: network request failed");
   }
 
+  if (!response.ok) {
+    failUserTokenVerification(response.status);
+  }
+
   let body;
   try {
     body = await response.json();
@@ -39,11 +50,8 @@ export async function verifyCloudflareApiToken({
     fail(`Cloudflare token verification failed: invalid JSON (HTTP ${response.status})`);
   }
 
-  if (!response.ok || body?.success !== true) {
-    fail(
-      `Cloudflare user-owned API token verification failed: HTTP ${response.status}; ` +
-      "CLOUDFLARE_API_TOKEN must be a user-owned token from My Profile > API Tokens",
-    );
+  if (body?.success !== true) {
+    failUserTokenVerification(response.status);
   }
 
   const status = String(body?.result?.status || "").toLowerCase();
