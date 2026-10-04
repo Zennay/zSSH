@@ -102,6 +102,26 @@ test("verifier rejects untracked content added to an existing release directory"
   );
 });
 
+test("verifier rejects a tree object hash even when the release contents match", t => {
+  const { root, release } = materializeRelease();
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+
+  const treeSha = execFileSync(
+    "git",
+    ["-C", ROOT, "rev-parse", "HEAD^{tree}"],
+    { encoding: "utf8" },
+  ).trim();
+
+  assert.throws(
+    () => execFileSync(
+      process.execPath,
+      [VERIFIER, ROOT, treeSha, release],
+      { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] },
+    ),
+    /release SHA must resolve to a commit, got tree/,
+  );
+});
+
 test("verifier rejects a symlinked release root even when it points to exact contents", t => {
   const { root } = materializeRelease();
   t.after(() => rmSync(root, { recursive: true, force: true }));
