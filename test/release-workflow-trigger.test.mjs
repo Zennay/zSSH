@@ -52,6 +52,16 @@ test("release-critical pull_request and push path filters stay in parity", () =>
     assert.ok(pushPaths.includes(provenancePath), `push trigger must include ${provenancePath}`);
   }
 
+  for (const governancePath of [
+    ".github/workflows/main-protection-apply.yml",
+    "scripts/apply-main-protection.mjs",
+    "test/main-protection-apply.test.mjs",
+    "docs/research/main-protection-apply-2026-10-04.md",
+  ]) {
+    assert.ok(pullRequestPaths.includes(governancePath), `pull_request trigger must include governance path ${governancePath}`);
+    assert.ok(pushPaths.includes(governancePath), `push trigger must include governance path ${governancePath}`);
+  }
+
   for (const readinessPath of [
     ".github/workflows/openai-production-readiness.yml",
     "scripts/check-production-readiness-audit.mjs",
