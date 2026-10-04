@@ -2,6 +2,11 @@ name: OpenAI production readiness audit
 
 on:
   workflow_dispatch:
+  pull_request:
+    types:
+      - closed
+    branches:
+      - main
 
 permissions:
   contents: read
@@ -14,6 +19,7 @@ concurrency:
 jobs:
   provenance:
     name: Canonical main provenance
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.merged == true
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -21,7 +27,16 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - name: Require dispatched SHA to originate from a merged PR
+      - name: Bind merged PR event to canonical main SHA
+        if: github.event_name == 'pull_request'
+        shell: bash
+        env:
+          MERGED_PR_SHA: ${{ github.event.pull_request.merge_commit_sha }}
+        run: |
+          set -Eeuo pipefail
+          test -n "$MERGED_PR_SHA"
+          test "$GITHUB_SHA" = "$MERGED_PR_SHA"
+      - name: Require candidate SHA to originate from a merged PR
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: node scripts/check-main-provenance.mjs
