@@ -48,6 +48,8 @@ const complete = {
   ZSSH_MAIN_BRANCH_PROTECTED: "1",
   ZSSH_CHATGPT_DESKTOP_REVIEWED: "1",
   ZSSH_CHATGPT_MOBILE_REVIEWED: "1",
+  ZSSH_CODEX_REVIEWED: "1",
+  ZSSH_CODEX_REVIEW_SHA256: "",
   ZSSH_OPENAI_DOMAIN_VERIFIED: "1",
   ZSSH_OPENAI_VERIFIED_MCP_ORIGIN: "https://zssh.cheapgpt.shop",
   ZSSH_OPENAI_TOOL_SCAN_VERIFIED: "1",
@@ -63,6 +65,7 @@ complete.ZSSH_CHATGPT_REVIEW_SHA256 = computeHostSurfaceReviewFingerprint({
   mcpUrl: complete.ZSSH_PLUGIN_MCP_URL,
   toolScanSha256: complete.ZSSH_OPENAI_TOOL_SCAN_SHA256,
 }).fingerprint;
+complete.ZSSH_CODEX_REVIEW_SHA256 = complete.ZSSH_CHATGPT_REVIEW_SHA256;
 
 test("classifies an empty production environment into actionable M5 lanes", () => {
   const result = buildProductionReadinessAudit({});
@@ -329,6 +332,29 @@ test("rejects reviewer login evidence from a different OAuth issuer origin", () 
   );
 });
 
+test("requires Codex review evidence bound to the exact current host-surface fingerprint", () => {
+  const missing = buildProductionReadinessAudit({
+    ...complete,
+    ZSSH_CODEX_REVIEWED: "",
+    ZSSH_CODEX_REVIEW_SHA256: "",
+  });
+  assert.equal(missing.ready.portal_and_host_attestations, false);
+  assert.ok(missing.lanes.portal_and_host_attestations.missing.includes("ZSSH_CODEX_REVIEWED"));
+  assert.ok(missing.lanes.portal_and_host_attestations.missing.includes("ZSSH_CODEX_REVIEW_SHA256"));
+
+  const stale = buildProductionReadinessAudit({
+    ...complete,
+    ZSSH_CODEX_REVIEW_SHA256: "0".repeat(64),
+  });
+  assert.equal(stale.ready.portal_and_host_attestations, false);
+  assert.ok(
+    stale.lanes.portal_and_host_attestations.invalid.some(
+      item => item.name === "ZSSH_CODEX_REVIEW_SHA256" && item.reason.includes("host-surface fingerprint"),
+    ),
+  );
+  assert.equal(stale.ready.final_release_config, false);
+});
+
 test("detects stale reviewer and domain bindings before the final probe", () => {
   const result = buildProductionReadinessAudit({
     ...complete,
@@ -468,6 +494,16 @@ test("protected readiness workflow proves merged-PR provenance before entering o
   );
 });
 
+
+test("protected release workflows carry Codex host-review attestations from openai-production", () => {
+  for (const workflow of [readinessWorkflow, publicReleaseWorkflow]) {
+    assert.ok(workflow.includes("ZSSH_CODEX_REVIEWED: ${{ vars.ZSSH_CODEX_REVIEWED }}"));
+    assert.ok(workflow.includes("ZSSH_CODEX_REVIEW_SHA256: ${{ vars.ZSSH_CODEX_REVIEW_SHA256 }}"));
+  }
+  assert.ok(releaseChecklist.includes("ZSSH_CODEX_REVIEWED=1"));
+  assert.ok(releaseChecklist.includes("ZSSH_CODEX_REVIEW_SHA256=<computed fingerprint>"));
+  assert.ok(reviewDoc.includes("Codex"));
+});
 
 test("canonical non-secret production defaults stay available without environment-variable provisioning", () => {
   const mcpDefault = "ZSSH_PLUGIN_MCP_URL: ${{ vars.ZSSH_PLUGIN_MCP_URL || 'https://zssh.cheapgpt.shop/mcp' }}";
