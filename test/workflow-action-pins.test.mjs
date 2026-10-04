@@ -86,3 +86,54 @@ test("all active external actions use reviewed Node 24-compatible action pins", 
     }
   }
 });
+
+
+test("active workflow shell source never directly interpolates github or inputs contexts", () => {
+  const workflowFiles = readdirSync(workflowsDir)
+    .filter((name) => name.endsWith(".yml") || name.endsWith(".yaml"))
+    .sort();
+
+  const unsafeExpression = /\$\{\{\s*(?:github|inputs)\./;
+
+  for (const name of workflowFiles) {
+    const workflow = readFileSync(join(workflowsDir.pathname, name), "utf8");
+    const lines = workflow.split("\n");
+
+    for (let index = 0; index < lines.length; index += 1) {
+      const runMatch = lines[index].match(/^(\s*)run:\s*(.*)$/);
+      if (!runMatch) continue;
+
+      const runIndent = runMatch[1].length;
+      const inline = runMatch[2].trim();
+
+      if (inline && !/^[>|][+-]?$/.test(inline)) {
+        assert.doesNotMatch(
+          inline,
+          unsafeExpression,
+          `${name}:${index + 1}: pass github/inputs context through env instead of interpolating it directly into run:`,
+        );
+        continue;
+      }
+
+      let end = index + 1;
+      while (end < lines.length) {
+        const line = lines[end];
+        if (!line.trim()) {
+          end += 1;
+          continue;
+        }
+        const indent = line.match(/^(\s*)/)?.[1].length || 0;
+        if (indent <= runIndent) break;
+        end += 1;
+      }
+
+      const script = lines.slice(index + 1, end).join("\n");
+      assert.doesNotMatch(
+        script,
+        unsafeExpression,
+        `${name}:${index + 1}: pass github/inputs context through env instead of interpolating it directly into shell source`,
+      );
+      index = end - 1;
+    }
+  }
+});
