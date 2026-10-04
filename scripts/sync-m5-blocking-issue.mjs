@@ -110,7 +110,7 @@ export function renderM5BlockingIssue({ readiness, canonicalSha, repository = "Z
   const runId = String(workflowRunId || "").trim();
   if (runId && !/^\d+$/.test(runId)) fail("workflowRunId must be a positive GitHub Actions run ID");
   const readinessRunLine = runId
-    ? \`- Readiness run: [\\\`\${runId}\\\`](https://github.com/\${repo}/actions/runs/\${runId})\`
+    ? `- Readiness run: [\`${runId}\`](https://github.com/${repo}/actions/runs/${runId})`
     : null;
 
   const gate = readiness.blocking_gate;
