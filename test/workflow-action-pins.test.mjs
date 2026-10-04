@@ -88,12 +88,12 @@ test("all active external actions use reviewed Node 24-compatible action pins", 
 });
 
 
-test("active workflow shell source never directly interpolates github or inputs contexts", () => {
+test("active workflow shell source never directly interpolates sensitive or operator-controlled contexts", () => {
   const workflowFiles = readdirSync(workflowsDir)
     .filter((name) => name.endsWith(".yml") || name.endsWith(".yaml"))
     .sort();
 
-  const unsafeExpression = /\$\{\{\s*(?:github|inputs)\./;
+  const unsafeExpression = /\$\{\{\s*(?:github|inputs|secrets|vars)\./;
 
   for (const name of workflowFiles) {
     const workflow = readFileSync(join(workflowsDir.pathname, name), "utf8");
@@ -110,7 +110,7 @@ test("active workflow shell source never directly interpolates github or inputs 
         assert.doesNotMatch(
           inline,
           unsafeExpression,
-          `${name}:${index + 1}: pass github/inputs context through env instead of interpolating it directly into run:`,
+          `${name}:${index + 1}: pass github/inputs/secrets/vars context through env instead of interpolating it directly into run:`,
         );
         continue;
       }
@@ -131,7 +131,7 @@ test("active workflow shell source never directly interpolates github or inputs 
       assert.doesNotMatch(
         script,
         unsafeExpression,
-        `${name}:${index + 1}: pass github/inputs context through env instead of interpolating it directly into shell source`,
+        `${name}:${index + 1}: pass github/inputs/secrets/vars context through env instead of interpolating it directly into shell source`,
       );
       index = end - 1;
     }
