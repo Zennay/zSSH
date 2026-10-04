@@ -378,10 +378,20 @@ export function buildProductionReadinessAudit(env = process.env) {
     });
   }
 
+  const internalActions = nextActions.filter(item => !item.requires_external_input);
+  const externalActions = nextActions.filter(item => item.requires_external_input);
+  const executionState =
+    internalActions.length > 0
+      ? "internal_action_available"
+      : externalActions.length > 0
+        ? "external_input_required"
+        : "ready_for_protected_probe";
+
   return {
-    schema_version: 2,
+    schema_version: 3,
     phase: "M5",
     goal: "public-plugin production submission",
+    execution_state: executionState,
     ready: {
       repository_governance: lanes.repository_governance.ready,
       dns_publication: lanes.dns_publication.ready,
@@ -392,9 +402,9 @@ export function buildProductionReadinessAudit(env = process.env) {
     },
     lanes,
     final_release_config: releaseConfig,
-    external_input_gates: nextActions
-      .filter(item => item.requires_external_input)
-      .map(item => item.lane),
+    external_input_gates: externalActions.map(item => item.lane),
+    next_internal_actions: internalActions,
+    next_external_action: externalActions[0] || null,
     next_actions: nextActions,
   };
 }
