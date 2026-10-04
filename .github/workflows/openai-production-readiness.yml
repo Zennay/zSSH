@@ -22,6 +22,8 @@ jobs:
     if: github.event_name == 'workflow_dispatch' || github.event.pull_request.merged == true
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    outputs:
+      main_protected: ${{ steps.main-protection.outputs.protected }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -40,6 +42,22 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: node scripts/check-main-provenance.mjs
+      - name: Inspect live main protection
+        id: main-protection
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -Eeuo pipefail
+          REPORT_PATH="$RUNNER_TEMP/zssh-main-protection-status.json"
+          node scripts/check-main-protection.mjs --public-status | sed "s/^ZSSH_MAIN_PROTECTION_STATUS //" | tee "$REPORT_PATH"
+          PROTECTED="$(node --input-type=module - "$REPORT_PATH" <<\'NODE\'
+          import { readFileSync } from "node:fs";
+          const result = JSON.parse(readFileSync(process.argv[2], "utf8"));
+          process.stdout.write(result.protected === true ? "1" : "0");
+          NODE
+          )"
+          echo "protected=$PROTECTED" >> "$GITHUB_OUTPUT"
 
   public_origin:
     name: Observe public production origin
@@ -101,6 +119,7 @@ jobs:
       ZSSH_REVIEW_LOGIN_VERIFIED_URL: ${{ vars.ZSSH_REVIEW_LOGIN_VERIFIED_URL }}
       ZSSH_REVIEW_CREDENTIALS_VERIFIED: ${{ vars.ZSSH_REVIEW_CREDENTIALS_VERIFIED }}
       ZSSH_MAIN_PROTECTION_VERIFIED: ${{ vars.ZSSH_MAIN_PROTECTION_VERIFIED }}
+      ZSSH_MAIN_BRANCH_PROTECTED: ${{ needs.provenance.outputs.main_protected }}
       ZSSH_CHATGPT_DESKTOP_REVIEWED: ${{ vars.ZSSH_CHATGPT_DESKTOP_REVIEWED }}
       ZSSH_CHATGPT_MOBILE_REVIEWED: ${{ vars.ZSSH_CHATGPT_MOBILE_REVIEWED }}
       ZSSH_CHATGPT_REVIEW_SHA256: ${{ vars.ZSSH_CHATGPT_REVIEW_SHA256 }}
