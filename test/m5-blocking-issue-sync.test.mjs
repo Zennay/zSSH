@@ -138,6 +138,18 @@ test("renders the no-blocker state without inventing a gate", () => {
   );
 });
 
+test("rejects stale or unknown readiness receipt schemas", () => {
+  for (const schemaVersion of [4, 6]) {
+    assert.throws(
+      () => renderM5BlockingIssue({
+        readiness: receipt({ schema_version: schemaVersion }),
+        canonicalSha: sha,
+      }),
+      new RegExp(`schema v5 is required; received v${schemaVersion}`),
+    );
+  }
+});
+
 test("rejects mismatched blocking action metadata", () => {
   assert.throws(
     () => renderM5BlockingIssue({
