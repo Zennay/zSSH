@@ -201,6 +201,16 @@ npm run agent:init -- zt_example1234 ~/.config/zssh/agent-ed25519.pem
 
 The helper writes the target-local Ed25519 private key mode 0600 inside a mode-0700 directory, never prints it, refuses overwrite, and outputs a `gateway_public_key_config` object containing only the public key. Copy that public record into the gateway file configured through `ZSSH_AGENT_PUBLIC_KEYS_FILE`. If the target ID argument is omitted, the helper generates a random opaque `zt_...` ID.
 
+For the OpenAI reviewer target, prepare the target identity and review files together:
+
+```bash
+npm run review:target
+```
+
+By default this creates `~/zssh-review/sample.txt`, reserves `~/zssh-review/output.txt` for the write roundtrip, and creates/reuses `~/.config/zssh/agent-ed25519.pem`. It also persists `~/.config/zssh/reviewer-agent-public.json` containing only the opaque target ID and gateway public-key configuration. The command is idempotent and prints a secret-safe JSON report with `ZSSH_REVIEW_FILE`, `ZSSH_REVIEW_WRITE_FILE`, the target ID, and a public-key SHA-256 fingerprint. It refuses partial identity state instead of silently replacing a key.
+
+Override the reviewer root or target identity locations with `ZSSH_REVIEW_ROOT`, `ZSSH_REVIEW_AGENT_KEY_FILE`, `ZSSH_REVIEW_AGENT_PUBLIC_FILE`, and optionally `ZSSH_REVIEW_TARGET_ID`.
+
 The gateway's agent endpoints use signed POST requests with a target ID, timestamp, nonce, and SHA-256 body binding. Replays and stale timestamps fail closed. A new authenticated agent session replaces only the previous session for the same target. Tool forwarding is bounded to the existing public zSSH surface; raw shell, private Git/systemd operations, and arbitrary target URLs are not exposed through this transport.
 
 Run the target-side agent directly for development, or install the persistent user service:
