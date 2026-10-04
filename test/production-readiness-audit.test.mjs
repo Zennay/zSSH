@@ -68,8 +68,21 @@ test("classifies an empty production environment into actionable M5 lanes", () =
   ]);
   assert.deepEqual(result.lanes.dns_publication.invalid, []);
   assert.equal(result.next_actions[0].lane, "repository_governance");
+  assert.equal(result.next_actions[0].gate_kind, "derived_evidence");
+  assert.equal(result.next_actions[0].requires_external_input, false);
+  assert.equal(result.next_actions[0].action.includes("set ZSSH_MAIN_PROTECTION_VERIFIED"), false);
   assert.equal(result.next_actions[1].lane, "dns_publication");
+  assert.equal(result.next_actions[1].gate_kind, "provider_credentials");
+  assert.equal(result.next_actions[1].requires_external_input, true);
   assert.equal(result.next_actions[2].lane, "auth0_preflight");
+  assert.equal(result.next_actions[2].gate_kind, "provider_configuration");
+  assert.equal(result.next_actions[2].requires_external_input, true);
+  assert.deepEqual(result.external_input_gates, [
+    "dns_publication",
+    "auth0_preflight",
+    "reviewer_fixture",
+    "portal_and_host_attestations",
+  ]);
 });
 
 test("rejects malformed configured values instead of reporting a false-ready lane", () => {
@@ -282,4 +295,10 @@ test("operator docs do not require the retired mutable governance attestation", 
   assert.ok(releaseChecklist.includes("issue #100"));
   assert.ok(releaseChecklist.includes("No persistent operator-set governance attestation is required."));
   assert.ok(reviewDoc.includes("Repository governance is derived live from protected main + immutable issue #100 negative-proof evidence."));
+});
+
+
+test("readiness workflow summary exposes gate classification for autonomous consumers", () => {
+  assert.ok(readinessWorkflow.includes("Gate kind: ${item.gate_kind}"));
+  assert.ok(readinessWorkflow.includes('Requires external input: ${item.requires_external_input ? "yes" : "no"}'));
 });
