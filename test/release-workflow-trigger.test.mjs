@@ -68,6 +68,16 @@ test("release-critical pull_request and push path filters stay in parity", () =>
     assert.ok(pushPaths.includes(authProviderPath), `push trigger must include OAuth-provider path ${authProviderPath}`);
   }
 
+  for (const governancePath of [
+    ".github/workflows/main-protection.yml",
+    "scripts/apply-main-protection.mjs",
+    "test/main-protection.test.mjs",
+    "docs/research/main-protection-automation-2026-10-04.md",
+  ]) {
+    assert.ok(pullRequestPaths.includes(governancePath), `pull_request trigger must include repository-governance path ${governancePath}`);
+    assert.ok(pushPaths.includes(governancePath), `push trigger must include repository-governance path ${governancePath}`);
+  }
+
   for (const runtimePath of [
     "server.mjs",
     "rate-limit.mjs",
