@@ -117,7 +117,9 @@ if ! grep -q '^ZSSH_CLIENT_TOKENS_FILE=' "$ENV_FILE"; then
 fi
 chmod 600 "$ENV_FILE"
 
-# Everything installed after staging must come from the immutable release,\n# never from the mutable source checkout.\nsed "s|@NODE_BIN@|$NODE_BIN|g" "$RELEASE/deploy/zssh.service.in" > "$UNIT"
+# Everything installed after staging must come from the immutable release,
+# never from the mutable source checkout.
+sed "s|@NODE_BIN@|$NODE_BIN|g" "$RELEASE/deploy/zssh.service.in" > "$UNIT"
 chmod 600 "$UNIT"
 
 PREVIOUS=""
