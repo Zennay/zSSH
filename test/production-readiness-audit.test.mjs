@@ -112,7 +112,7 @@ test("derives Auth0 management origin for canonical tenant issuers", () => {
 test("requires explicit canonical Auth0 management origin for custom issuer domains", () => {
   const result = buildProductionReadinessAudit({
     ...complete,
-    ZSSH_OAUTH_ISSUER: "https://login.example.com/",
+    ZSSH_OAUTH_ISSUER: "https://login.cheapgpt.shop/",
     AUTH0_MANAGEMENT_BASE_URL: "",
   });
 
