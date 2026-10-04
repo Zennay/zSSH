@@ -2,7 +2,7 @@
 
 ## Scope
 
-This note records an M5 GitHub Actions hardening decision for the protected Cloudflare DNS, Auth0 production-readiness, and aggregate OpenAI production-readiness workflows.
+This note records an M5 GitHub Actions hardening decision for the protected Cloudflare DNS, Auth0 production-readiness, aggregate OpenAI production-readiness, and final OpenAI production-release workflows.
 
 ## Primary sources
 
@@ -20,6 +20,8 @@ The production DNS and Auth0 workflows already fail closed on canonical protecte
 - `AUTH0_MANAGEMENT_API_TOKEN` is referenced only by the Auth0 provider validation step in the dedicated Auth0 workflow.
 - The aggregate OpenAI production-readiness audit keeps `CLOUDFLARE_API_TOKEN`, `AUTH0_MANAGEMENT_API_TOKEN`, `ZSSH_REVIEW_ACCESS_TOKEN`, and `OPENAI_APPS_CHALLENGE_TOKEN` out of job-level `env`; those four secrets are injected only into the single classifier step that converts their presence/validity into a secret-safe readiness receipt.
 - Repository checkout, Node setup, canonical-main provenance, branch-protection checks, DNS convergence observation, summaries, issue synchronization, and artifact upload receive no provider/reviewer/challenge credential.
-- Regression tests fail if these protected secrets return to the readiness job-level environment or disappear from the classifier step.
+- The final production-release job also keeps `ZSSH_REVIEW_ACCESS_TOKEN`, `AUTH0_MANAGEMENT_API_TOKEN`, and `OPENAI_APPS_CHALLENGE_TOKEN` out of job-level `env`. The two release-config checks receive all three, Auth0 qualification receives only the Auth0 management token, and the end-to-end submission probe receives only the reviewer access token plus OpenAI challenge token.
+- Final-release ingress checks, artifact upload, Verify Domain binding, bundle construction, Scan Tools binding, evidence synthesis, and release artifact upload receive none of those three protected values.
+- Regression tests fail if protected secrets return to readiness/final-release job scope, disappear from the steps that require them, or appear in a final-release step that does not need them.
 
 This does not change provider permissions, production targets, or the external-input gate. It narrows credential exposure inside already protected workflows.
