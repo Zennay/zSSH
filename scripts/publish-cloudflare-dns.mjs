@@ -144,7 +144,7 @@ export async function reconcileCloudflareDns({
   const listed = await cloudflareJson(fetchImpl, collectionUrl, { method: "GET", headers }, "DNS record lookup");
   const records = Array.isArray(listed.result) ? listed.result : [];
   const exact = records.filter(record => normalizeDnsName(record?.name) === hostname);
-  const blockers = exact.filter(record => record?.type === "CNAME" || record?.type === "NS");
+  const blockers = exact.filter(record => ["AAAA", "CNAME", "NS"].includes(record?.type));
   if (blockers.length > 0) {
     fail(`DNS name ${hostname} has a conflicting ${blockers[0].type} record; refusing mutation`);
   }
