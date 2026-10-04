@@ -73,3 +73,16 @@ The deep `repo:main-protection:verify` command remains the authoritative check f
 For ordinary GitHub Actions, `repo:main-protection:status` now uses the non-admin branch metadata endpoint. This mode does not pretend to prove the detailed policy. It proves only the necessary prerequisite that GitHub currently reports `main` as protected.
 
 The protected M5 readiness workflow feeds that live boolean into the repository-governance lane. The final production workflow executes the same metadata check with `--require-protected` before entering the `openai-production` environment. Therefore a stale manual `ZSSH_MAIN_PROTECTION_VERIFIED=1` cannot make a release candidate pass while GitHub currently reports `main` unprotected.
+
+
+## Repository-owned application lane
+
+The repository now also has a guarded mutation path for applying the canonical policy instead of leaving issue #100 as a UI-only operation.
+
+The manual `zSSH main protection` workflow first proves canonical `main` merged-PR provenance, then enters the separate protected `repository-governance` environment. Only that protected job can read `ZSSH_REPO_ADMIN_TOKEN`, and mutation additionally requires the literal confirmation `PROTECT_ZSSH_MAIN`.
+
+The applied policy requires strict status checks, binds the `test` check to GitHub Actions app id `15368`, requires PR-based changes with zero approving reviewers for the solo-maintainer flow, includes administrators, requires conversation resolution, and disables force pushes and branch deletion. After the PUT, the helper re-reads effective protection and reuses the existing deep verifier semantics so a partial or unexpected policy fails closed.
+
+GitHub's branch-protection REST endpoint requires repository Administration (write) to update policy. The routine ChatGPT GitHub integration does not have that permission, so the mutation credential is deliberately isolated from normal CI rather than broadening routine automation credentials.
+
+The workflow does **not** set `ZSSH_MAIN_PROTECTION_VERIFIED=1`. Issue #100 remains open until a controlled normal direct-write attempt is rejected and that negative evidence is captured.
