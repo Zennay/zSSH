@@ -202,7 +202,7 @@ test("protected readiness workflow proves merged-PR provenance before entering o
 
   assert.match(
     readinessWorkflow,
-    /check-main-branch-protection\.mjs[\s\S]*ZSSH_MAIN_BRANCH_PROTECTED=/,
+    /check-main-branch-protection\.mjs[\s\S]*ZSSH_MAIN_BRANCH_PROTECTED:\s*\$\{\{ needs\.provenance\.outputs\.main_protected \}\}/,
     "readiness workflow must derive live protection state before classifying repository governance",
   );
 
