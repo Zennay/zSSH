@@ -12,6 +12,7 @@ import {
   validateProductionServerInfo,
   validatePublicMcpUrl,
 } from "./release-contract.mjs";
+import { assertAnnotationJustificationsMatchTools, loadAnnotationJustifications } from "./annotation-justifications.mjs";
 
 function required(name) {
   const value = String(process.env[name] || "").trim();
@@ -213,6 +214,11 @@ try {
     }
   }
 
+  const annotationJustifications = assertAnnotationJustificationsMatchTools(
+    tools,
+    await loadAnnotationJustifications(),
+  );
+
   const profileTool = byName.get("get_profile");
   if (profileTool?._meta?.["openai/profile"] !== true) {
     throw new Error("get_profile is not marked as the OpenAI profile tool");
@@ -295,6 +301,8 @@ try {
     tool_scan_sha256: toolScanSha256,
     forbidden_generic_tools_absent: true,
     annotations_validated: true,
+    annotation_justifications_validated: true,
+    annotation_justifications_sha256: annotationJustifications.sha256,
     oauth_security_validated: true,
     oauth_tool_scope_contract_validated: true,
     oauth_authorization_server_metadata_validated: true,
