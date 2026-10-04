@@ -56,10 +56,12 @@ complete.ZSSH_CHATGPT_REVIEW_SHA256 = computeHostSurfaceReviewFingerprint({
 
 test("classifies an empty production environment into actionable M5 lanes", () => {
   const result = buildProductionReadinessAudit({});
-  assert.equal(result.schema_version, 3);
+  assert.equal(result.schema_version, 4);
   assert.equal(result.phase, "M5");
   assert.equal(result.execution_state, "internal_action_available");
   assert.deepEqual(result.internal_action_gates, ["repository_governance"]);
+  assert.equal(result.blocking_gate, "repository_governance");
+  assert.equal(result.blocking_action?.requires_external_input, false);
   assert.equal(result.ready.repository_governance, false);
   assert.equal(result.ready.dns_publication, false);
   assert.equal(result.ready.auth0_preflight, false);
@@ -115,6 +117,9 @@ test("reports external-input-only when no repository-owned action remains", () =
     "auth0_preflight",
     "reviewer_fixture",
   ]);
+  assert.equal(result.blocking_gate, "dns_publication");
+  assert.equal(result.blocking_action?.lane, "dns_publication");
+  assert.equal(result.blocking_action?.requires_external_input, true);
 });
 
 test("rejects malformed configured values instead of reporting a false-ready lane", () => {
@@ -234,6 +239,8 @@ test("never serializes protected values", () => {
   assert.equal(result.execution_state, "ready");
   assert.deepEqual(result.internal_action_gates, []);
   assert.deepEqual(result.external_input_gates, []);
+  assert.equal(result.blocking_gate, null);
+  assert.equal(result.blocking_action, null);
 });
 
 test("protected readiness workflow runs automatically only for merged PRs and keeps manual dispatch", () => {
@@ -342,6 +349,7 @@ test("operator docs do not require the retired mutable governance attestation", 
 
 test("readiness workflow summary exposes gate classification for autonomous consumers", () => {
   assert.ok(readinessWorkflow.includes("Execution state: ${result.execution_state}"));
+  assert.ok(readinessWorkflow.includes("Blocking gate: ${result.blocking_gate || \"none\"}"));
   assert.ok(readinessWorkflow.includes("Internal action gates: ${result.internal_action_gates.join(\", \") || \"none\"}"));
   assert.ok(readinessWorkflow.includes("External input gates: ${result.external_input_gates.join(\", \") || \"none\"}"));
   assert.ok(readinessWorkflow.includes("Gate kind: ${item.gate_kind}"));
