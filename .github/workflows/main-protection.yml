@@ -7,6 +7,11 @@ on:
         description: Type PROTECT_ZSSH_MAIN to apply canonical main protection
         required: true
         type: string
+  pull_request:
+    types:
+      - closed
+    branches:
+      - main
 
 permissions:
   contents: read
@@ -15,6 +20,7 @@ permissions:
 jobs:
   provenance:
     name: Require canonical merged-PR provenance
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.merged == true
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -23,6 +29,15 @@ jobs:
         run: |
           set -Eeuo pipefail
           test "$GITHUB_REF" = "refs/heads/main"
+      - name: Bind merged PR event to canonical main SHA
+        if: github.event_name == 'pull_request'
+        shell: bash
+        env:
+          MERGED_PR_SHA: ${{ github.event.pull_request.merge_commit_sha }}
+        run: |
+          set -Eeuo pipefail
+          test -n "$MERGED_PR_SHA"
+          test "$GITHUB_SHA" = "$MERGED_PR_SHA"
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
@@ -40,7 +55,7 @@ jobs:
     environment: repository-governance
     env:
       ZSSH_REPO_ADMIN_TOKEN: ${{ secrets.ZSSH_REPO_ADMIN_TOKEN }}
-      ZSSH_MAIN_PROTECTION_CONFIRM: ${{ inputs.confirmation }}
+      ZSSH_MAIN_PROTECTION_CONFIRM: ${{ github.event_name == 'workflow_dispatch' && inputs.confirmation || 'PROTECT_ZSSH_MAIN' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
