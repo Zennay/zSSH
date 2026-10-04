@@ -6,23 +6,21 @@ The GitHub-hosted public ingress preflight produces production evidence, so its 
 
 Manual dispatch accepts no URL override. It must run from `refs/heads/main`, pass merged-PR provenance, require live branch protection, and prove that `GITHUB_SHA` is the exact current GitHub-reported `main` revision before network evidence is collected.
 
-The automatic `workflow_run` path remains chained only from a successful canonical `zSSH production DNS publish` run, verifies the source branch and repository before checkout, and proves that the source run's `head_sha` is still the exact current protected `main` revision before network evidence is collected. This prevents rerunning an older successful DNS publication from minting fresh production ingress evidence after `main` has advanced.
+The production evidence workflow is intentionally **not** chained directly from `zSSH production DNS publish`. DNS convergence only makes the next repository-owned gate executable; it does not prove that the isolated public gateway and Caddy ingress have been promoted on the VPS. The canonical sequence is DNS convergence → bounded VPS public-gateway/Caddy rollout → explicit external ingress preflight. Keeping the preflight on guarded manual dispatch prevents an expected false-negative run in the gap between DNS publication and ingress rollout.
 
 The reusable `scripts/check-public-ingress.mjs` checker remains generic for tests and non-production use; only the production evidence workflow is target-locked.
 
 ## Regression guard
 
-`test/public-ingress-preflight.test.mjs` requires the canonical URL, rejects `inputs.mcp_url`, and locks manual evidence to exact current protected main.
+`test/public-ingress-preflight.test.mjs` requires the canonical URL, rejects `inputs.mcp_url`, requires guarded manual dispatch, rejects a direct `workflow_run` dependency on DNS publication, and locks evidence to exact current protected main.
 
-## GitHub Actions source-freshness rationale — 2026-10-04
+## Post-DNS sequencing rationale — 2026-10-04
 
-GitHub documents that a `workflow_run`-triggered workflow receives `GITHUB_SHA` / `GITHUB_REF` for the default branch, not the upstream workflow's source revision. The upstream revision therefore has to be bound explicitly through `github.event.workflow_run.head_sha` when production evidence must correspond to the exact producer commit.
+The live M5 handoff classifies `public_ingress` as an internal action only **after** public DNS has converged. On the current production topology the public gateway/Caddy rollout is a separate VPS mutation and may not exist when the DNS workflow finishes. A DNS-completion `workflow_run` trigger therefore races ahead of the required rollout and can create a red ingress run that represents sequencing, not a release defect.
 
-Primary sources:
-- https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#workflow_run
-- https://docs.github.com/en/actions/reference/security/secure-use
+The external preflight is now dispatched only after the bounded VPS rollout has completed. Its existing merged-PR provenance, protected-branch and exact-current-`main` checks still bind the resulting evidence to canonical code. The final protected release also reruns the same external checker, so removing the premature DNS trigger does not weaken the final release gate.
 
-The source SHA is passed as an intermediate environment variable and compared against live GitHub branch metadata by the existing branch-protection verifier. No provider credential, public tool surface, OAuth scope, or DNS destination changes.
+No provider credential, public tool surface, OAuth scope, DNS destination or VPS permission changes.
 
 
 ## Direct-origin DNS binding — 2026-10-04
