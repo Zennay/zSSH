@@ -131,7 +131,7 @@ test("apply creates the exact DNS-only A record", async () => {
     calls.push({ url: String(url), init });
     if (calls.length === 1) return response([]);
     return response({ id: recordId, type: "A", name: "zssh.cheapgpt.shop", content: "198.244.191.182", ttl: 1, proxied: false });
-  }, { apply: true }));
+  }, { apply: true, expectedPlanAction: "would_create" }));
   assert.equal(result.action, "created");
   assert.equal(result.ttl, 1);
   assert.equal(calls[1].init.method, "POST");
@@ -323,6 +323,62 @@ test("apply fails closed when TTL or proxy state changes after the reviewed dry-
       /state changed since the reviewed DNS plan/,
     );
   }
+});
+
+test("apply binds create plans to continued record absence", async () => {
+  await assert.rejects(
+    reconcileCloudflareDns(baseArgs(async () => response([
+      {
+        id: recordId,
+        type: "A",
+        name: "zssh.cheapgpt.shop",
+        content: "198.244.191.182",
+        ttl: 1,
+        proxied: false,
+      },
+    ]), {
+      apply: true,
+      expectedPlanAction: "would_create",
+    })),
+    /changed since the reviewed create plan/,
+  );
+});
+
+test("apply binds update plans before accepting a newly converged noop", async () => {
+  const reviewed = {
+    id: recordId,
+    type: "A",
+    name: "zssh.cheapgpt.shop",
+    content: "203.0.113.10",
+    ttl: 300,
+    proxied: true,
+  };
+  const converged = {
+    ...reviewed,
+    content: "198.244.191.182",
+    ttl: 1,
+    proxied: false,
+  };
+
+  await assert.rejects(
+    reconcileCloudflareDns(baseArgs(async () => response([converged]), {
+      apply: true,
+      expectedCurrentIpv4: reviewed.content,
+      expectedCurrentStateSha256: cloudflareDnsRecordStateSha256(reviewed),
+      expectedPlanAction: "would_update",
+    })),
+    /state changed since the reviewed DNS plan/,
+  );
+});
+
+test("apply rejects unknown reviewed plan actions", async () => {
+  await assert.rejects(
+    reconcileCloudflareDns(baseArgs(async () => response([]), {
+      apply: true,
+      expectedPlanAction: "noop",
+    })),
+    /ZSSH_DNS_EXPECTED_PLAN_ACTION/,
+  );
 });
 
 test("apply fails closed when an A record disappears after the reviewed dry-run plan", async () => {
