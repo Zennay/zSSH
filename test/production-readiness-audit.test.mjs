@@ -87,6 +87,10 @@ test("classifies an empty production environment into actionable M5 lanes", () =
   assert.equal(result.next_actions[1].lane, "dns_publication");
   assert.equal(result.next_actions[1].gate_kind, "provider_credentials");
   assert.equal(result.next_actions[1].requires_external_input, true);
+  assert.match(result.next_actions[1].action, /user-owned Cloudflare API token/i);
+  assert.match(result.next_actions[1].action, /My Profile > API Tokens/);
+  assert.match(result.next_actions[1].action, /\/user\/tokens\/verify/);
+  assert.match(result.next_actions[1].action, /do not use an Account API token/i);
   assert.equal(result.next_actions[2].lane, "auth0_preflight");
   assert.equal(result.next_actions[2].gate_kind, "provider_configuration");
   assert.equal(result.next_actions[2].requires_external_input, true);
