@@ -29,6 +29,8 @@ const REQUIRED_RELEASE_CONFIG = [
   "ZSSH_CHATGPT_DESKTOP_REVIEWED",
   "ZSSH_CHATGPT_MOBILE_REVIEWED",
   "ZSSH_CHATGPT_REVIEW_SHA256",
+  "ZSSH_CODEX_REVIEWED",
+  "ZSSH_CODEX_REVIEW_SHA256",
   "ZSSH_OPENAI_DOMAIN_VERIFIED",
   "ZSSH_OPENAI_VERIFIED_MCP_ORIGIN",
   "ZSSH_OPENAI_TOOL_SCAN_VERIFIED",
@@ -144,6 +146,17 @@ export function validatePublicReleaseConfig(env = process.env) {
     requireValue(env, "ZSSH_OPENAI_TOOL_SCAN_SHA256"),
     requireValue(env, "ZSSH_CHATGPT_REVIEW_SHA256")
   );
+  const codexReviewed = requireValue(env, "ZSSH_CODEX_REVIEWED");
+  if (codexReviewed !== "1") {
+    fail("ZSSH_CODEX_REVIEWED must be exactly 1 only after all five positive and three negative reviewer cases have passed on the production plugin in Codex");
+  }
+  const codexReviewSha256 = requireValue(env, "ZSSH_CODEX_REVIEW_SHA256");
+  if (!/^[a-f0-9]{64}$/.test(codexReviewSha256)) {
+    fail("ZSSH_CODEX_REVIEW_SHA256 must be the 64-character lowercase host-surface fingerprint from the exact production plugin reviewed in Codex");
+  }
+  if (codexReviewSha256 !== chatgptReviewBinding.chatgpt_review_sha256) {
+    fail("Codex review attestation is stale: ZSSH_CODEX_REVIEW_SHA256 must match the exact production endpoint, tool contract, and reviewed host-surface fingerprint");
+  }
   const openaiDomainVerified = requireValue(env, "ZSSH_OPENAI_DOMAIN_VERIFIED");
   if (openaiDomainVerified !== "1") {
     fail("ZSSH_OPENAI_DOMAIN_VERIFIED must be exactly 1 only after Verify Domain has passed in the OpenAI plugin submission portal");
@@ -186,6 +199,8 @@ export function validatePublicReleaseConfig(env = process.env) {
     chatgpt_desktop_reviewed: true,
     chatgpt_mobile_reviewed: true,
     chatgpt_review_sha256: chatgptReviewBinding.chatgpt_review_sha256,
+    codex_reviewed: true,
+    codex_review_sha256: codexReviewSha256,
     connection_card_sha256: chatgptReviewBinding.connection_card_sha256,
     openai_domain_verified: true,
     verified_mcp_origin: domainBinding.verified_mcp_origin,
@@ -223,6 +238,8 @@ export function runSelfTest() {
     ZSSH_CHATGPT_DESKTOP_REVIEWED: "1",
     ZSSH_CHATGPT_MOBILE_REVIEWED: "1",
     ZSSH_CHATGPT_REVIEW_SHA256: "",
+    ZSSH_CODEX_REVIEWED: "1",
+    ZSSH_CODEX_REVIEW_SHA256: "",
     ZSSH_OPENAI_DOMAIN_VERIFIED: "1",
     ZSSH_OPENAI_VERIFIED_MCP_ORIGIN: "https://mcp.zssh.dev",
     ZSSH_OPENAI_TOOL_SCAN_VERIFIED: "1",
@@ -238,6 +255,7 @@ export function runSelfTest() {
     mcpUrl: good.ZSSH_PLUGIN_MCP_URL,
     toolScanSha256: good.ZSSH_OPENAI_TOOL_SCAN_SHA256,
   }).fingerprint;
+  good.ZSSH_CODEX_REVIEW_SHA256 = good.ZSSH_CHATGPT_REVIEW_SHA256;
   const result = validatePublicReleaseConfig(good);
   if (!result.ok || result.endpoint_path !== "/mcp") fail("self-test valid configuration failed");
 
@@ -317,6 +335,8 @@ export function runSelfTest() {
   assertThrows(() => validatePublicReleaseConfig({ ...good, ZSSH_CHATGPT_DESKTOP_REVIEWED: "0" }), /ChatGPT desktop/);
   assertThrows(() => validatePublicReleaseConfig({ ...good, ZSSH_CHATGPT_MOBILE_REVIEWED: "0" }), /ChatGPT mobile/);
   assertThrows(() => validatePublicReleaseConfig({ ...good, ZSSH_CHATGPT_REVIEW_SHA256: "0".repeat(64) }), /attestation is stale/);
+  assertThrows(() => validatePublicReleaseConfig({ ...good, ZSSH_CODEX_REVIEWED: "0" }), /Codex/);
+  assertThrows(() => validatePublicReleaseConfig({ ...good, ZSSH_CODEX_REVIEW_SHA256: "0".repeat(64) }), /Codex review attestation is stale/);
   assertThrows(() => validatePublicReleaseConfig({ ...good, ZSSH_OPENAI_DOMAIN_VERIFIED: "0" }), /Verify Domain has passed/);
   assertThrows(() => validatePublicReleaseConfig({ ...good, ZSSH_OPENAI_VERIFIED_MCP_ORIGIN: "https://old-mcp.zssh.dev" }), /stale or for a different endpoint/);
   assertThrows(() => validatePublicReleaseConfig({ ...good, ZSSH_OPENAI_TOOL_SCAN_VERIFIED: "0" }), /Scan Tools has completed successfully/);
