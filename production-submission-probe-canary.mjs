@@ -145,7 +145,7 @@ try {
     throw new Error("production probe failed: " + result.stderr + "\n" + result.stdout);
   }
   const report = JSON.parse(result.stdout);
-  if (!report.ok || !report.annotations_validated || !report.review_file_write_roundtrip_green || !report.demo_recording_accessible || !report.no_redirect_contract_validated || !report.listing_urls_validated || !report.exact_resource_metadata_challenge_validated || !report.oauth_authorization_server_metadata_validated || !report.oauth_pkce_s256_validated || !/^[a-f0-9]{64}$/.test(String(report.tool_scan_sha256 || ""))) {
+  if (!report.ok || !report.annotations_validated || !report.review_file_write_roundtrip_green || !report.demo_recording_accessible || !report.no_redirect_contract_validated || !report.listing_urls_validated || !report.support_contact_routes_validated || !report.exact_resource_metadata_challenge_validated || !report.oauth_authorization_server_metadata_validated || !report.oauth_pkce_s256_validated || !/^[a-f0-9]{64}$/.test(String(report.tool_scan_sha256 || ""))) {
     throw new Error("production probe did not report all green gates: " + result.stdout);
   }
   console.log(JSON.stringify({ ok: true, production_submission_probe_canary: report }, null, 2));
