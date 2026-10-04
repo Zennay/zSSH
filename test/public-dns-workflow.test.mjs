@@ -34,14 +34,19 @@ test("reviewed marker can trigger the exact production DNS publish after main is
   assert.match(workflow, /test "\$\(cat \.github\/openai-production-dns-trigger\)" = "PUBLISH_ZSSH_PRODUCTION_DNS"/);
   assert.match(workflow, /node scripts\/check-main-provenance\.mjs/);
   assert.match(workflow, /check-main-protection\.mjs --public-status --require-protected/);
-  assert.match(
-    workflow,
-    /ZSSH_PUBLIC_BASE_URL: \$\{\{ github\.event_name == 'workflow_dispatch' && inputs\.public_base_url \|\| 'https:\/\/zssh\.cheapgpt\.shop' \}\}/,
-  );
-  assert.match(
-    workflow,
-    /ZSSH_PUBLIC_IPV4: \$\{\{ github\.event_name == 'workflow_dispatch' && inputs\.ipv4 \|\| '198\.244\.191\.182' \}\}/,
-  );
+  assert.match(workflow, /CLOUDFLARE_ZONE_NAME: cheapgpt\.shop/);
+  assert.match(workflow, /ZSSH_PUBLIC_BASE_URL: https:\/\/zssh\.cheapgpt\.shop/);
+  assert.match(workflow, /ZSSH_PUBLIC_IPV4: 198\.244\.191\.182/);
+});
+
+test("production DNS target cannot be overridden by manual dispatch inputs", () => {
+  assert.doesNotMatch(workflow, /^      public_base_url:/m);
+  assert.doesNotMatch(workflow, /^      ipv4:/m);
+  assert.doesNotMatch(workflow, /inputs\.public_base_url/);
+  assert.doesNotMatch(workflow, /inputs\.ipv4/);
+  assert.match(workflow, /CLOUDFLARE_ZONE_NAME: cheapgpt\.shop/);
+  assert.match(workflow, /ZSSH_PUBLIC_BASE_URL: https:\/\/zssh\.cheapgpt\.shop/);
+  assert.match(workflow, /ZSSH_PUBLIC_IPV4: 198\.244\.191\.182/);
 });
 
 test("manual DNS publication still requires explicit confirmation", () => {
