@@ -28,6 +28,7 @@ jobs:
           bash -n deploy/bootstrap-vps.sh
           bash -n deploy/bootstrap-linux.sh
           bash -n deploy/install-scoped-sudo.sh
+          bash -n deploy/install-target-agent.sh
           bash -n deploy/configure-tunnel.sh
           bash -n ops/diagnose-vps.sh
           bash -n ops/diagnose.sh
@@ -39,6 +40,7 @@ jobs:
           node --check agent-pairing-control.mjs
           node --check agent-runtime.mjs
           node --check agent.mjs
+          node --check scripts/create-agent-identity.mjs
           node --check public-site.mjs
           node --check auth-store.mjs
           node --check bin/zssh.mjs
