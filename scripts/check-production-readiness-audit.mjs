@@ -46,6 +46,8 @@ const PROVIDER_LANES = {
     "ZSSH_CHATGPT_DESKTOP_REVIEWED",
     "ZSSH_CHATGPT_MOBILE_REVIEWED",
     "ZSSH_CHATGPT_REVIEW_SHA256",
+    "ZSSH_CODEX_REVIEWED",
+    "ZSSH_CODEX_REVIEW_SHA256",
     "OPENAI_APPS_CHALLENGE_TOKEN",
   ],
 };
@@ -259,6 +261,8 @@ function validatePortalLane(env) {
     validateExactFlag(env, "ZSSH_CHATGPT_DESKTOP_REVIEWED"),
     validateExactFlag(env, "ZSSH_CHATGPT_MOBILE_REVIEWED"),
     validateSha256(env, "ZSSH_CHATGPT_REVIEW_SHA256"),
+    validateExactFlag(env, "ZSSH_CODEX_REVIEWED"),
+    validateSha256(env, "ZSSH_CODEX_REVIEW_SHA256"),
     validateMinLength(env, "OPENAI_APPS_CHALLENGE_TOKEN", 16),
   ]);
 
@@ -280,6 +284,19 @@ function validatePortalLane(env) {
     } catch {
       // URL syntax is reported by the lane-local validators.
     }
+  }
+
+  if (
+    configured(env, "ZSSH_CHATGPT_REVIEW_SHA256") &&
+    configured(env, "ZSSH_CODEX_REVIEW_SHA256") &&
+    value(env, "ZSSH_CHATGPT_REVIEW_SHA256") !== value(env, "ZSSH_CODEX_REVIEW_SHA256")
+  ) {
+    issues.push(
+      validationIssue(
+        "ZSSH_CODEX_REVIEW_SHA256",
+        "must match the exact host-surface fingerprint reviewed in ChatGPT and bound to the current production endpoint/tool contract",
+      ),
+    );
   }
 
   if (
@@ -446,7 +463,7 @@ export function buildProductionReadinessAudit(env = process.env) {
       lane: "portal_and_host_attestations",
       gate_kind: "portal_attestation",
       requires_external_input: true,
-      action: "Complete Verify Domain, Scan Tools, reviewer-login verification, and live desktop/mobile review before setting attestations.",
+      action: "Complete Verify Domain, Scan Tools, reviewer-login verification, live ChatGPT desktop/mobile review, and all five positive plus three negative cases in Codex before setting attestations.",
       missing: lanes.portal_and_host_attestations.missing,
       invalid: lanes.portal_and_host_attestations.invalid,
     });
