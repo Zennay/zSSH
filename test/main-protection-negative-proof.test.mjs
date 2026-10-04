@@ -36,7 +36,11 @@ function canonicalProtection() {
   };
 }
 
-function fixtureFetch({ finalStatus = 422, finalBody = { message: "Changes must be made through a pull request." }, admin = false } = {}) {
+function fixtureFetch({
+  finalStatus = 422,
+  finalBody = { message: "Changes must be made through a pull request." },
+  admin = false,
+} = {}) {
   const currentSha = "a".repeat(40);
   const treeSha = "b".repeat(40);
   const canarySha = "c".repeat(40);
@@ -70,9 +74,30 @@ test("controlled canary proves a write-capable non-admin token is rejected by br
   assert.equal(result.direct_write_rejected, true);
   assert.equal(result.rejection_status, 422);
   assert.equal(result.canary_token_admin, false);
+  assert.equal(result.deep_protection_verified, true);
   const patch = fixture.calls.find((call) => call.options.method === "PATCH");
   assert.ok(patch);
   assert.deepEqual(JSON.parse(patch.options.body), { sha: fixture.canarySha, force: false });
+});
+
+test("ephemeral Actions canary can prove rejection without an admin secret in the same job", async () => {
+  const fixture = fixtureFetch();
+  const result = await proveMainProtectionRejectsDirectWrite({
+    repository: "Zennay/zSSH",
+    adminToken: "",
+    canaryToken: "b".repeat(40),
+    confirmation: CONFIRMATION,
+    fetchImpl: fixture.fetchImpl,
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.deep_protection_verified, false);
+  assert.equal(result.public_protected_flag, true);
+  assert.equal(result.direct_write_rejected, true);
+  assert.equal(
+    fixture.calls.some((call) => call.url.endsWith("/branches/main/protection")),
+    false,
+  );
 });
 
 test("generic permission failure is not accepted as branch-protection evidence", async () => {
@@ -83,7 +108,7 @@ test("generic permission failure is not accepted as branch-protection evidence",
   await assert.rejects(
     proveMainProtectionRejectsDirectWrite({
       repository: "Zennay/zSSH",
-      adminToken: "a".repeat(40),
+      adminToken: "",
       canaryToken: "b".repeat(40),
       confirmation: CONFIRMATION,
       fetchImpl: fixture.fetchImpl,
@@ -97,7 +122,7 @@ test("admin canary token is refused before the direct-write attempt", async () =
   await assert.rejects(
     proveMainProtectionRejectsDirectWrite({
       repository: "Zennay/zSSH",
-      adminToken: "a".repeat(40),
+      adminToken: "",
       canaryToken: "b".repeat(40),
       confirmation: CONFIRMATION,
       fetchImpl: fixture.fetchImpl,
@@ -115,7 +140,7 @@ test("unexpected successful direct write fails critically rather than producing 
   await assert.rejects(
     proveMainProtectionRejectsDirectWrite({
       repository: "Zennay/zSSH",
-      adminToken: "a".repeat(40),
+      adminToken: "",
       canaryToken: "b".repeat(40),
       confirmation: CONFIRMATION,
       fetchImpl: fixture.fetchImpl,
@@ -124,12 +149,17 @@ test("unexpected successful direct write fails critically rather than producing 
   );
 });
 
-test("workflow gates the proof behind canonical main, public protection, and repository-governance secrets", () => {
+test("workflow self-boots the proof from canonical main with an ephemeral non-admin Actions token", () => {
+  assert.match(workflow, /push:/);
+  assert.match(workflow, /branches:\s*\n\s*- main/);
+  assert.match(workflow, /paths:/);
   assert.match(workflow, /test "\$GITHUB_REF" = "refs\/heads\/main"/);
   assert.match(workflow, /check-main-provenance\.mjs/);
   assert.match(workflow, /--public-status --require-protected/);
   assert.match(workflow, /environment: repository-governance/);
-  assert.match(workflow, /ZSSH_MAIN_PROTECTION_CANARY_TOKEN: \$\{\{ secrets\.ZSSH_MAIN_PROTECTION_CANARY_TOKEN \}\}/);
-  assert.doesNotMatch(workflow, /contents: write/);
+  assert.match(workflow, /ZSSH_MAIN_PROTECTION_CANARY_TOKEN: \$\{\{ github\.token \}\}/);
+  assert.match(workflow, /negative-proof:[\s\S]*permissions:[\s\S]*contents: write/);
+  assert.match(workflow, /github\.event_name == 'push'/);
+  assert.doesNotMatch(workflow, /secrets\.ZSSH_MAIN_PROTECTION_CANARY_TOKEN/);
   assert.doesNotMatch(workflow, /self-hosted/);
 });
