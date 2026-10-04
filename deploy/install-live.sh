@@ -62,7 +62,10 @@ if [[ ! -d "$RELEASE" ]]; then
   git -C "$SOURCE_ROOT" archive --format=tar "$REPO_SHA" | tar -x -C "$STAGE"
   rm -rf "$STAGE/node_modules" "$STAGE/data"
   "$NPM_BIN" install --prefix "$STAGE" --omit=dev --ignore-scripts --no-audit --no-fund
-  "$NPM_BIN" test --prefix "$STAGE"
+  # Test the exact archived stage while borrowing Git metadata only from the
+  # reviewed source checkout. This keeps .git out of the immutable release
+  # while allowing provenance-sensitive installer tests to validate the stage.
+  GIT_DIR="$SOURCE_ROOT/.git" GIT_WORK_TREE="$STAGE" "$NPM_BIN" test --prefix "$STAGE"
   mv "$STAGE" "$RELEASE"
 fi
 
