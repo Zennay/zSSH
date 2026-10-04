@@ -102,6 +102,18 @@ test("verifier rejects untracked content added to an existing release directory"
   );
 });
 
+test("verifier rejects a symlinked release root even when it points to exact contents", t => {
+  const { root } = materializeRelease();
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+
+  const releaseLink = path.join(root, "release-link");
+  symlinkSync("release", releaseLink, "dir");
+
+  assert.throws(
+    () => verify(releaseLink),
+    /release root must be a real directory, not a symlink/,
+  );
+});
 
 test("verifier permits only the npm-managed node_modules subtree when explicitly requested", t => {
   const { root, release } = materializeRelease();
