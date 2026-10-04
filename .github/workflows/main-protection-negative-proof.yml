@@ -23,8 +23,8 @@ jobs:
         run: |
           set -Eeuo pipefail
           test "$GITHUB_REF" = "refs/heads/main"
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 20
       - name: Verify canonical main provenance
@@ -47,8 +47,8 @@ jobs:
       ZSSH_MAIN_PROTECTION_CANARY_TOKEN: ${{ secrets.ZSSH_MAIN_PROTECTION_CANARY_TOKEN }}
       ZSSH_MAIN_PROTECTION_PROOF_CONFIRM: ${{ inputs.confirmation }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 20
       - name: Attempt controlled direct write and require policy rejection
@@ -59,7 +59,7 @@ jobs:
           set -Eeuo pipefail
           node scripts/prove-main-protection-rejection.mjs | tee "$RECEIPT_PATH"
       - name: Upload non-secret rejection receipt
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: zssh-main-protection-negative-proof-${{ github.run_id }}
           path: ${{ runner.temp }}/zssh-main-protection-negative-proof.json
