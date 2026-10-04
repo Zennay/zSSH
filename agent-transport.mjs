@@ -344,6 +344,9 @@ export const AGENT_ENDPOINTS = Object.freeze([
   "/agent/v1/poll",
   "/agent/v1/result",
   "/agent/v1/disconnect",
+  "/agent/v1/pairings",
+  "/agent/v1/pairing/approve",
+  "/agent/v1/pairing/revoke",
 ]);
 
 export class OutboundAgentBroker {

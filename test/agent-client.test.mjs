@@ -33,6 +33,9 @@ test("target client signs every outbound agent request", async () => {
     if (pathname === "/agent/v1/poll") {
       return new Response(JSON.stringify({ command: null }), { status: 200 });
     }
+    if (pathname === "/agent/v1/pairings") {
+      return new Response(JSON.stringify({ pairings: [], requests: [] }), { status: 200 });
+    }
     return new Response(JSON.stringify({ accepted: true }), { status: 200 });
   };
 
@@ -50,11 +53,17 @@ test("target client signs every outbound agent request", async () => {
     await client.poll(opened.session_id);
     await client.result(opened.session_id, "rpc_abcdefghijklmnop", { ok: true });
     await client.disconnect(opened.session_id);
+    await client.pairings();
+    await client.approvePairing("pair_0123456789abcdef01234567");
+    await client.revokePairing("zssh_0123456789abcdef0123456789abcdef");
     assert.deepEqual(seen, [
       "/agent/v1/session",
       "/agent/v1/poll",
       "/agent/v1/result",
       "/agent/v1/disconnect",
+      "/agent/v1/pairings",
+      "/agent/v1/pairing/approve",
+      "/agent/v1/pairing/revoke",
     ]);
   } finally {
     await rm(root, { recursive: true, force: true });

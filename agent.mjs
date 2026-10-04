@@ -91,6 +91,15 @@ export async function createAgentClient({ env = process.env, fetchImpl = fetch }
     async disconnect(sessionId) {
       return await post("/agent/v1/disconnect", { session_id: sessionId });
     },
+    async pairings() {
+      return await post("/agent/v1/pairings", {});
+    },
+    async approvePairing(requestId) {
+      return await post("/agent/v1/pairing/approve", { request_id: requestId });
+    },
+    async revokePairing(profileId) {
+      return await post("/agent/v1/pairing/revoke", { profile_id: profileId });
+    },
   };
 }
 
@@ -120,12 +129,44 @@ export async function runAgent({ env = process.env, fetchImpl = fetch, signal } 
   }
 }
 
-async function main() {
-  const controller = new AbortController();
-  for (const event of ["SIGINT", "SIGTERM"]) {
-    process.once(event, () => controller.abort());
+export async function runAgentCli({
+  argv = process.argv.slice(2),
+  env = process.env,
+  fetchImpl = fetch,
+} = {}) {
+  const [command, value] = argv;
+  if (!command || command === "run") {
+    const controller = new AbortController();
+    for (const event of ["SIGINT", "SIGTERM"]) {
+      process.once(event, () => controller.abort());
+    }
+    await runAgent({ env, fetchImpl, signal: controller.signal });
+    return null;
   }
-  await runAgent({ signal: controller.signal });
+
+  const client = await createAgentClient({ env, fetchImpl });
+  if (command === "pairings") {
+    return await client.pairings();
+  }
+  if (command === "approve") {
+    if (!/^pair_[a-f0-9]{24}$/.test(String(value || ""))) {
+      throw new Error("usage: node agent.mjs approve <pairing-request-id>");
+    }
+    return await client.approvePairing(value);
+  }
+  if (command === "revoke") {
+    if (!/^zssh_[a-f0-9]{32}$/.test(String(value || ""))) {
+      throw new Error("usage: node agent.mjs revoke <profile-id>");
+    }
+    return await client.revokePairing(value);
+  }
+
+  throw new Error("usage: node agent.mjs [run|pairings|approve <request-id>|revoke <profile-id>]");
+}
+
+async function main() {
+  const result = await runAgentCli();
+  if (result !== null) console.log(JSON.stringify(result, null, 2));
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
