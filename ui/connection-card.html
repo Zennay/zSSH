@@ -51,7 +51,6 @@
     </div>
 
     <div class="details">
-      <div class="row"><span class="key">Profile</span><span id="profile" class="value">—</span></div>
       <div id="requestRow" class="row" hidden><span class="key">Pairing request</span><span id="request" class="value">—</span></div>
     </div>
 
@@ -62,7 +61,6 @@
   <script>
     const targetEl = document.getElementById("target");
     const statusEl = document.getElementById("status");
-    const profileEl = document.getElementById("profile");
     const requestRowEl = document.getElementById("requestRow");
     const requestEl = document.getElementById("request");
     const noteEl = document.getElementById("note");
@@ -80,7 +78,6 @@
     function render(value) {
       if (!value || typeof value !== "object") return;
       targetEl.textContent = String(value.target_label || "Linux target");
-      profileEl.textContent = String(value.profile_id || "—");
 
       if (value.paired) {
         statusEl.textContent = "Connected";
