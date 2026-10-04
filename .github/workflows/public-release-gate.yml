@@ -10,11 +10,13 @@ on:
       - "public-site.mjs"
       - "test/public-site.test.mjs"
       - "scripts/check-public-release-config.mjs"
+      - "scripts/check-main-provenance.mjs"
       - "scripts/build-openai-plugin.py"
       - "package.json"
       - "production-submission-probe.mjs"
       - "production-submission-probe-canary.mjs"
       - "test/release-contract.test.mjs"
+      - "test/main-provenance.test.mjs"
       - "submission/**"
       - "docs/openai-plugin-*.md"
   push:
@@ -37,6 +39,7 @@ on:
 
 permissions:
   contents: read
+  pull-requests: read
 
 concurrency:
   group: zssh-openai-public-release-${{ github.event_name }}-${{ github.ref }}
@@ -60,15 +63,31 @@ jobs:
         run: |
           node --check release-contract.mjs
           node --check scripts/check-public-release-config.mjs
+          node --check scripts/check-main-provenance.mjs
           node --check production-submission-probe.mjs
           node --check production-submission-probe-canary.mjs
           python3 -m py_compile scripts/build-openai-plugin.py
 
 
+  provenance:
+    name: Canonical main provenance
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Require current main SHA to originate from a merged PR
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node scripts/check-main-provenance.mjs
+
   production:
     name: Production submission probe
-    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && startsWith(github.event.head_commit.message, '[openai-production-probe]'))
-    needs: contract
+    if: github.event_name == 'workflow_dispatch'
+    needs: [contract, provenance]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     environment: openai-production
