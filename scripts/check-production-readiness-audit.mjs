@@ -19,7 +19,6 @@ const PROVIDER_LANES = {
     "ZSSH_MAIN_BRANCH_PROTECTED",
   ],
   dns_publication: [
-    "CLOUDFLARE_ZONE_ID",
     "CLOUDFLARE_API_TOKEN",
   ],
   auth0_preflight: [
@@ -328,7 +327,7 @@ export function buildProductionReadinessAudit(env = process.env) {
       lane: "dns_publication",
       gate_kind: "provider_credentials",
       requires_external_input: true,
-      action: "Provision valid protected Cloudflare zone ID/token, then run zSSH production DNS publish.",
+      action: "Provision a protected Cloudflare token scoped to cheapgpt.shop with Zone Read + DNS Write, then run zSSH production DNS publish. CLOUDFLARE_ZONE_ID remains an optional legacy override for DNS-write-only tokens.",
       missing: lanes.dns_publication.missing,
       invalid: lanes.dns_publication.invalid,
     });
