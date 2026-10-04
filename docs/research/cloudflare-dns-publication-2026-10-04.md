@@ -68,3 +68,10 @@ The token is an external credential and is intentionally not stored in the repos
 - The deterministic non-secret zSSH release variables are independent of this provider gate. zCloud run `37182568488` successfully seeded and read back `ZSSH_PLUGIN_MCP_URL`, `ZSSH_REVIEW_FILE`, and `ZSSH_REVIEW_WRITE_FILE` in the zSSH `openai-production` environment.
 - A separate zCloud self-hosted capability probe now checks whether `vps-bb300bba` already has a reusable Cloudflare API or Wrangler session. That probe is read-only: it performs token verification / zone lookup GETs and `wrangler whoami`, emits only boolean capability evidence, and never publishes DNS or copies a provider credential into zSSH.
 - The provider gate is now reduced to one preferred external secret: a zone-scoped Cloudflare token with `Zone Read` + DNS write. A manually supplied zone ID is no longer required for the recommended path. DNS publication still remains an external credential gate until that token is provided.
+
+
+## Step-level provider credential exposure
+
+The protected `CLOUDFLARE_API_TOKEN` is not injected at job scope. It is exposed only to the three repository-owned Cloudflare API steps that plan, apply, and re-read the DNS state. Checkout, provenance/protection gates, explicit confirmation, external DNS convergence, and evidence upload do not receive the provider token in their environment.
+
+This keeps the external provider credential unavailable until after the reviewed activation gates have passed and limits its exposure to code that must call the Cloudflare API. Regression coverage in `test/public-dns-workflow.test.mjs` locks this boundary.
