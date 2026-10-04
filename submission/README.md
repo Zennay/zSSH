@@ -33,7 +33,7 @@ The annotation explanations to paste into review are maintained in `docs/openai-
 
 The review cases assume the dedicated review target has `/srv/zssh-review` configured as `ZSSH_PUBLIC_ALLOWED_ROOTS`, with a UTF-8 file at `/srv/zssh-review/sample.txt`. Keep this public root free of credentials and authentication secrets. The public file tools reject common credential-file paths and secret-like content rather than returning it. The reviewer OAuth account must be explicitly paired to that target before target operations are expected to succeed.
 
-The final directory submission also needs a verified developer identity, successful domain verification, a current production tool scan, and reviewer-accessible OAuth credentials.
+The final directory submission also needs a verified developer identity, successful domain verification, a current production tool scan, and reviewer-accessible OAuth credentials. The protected `openai-production` release environment must keep `ZSSH_OPENAI_DOMAIN_VERIFIED=1` and `ZSSH_OPENAI_TOOL_SCAN_VERIFIED=1` unset until those two portal checks are actually green.
 
 ## Reviewer account release gate
 
@@ -43,7 +43,9 @@ The username/password or other reviewer credentials must **not** be committed, p
 
 - `ZSSH_REVIEW_LOGIN_URL` as a non-secret variable;
 - `ZSSH_REVIEW_CREDENTIALS_VERIFIED=1` as a non-secret operator attestation after the login has actually been tested;
-- `ZSSH_REVIEW_ACCESS_TOKEN` separately as a secret used only by the automated end-to-end MCP probe.
+- `ZSSH_REVIEW_ACCESS_TOKEN` separately as a secret used only by the automated end-to-end MCP probe;
+- `ZSSH_OPENAI_DOMAIN_VERIFIED=1` only after OpenAI Verify Domain succeeds;
+- `ZSSH_OPENAI_TOOL_SCAN_VERIFIED=1` only after the current production Scan Tools run succeeds and required findings are resolved.
 
 ## Production readiness probe
 
