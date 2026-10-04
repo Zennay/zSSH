@@ -27,10 +27,20 @@ def fail(message: str) -> None:
     raise SystemExit("PLUGIN_PACKAGE_ERROR: " + message)
 
 
-def https_url(value: str, field: str) -> str:
+def https_url(
+    value: str,
+    field: str,
+    *,
+    allow_query: bool = True,
+    allow_fragment: bool = True,
+) -> str:
     parsed = urlparse(value)
     if parsed.scheme != "https" or not parsed.netloc or parsed.username or parsed.password:
         fail(f"{field} must be an HTTPS URL without embedded credentials")
+    if not allow_query and parsed.query:
+        fail(f"{field} must not contain query parameters")
+    if not allow_fragment and parsed.fragment:
+        fail(f"{field} must not contain a URL fragment")
     return value
 
 
@@ -204,7 +214,11 @@ def validate_plugin(plugin: dict, expected_listing_urls: dict[str, str] | None =
             if not isinstance(case.get(field), str) or not case[field].strip():
                 fail(f"negative review case {index} is missing {field}")
 
-    https_url(str(review.get("demo_recording_url", "")), "review.demo_recording_url")
+    https_url(
+        str(review.get("demo_recording_url", "")),
+        "review.demo_recording_url",
+        allow_fragment=False,
+    )
     if review.get("commerce") is not False:
         fail("zSSH review metadata must declare commerce=false")
 
@@ -227,10 +241,19 @@ def main() -> None:
     parser.add_argument("--out-dir", default=str(DEFAULT_OUT))
     args = parser.parse_args()
 
-    mcp_url = https_url(args.mcp_url, "MCP URL")
+    mcp_url = https_url(
+        args.mcp_url,
+        "MCP URL",
+        allow_query=False,
+        allow_fragment=False,
+    )
     if urlparse(mcp_url).path.rstrip("/") != "/mcp":
         fail("MCP URL must point to the public /mcp endpoint")
-    demo_url = https_url(args.demo_url, "demo recording URL")
+    demo_url = https_url(
+        args.demo_url,
+        "demo recording URL",
+        allow_fragment=False,
+    )
 
     if not args.icon:
         fail("ZSSH_PLUGIN_ICON or --icon is required for a submission build")
