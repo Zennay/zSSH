@@ -1,22 +1,44 @@
 import { pathToFileURL } from "node:url";
 
-const CLOUDFLARE_TOKEN_VERIFY_URL = "https://api.cloudflare.com/client/v4/user/tokens/verify";
+const CLOUDFLARE_API_BASE_URL = "https://api.cloudflare.com/client/v4";
+const CLOUDFLARE_USER_TOKEN_VERIFY_URL = `${CLOUDFLARE_API_BASE_URL}/user/tokens/verify`;
 export const CLOUDFLARE_TOKEN_VERIFY_TIMEOUT_MS = 10_000;
 
 function fail(message) {
   throw new Error(message);
 }
 
+function normalizeAccountId(accountId) {
+  const value = String(accountId || "").trim();
+  if (!value) return "";
+  if (!/^[a-f0-9]{32}$/i.test(value)) {
+    fail("CLOUDFLARE_ACCOUNT_ID must be a 32-character hexadecimal account ID");
+  }
+  return value;
+}
+
+export function cloudflareTokenVerifyUrl({ accountId } = {}) {
+  const normalizedAccountId = normalizeAccountId(accountId);
+  if (!normalizedAccountId) return CLOUDFLARE_USER_TOKEN_VERIFY_URL;
+  return `${CLOUDFLARE_API_BASE_URL}/accounts/${normalizedAccountId}/tokens/verify`;
+}
+
 export async function verifyCloudflareApiToken({
   apiToken,
+  accountId,
   fetchImpl = fetch,
 } = {}) {
   const token = String(apiToken || "").trim();
   if (!token) fail("CLOUDFLARE_API_TOKEN is required");
 
+  const normalizedAccountId = normalizeAccountId(accountId);
+  const verifyUrl = normalizedAccountId
+    ? `${CLOUDFLARE_API_BASE_URL}/accounts/${normalizedAccountId}/tokens/verify`
+    : CLOUDFLARE_USER_TOKEN_VERIFY_URL;
+
   let response;
   try {
-    response = await fetchImpl(CLOUDFLARE_TOKEN_VERIFY_URL, {
+    response = await fetchImpl(verifyUrl, {
       method: "GET",
       headers: {
         accept: "application/json",
@@ -40,9 +62,11 @@ export async function verifyCloudflareApiToken({
   }
 
   if (!response.ok || body?.success !== true) {
+    const guidance = normalizedAccountId
+      ? "account-owned tokens require the matching CLOUDFLARE_ACCOUNT_ID"
+      : "user-owned tokens must come from My Profile > API Tokens; set CLOUDFLARE_ACCOUNT_ID only for an account-owned token";
     fail(
-      `Cloudflare user-owned API token verification failed: HTTP ${response.status}; ` +
-      "CLOUDFLARE_API_TOKEN must be a user-owned token from My Profile > API Tokens",
+      `Cloudflare ${normalizedAccountId ? "account-owned" : "user-owned"} API token verification failed: HTTP ${response.status}; ${guidance}`,
     );
   }
 
@@ -60,6 +84,7 @@ export async function verifyCloudflareApiToken({
 export async function main({ env = process.env, stdout = process.stdout } = {}) {
   const result = await verifyCloudflareApiToken({
     apiToken: env.CLOUDFLARE_API_TOKEN,
+    accountId: env.CLOUDFLARE_ACCOUNT_ID,
   });
   stdout.write(JSON.stringify(result, null, 2) + "\n");
 }
