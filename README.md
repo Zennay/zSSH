@@ -231,10 +231,10 @@ The default `~/zssh-review` location is a **development/test fixture**, not the 
 For the real submitted reviewer fixture, prepare `/srv/zssh-review` for the unprivileged target user first, then run:
 
 ```bash
-ZSSH_REVIEW_ROOT=/srv/zssh-review npm run review:target
+ZSSH_REVIEW_ROOT=/srv/zssh-review ZSSH_REVIEW_REQUIRE_RELEASE_COMPATIBLE=1 npm run review:target
 ```
 
-Only the exact submitted files `/srv/zssh-review/sample.txt` and `/srv/zssh-review/output.txt` produce `release_compatible=true` and the corresponding copyable `ZSSH_REVIEW_FILE` / `ZSSH_REVIEW_WRITE_FILE` values. Override identity locations with `ZSSH_REVIEW_AGENT_KEY_FILE`, `ZSSH_REVIEW_AGENT_PUBLIC_FILE`, and optionally `ZSSH_REVIEW_TARGET_ID`; changing `ZSSH_REVIEW_ROOT` away from the canonical `/srv/zssh-review` keeps the fixture non-release-compatible.
+Only the exact submitted files `/srv/zssh-review/sample.txt` and `/srv/zssh-review/output.txt` produce `release_compatible=true` and the corresponding copyable `ZSSH_REVIEW_FILE` / `ZSSH_REVIEW_WRITE_FILE` values. Set `ZSSH_REVIEW_REQUIRE_RELEASE_COMPATIBLE=1` for production preparation so the helper fails closed instead of returning a development-only fixture. Override identity locations with `ZSSH_REVIEW_AGENT_KEY_FILE`, `ZSSH_REVIEW_AGENT_PUBLIC_FILE`, and optionally `ZSSH_REVIEW_TARGET_ID`; changing `ZSSH_REVIEW_ROOT` away from the canonical `/srv/zssh-review` keeps the fixture non-release-compatible.
 
 The gateway's agent endpoints use signed POST requests with a target ID, timestamp, nonce, and SHA-256 body binding. Replays and stale timestamps fail closed. A new authenticated agent session replaces only the previous session for the same target. Tool forwarding is bounded to the existing public zSSH surface; raw shell, private Git/systemd operations, and arbitrary target URLs are not exposed through this transport.
 
