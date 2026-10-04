@@ -125,6 +125,9 @@ test("keeps DNS as an internal execution gate when credentials exist but public 
   assert.equal(result.blocking_action?.gate_kind, "provider_execution");
   assert.equal(result.blocking_action?.requires_external_input, false);
   assert.match(result.blocking_action?.action || "", /Run the guarded zSSH production DNS publisher/);
+  assert.match(result.blocking_action?.action || "", /\.github\/openai-production-dns-trigger/);
+  assert.match(result.blocking_action?.action || "", /PUBLISH_ZSSH_PRODUCTION_DNS/);
+  assert.match(result.blocking_action?.action || "", /activation-id=<8-80 safe characters>/);
   assert.deepEqual(result.internal_action_gates, ["dns_publication"]);
 });
 
