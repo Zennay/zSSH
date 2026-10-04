@@ -30,11 +30,16 @@ jobs:
       - name: Require successful canonical production DNS source
         if: github.event_name == 'workflow_run'
         shell: bash
+        env:
+          ZSSH_SOURCE_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          ZSSH_SOURCE_HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          ZSSH_SOURCE_REPOSITORY: ${{ github.event.workflow_run.head_repository.full_name }}
+          ZSSH_EXPECTED_REPOSITORY: ${{ github.repository }}
         run: |
           set -Eeuo pipefail
-          test "${{ github.event.workflow_run.conclusion }}" = "success"
-          test "${{ github.event.workflow_run.head_branch }}" = "main"
-          test "${{ github.event.workflow_run.head_repository.full_name }}" = "${{ github.repository }}"
+          test "$ZSSH_SOURCE_CONCLUSION" = "success"
+          test "$ZSSH_SOURCE_HEAD_BRANCH" = "main"
+          test "$ZSSH_SOURCE_REPOSITORY" = "$ZSSH_EXPECTED_REPOSITORY"
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 22.23.3
