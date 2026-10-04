@@ -7,6 +7,7 @@ This checklist tracks the production path from the current review-ready MCP prof
 ## Pre-release
 
 - [ ] Stable public HTTPS MCP endpoint configured
+- [ ] Published `/privacy` page discloses data categories, purposes, recipients, retention, and user controls for the actual production data flow
 - [ ] Production OAuth authorization server publishes discovery metadata with authorization-code flow, PKCE S256, and token endpoint auth methods
 - [ ] Resource-server metadata points to the production MCP resource
 - [ ] Health, OAuth metadata, challenge, and unauthenticated MCP checks do not redirect away from the submitted origin
