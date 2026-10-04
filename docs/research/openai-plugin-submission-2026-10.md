@@ -264,3 +264,23 @@ Engineering decision:
 - The protected production release gate computes the live tool-contract fingerprint independently and fails closed unless it exactly matches `ZSSH_OPENAI_TOOL_SCAN_SHA256`.
 - A tool contract change therefore invalidates the prior portal-scan evidence until the production endpoint is rescanned and the attested fingerprint is refreshed.
 - The fingerprint is non-secret and is recorded in release evidence; credentials and tokens remain excluded.
+
+
+## Exact domain-verification host binding — 2026-10-04
+
+Primary sources re-checked on 2026-10-04:
+- https://developers.openai.com/plugins/deploy/submission
+- https://developers.openai.com/plugins/deploy/app-review
+- https://developers.openai.com/plugins/deploy/submission-errors
+
+Current platform facts:
+- A public remote MCP submission must use a publicly accessible production domain and complete the portal domain-verification challenge before connection/submission can be green.
+- The challenge is hosted at the exact URL shown by the portal. Its challenge base must be an HTTPS origin on the MCP hostname or an eligible parent domain.
+- OpenAI treats an MCP server origin change (scheme, hostname, or port) as a new-plugin boundary rather than an ordinary version update.
+
+Engineering decision:
+- A bare `ZSSH_OPENAI_DOMAIN_VERIFIED=1` boolean is insufficient release evidence because it can outlive the host it originally verified.
+- Add `ZSSH_OPENAI_DOMAIN_VERIFIED_HOST` as a required non-secret production release value containing the exact challenge-base hostname that passed Verify Domain.
+- The release preflight normalizes this value and fails closed unless it is the production MCP hostname or an eligible parent domain of that hostname.
+- Release evidence records the verified host next to the production endpoint origin. Changing the MCP host therefore cannot silently reuse an unrelated prior verification attestation.
+- This value remains an operator attestation after the real portal check; automation does not fabricate or replace OpenAI domain verification.
