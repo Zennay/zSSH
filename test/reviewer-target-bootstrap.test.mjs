@@ -95,18 +95,6 @@ test("reviewer target bootstrap release guard rejects non-canonical dev fixture"
   }
 });
 
-test("reviewer target bootstrap release guard rejects non-canonical dev fixture", async () => {
-  const home = await mkdtemp(path.join(os.tmpdir(), "zssh-review-bootstrap-release-guard-"));
-
-  try {
-    await assert.rejects(
-      () => runBootstrap(home, { ZSSH_REVIEW_REQUIRE_RELEASE_COMPATIBLE: "1" }),
-      /reviewer fixture is not at the canonical submitted paths/,
-    );
-  } finally {
-    await rm(home, { recursive: true, force: true });
-  }
-});
 
 test("reviewer target bootstrap fails closed on partial identity state", async () => {
   const home = await mkdtemp(path.join(os.tmpdir(), "zssh-review-bootstrap-partial-"));
