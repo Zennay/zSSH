@@ -23,6 +23,7 @@ const complete = {
   ZSSH_REVIEW_LOGIN_VERIFIED_URL: "https://tenant.eu.auth0.com/u/login",
   ZSSH_REVIEW_CREDENTIALS_VERIFIED: "1",
   ZSSH_MAIN_PROTECTION_VERIFIED: "1",
+  ZSSH_MAIN_BRANCH_PROTECTED: "1",
   ZSSH_CHATGPT_DESKTOP_REVIEWED: "1",
   ZSSH_CHATGPT_MOBILE_REVIEWED: "1",
   ZSSH_OPENAI_DOMAIN_VERIFIED: "1",
@@ -63,6 +64,7 @@ test("rejects malformed configured values instead of reporting a false-ready lan
   const result = buildProductionReadinessAudit({
     ...complete,
     ZSSH_MAIN_PROTECTION_VERIFIED: "0",
+    ZSSH_MAIN_BRANCH_PROTECTED: "0",
     CLOUDFLARE_ZONE_ID: "not-a-zone",
     ZSSH_OAUTH_ISSUER: "http://tenant.example.test/",
     AUTH0_MANAGEMENT_API_TOKEN: "short",
@@ -76,7 +78,7 @@ test("rejects malformed configured values instead of reporting a false-ready lan
 
   assert.deepEqual(
     result.lanes.repository_governance.invalid.map(item => item.name),
-    ["ZSSH_MAIN_PROTECTION_VERIFIED"],
+    ["ZSSH_MAIN_PROTECTION_VERIFIED", "ZSSH_MAIN_BRANCH_PROTECTED"],
   );
   assert.deepEqual(
     result.lanes.dns_publication.invalid.map(item => item.name),
@@ -117,6 +119,7 @@ test("keeps repository governance independent from provider and portal lanes", (
   const result = buildProductionReadinessAudit({
     ...complete,
     ZSSH_MAIN_PROTECTION_VERIFIED: "",
+    ZSSH_MAIN_BRANCH_PROTECTED: "1",
   });
   assert.equal(result.ready.repository_governance, false);
   assert.equal(result.ready.dns_publication, true);
@@ -194,7 +197,18 @@ test("protected readiness workflow proves merged-PR provenance before entering o
   );
   assert.match(
     readinessWorkflow,
+    /Inspect live main protection[\s\S]*check-main-protection\.mjs --public-status[\s\S]*main_protected/,
+    "readiness provenance must derive GitHub live protection status",
+  );
+  assert.match(
+    readinessWorkflow,
     /audit:\n    name: Classify protected M5 inputs\n    needs: provenance\n    runs-on: ubuntu-latest\n    timeout-minutes: 5\n    environment: openai-production/,
+  );
+
+  assert.match(
+    publicReleaseWorkflow,
+    /Require GitHub to report main protected[\s\S]*check-main-protection\.mjs --public-status --require-protected/,
+    "final production provenance must fail closed unless GitHub reports main protected",
   );
 
   for (const workflow of [readinessWorkflow, publicReleaseWorkflow]) {
