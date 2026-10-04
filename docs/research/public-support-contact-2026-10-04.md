@@ -25,3 +25,8 @@ The production `/support` page must expose:
 Regression tests pin these routes so a future copy change cannot silently reduce the published support page to a non-actionable repository homepage.
 
 This is release hardening only. It does not fabricate the remaining external M5 inputs such as production DNS/TLS, OAuth reviewer credentials, OpenAI portal verification, demo recording, or live ChatGPT desktop/mobile review.
+
+
+## Production proof decision
+
+Unit coverage is not sufficient for the final release boundary because the deployed listing site could drift from the committed source. The production submission probe therefore validates the live same-origin `/support` response for both actionable contact routes before it can report a green release result. Release evidence now includes `support_contact_routes_validated: true` only after those exact live links are present.
