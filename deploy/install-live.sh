@@ -75,6 +75,8 @@ if [[ ! -d "$RELEASE" ]]; then
 fi
 
 verify_release_provenance
+"$NPM_BIN" ci --prefix "$RELEASE" --omit=dev --ignore-scripts --no-audit --no-fund
+verify_release_provenance
 
 random_hex_32() {
   if command -v openssl >/dev/null 2>&1; then
