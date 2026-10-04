@@ -51,12 +51,7 @@ jobs:
           set -Eeuo pipefail
           REPORT_PATH="$RUNNER_TEMP/zssh-main-protection-status.json"
           node scripts/check-main-protection.mjs --public-status | sed "s/^ZSSH_MAIN_PROTECTION_STATUS //" | tee "$REPORT_PATH"
-          PROTECTED="$(node --input-type=module - "$REPORT_PATH" <<\'NODE\'
-          import { readFileSync } from "node:fs";
-          const result = JSON.parse(readFileSync(process.argv[2], "utf8"));
-          process.stdout.write(result.protected === true ? "1" : "0");
-          NODE
-          )"
+          PROTECTED="$(node -e 'const fs = require("node:fs"); const result = JSON.parse(fs.readFileSync(process.argv[1], "utf8")); process.stdout.write(result.protected === true ? "1" : "0");' "$REPORT_PATH")"
           echo "protected=$PROTECTED" >> "$GITHUB_OUTPUT"
 
   public_origin:
