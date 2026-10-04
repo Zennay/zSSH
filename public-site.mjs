@@ -77,7 +77,10 @@ const PAGES = new Map([
     `<h1>Support</h1>
 <p>Before reporting a problem, confirm that the public endpoint is reachable, OAuth discovery succeeds, the target is locally paired, and the requested path is inside the configured public roots.</p>
 <h2>Useful diagnostics</h2><ul><li><code>GET /health</code> should return a healthy zSSH service response.</li><li>The OAuth protected-resource document should be available at <code>/.well-known/oauth-protected-resource</code>.</li><li>Pairing must be approved locally on the target; the remote service cannot self-approve access.</li></ul>
-<p>Project support and source history are maintained at <a href="https://github.com/Zennay/zSSH">github.com/Zennay/zSSH</a>.</p>`
+<h2>Contact support</h2>
+<p>For installation questions, bug reports, compatibility issues, and feature requests, open a <a href="https://github.com/Zennay/zSSH/issues">GitHub support issue</a>. This is the public end-user support route for zSSH.</p>
+<p>For security vulnerabilities, use the repository's <a href="https://github.com/Zennay/zSSH/security/advisories/new">private vulnerability-reporting flow</a>. Never post passwords, private keys, bearer tokens, API keys, MFA/OTP codes, capability URLs, or exploit details in a public issue.</p>
+<p>Source history is maintained at <a href="https://github.com/Zennay/zSSH">github.com/Zennay/zSSH</a>.</p>`
   )],
 ]);
 
