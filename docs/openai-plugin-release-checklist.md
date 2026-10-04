@@ -58,7 +58,7 @@ Record:
 - VPS rollout proof from the dedicated `Zennay/zCloud` `zSSH standalone VPS release` workflow, pinned to the exact canonical zSSH commit;
 - SHA-256 fingerprint of the exact public tool metadata returned by the production probe, with `ZSSH_OPENAI_TOOL_SCAN_SHA256` required to match it exactly after the portal scan;
 - SHA-256 of the exact `zssh-openai-plugin.zip` uploaded by the production release gate;
-- plugin version, currently `0.1.2`, matching `package.json` and `submission/plugin.template.json`;
+- plugin version, currently `0.1.2`, matching `package.json` and `submission/plugin.template.json`, with that exact version named in `publication.release_notes`;
 - authorization-server metadata URL(s), issuer(s), and PKCE S256 evidence emitted by the production probe;
 - same-origin listing-site proof for `/`, `/support`, `/privacy`, and `/terms`, including restrictive CSP and no-redirect validation;
 - reviewer walkthrough result;
