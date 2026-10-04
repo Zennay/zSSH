@@ -99,6 +99,10 @@ const release = reviewerFixtureReleaseMetadata({
   reviewFile: fixture.sample_file,
   reviewWriteFile: fixture.write_test_file,
 });
+const requireReleaseCompatible = process.env.ZSSH_REVIEW_REQUIRE_RELEASE_COMPATIBLE === "1";
+if (requireReleaseCompatible && !release.release_compatible) {
+  throw new Error(release.release_blocker || "reviewer fixture is not release-compatible");
+}
 console.log(JSON.stringify({
   ok: true,
   target_id: targetId,
@@ -109,6 +113,7 @@ console.log(JSON.stringify({
   review_root: fixture.review_root,
   review_file: fixture.sample_file,
   review_write_file: fixture.write_test_file,
+  release_guard_enforced: requireReleaseCompatible,
   ...release,
 }, null, 2));
 NODE
