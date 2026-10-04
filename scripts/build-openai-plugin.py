@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import ipaddress
 import json
 import os
 import re
@@ -27,12 +28,31 @@ def fail(message: str) -> None:
     raise SystemExit("PLUGIN_PACKAGE_ERROR: " + message)
 
 
+def is_non_public_hostname(hostname: str | None) -> bool:
+    host = str(hostname or "").strip().lower().rstrip(".")
+    if not host or "." not in host or host == "localhost":
+        return True
+    try:
+        ipaddress.ip_address(host)
+        return True
+    except ValueError:
+        pass
+    reserved_domains = ("example.com", "example.net", "example.org")
+    if any(host == domain or host.endswith("." + domain) for domain in reserved_domains):
+        return True
+    return any(
+        host.endswith(suffix)
+        for suffix in (".local", ".localhost", ".test", ".example", ".invalid")
+    )
+
+
 def https_url(
     value: str,
     field: str,
     *,
     allow_query: bool = True,
     allow_fragment: bool = True,
+    require_public_hostname: bool = False,
 ) -> str:
     parsed = urlparse(value)
     if parsed.scheme != "https" or not parsed.netloc or parsed.username or parsed.password:
@@ -41,6 +61,8 @@ def https_url(
         fail(f"{field} must not contain query parameters")
     if not allow_fragment and parsed.fragment:
         fail(f"{field} must not contain a URL fragment")
+    if require_public_hostname and is_non_public_hostname(parsed.hostname):
+        fail(f"{field} must use a public DNS hostname reachable by OpenAI reviewers")
     return value
 
 
@@ -246,6 +268,7 @@ def main() -> None:
         "MCP URL",
         allow_query=False,
         allow_fragment=False,
+        require_public_hostname=True,
     )
     if urlparse(mcp_url).path.rstrip("/") != "/mcp":
         fail("MCP URL must point to the public /mcp endpoint")
@@ -253,6 +276,7 @@ def main() -> None:
         args.demo_url,
         "demo recording URL",
         allow_fragment=False,
+        require_public_hostname=True,
     )
 
     if not args.icon:
