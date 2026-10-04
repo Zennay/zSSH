@@ -12,9 +12,6 @@ on:
       - closed
     branches:
       - main
-  push:
-    branches:
-      - main
 
 permissions:
   contents: read
@@ -23,7 +20,7 @@ permissions:
 jobs:
   provenance:
     name: Require canonical merged-PR provenance
-    if: github.event_name == 'workflow_dispatch' || github.event_name == 'push' || github.event.pull_request.merged == true
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.merged == true
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
