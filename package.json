@@ -8,6 +8,7 @@
     "node": ">=20"
   },
   "scripts": {
+    "repo:hygiene": "node scripts/check-repo-hygiene.mjs",
     "start": "node server.mjs",
     "agent": "node agent.mjs",
     "test": "node --test",

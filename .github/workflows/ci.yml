@@ -20,6 +20,8 @@ jobs:
           node-version: 20
       - name: Install dependencies
         run: npm install --ignore-scripts --no-audit --no-fund
+      - name: Enforce zSSH review-surface hygiene
+        run: npm run repo:hygiene
       - name: Run security and deployment tests
         run: npm test
       - name: Validate deployment scripts
