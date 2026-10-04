@@ -86,6 +86,25 @@ test("manual DNS publication keeps confirmation input out of generated shell sou
   assert.doesNotMatch(step.split("run: |")[1] || "", /\$\{\{ inputs\.confirmation \}\}/);
 });
 
+test("production DNS replacement is bound to an explicit reviewed existing-record precondition", () => {
+  for (const stepName of [
+    "Validate desired Cloudflare DNS change without mutation",
+    "Publish exact DNS-only A record",
+    "Re-read Cloudflare API and prove idempotent desired state",
+  ]) {
+    const tail = workflow.split("      - name: " + stepName)[1];
+    assert.ok(tail, "missing provider step " + stepName);
+    const step = tail.split("\n      - name:")[0];
+    assert.match(
+      step,
+      /ZSSH_DNS_EXPECTED_CURRENT_IPV4: \$\{\{ vars\.ZSSH_DNS_EXPECTED_CURRENT_IPV4 \}\}/,
+    );
+  }
+
+  assert.match(runbook, /ZSSH_DNS_EXPECTED_CURRENT_IPV4/);
+  assert.match(runbook, /existing A record/);
+});
+
 test("operator DNS cutover runbook stays aligned with the guarded workflow contract", () => {
   const workflowName = workflow.match(/^name:\s*(.+)$/m)?.[1]?.trim();
   const confirmationPhrase = workflow.match(

@@ -145,6 +145,7 @@ export async function reconcileCloudflareDns({
   apiToken,
   publicBaseUrl,
   ipv4,
+  expectedCurrentIpv4 = "",
   apply = false,
   fetchImpl = fetch,
 } = {}) {
@@ -196,8 +197,49 @@ export async function reconcileCloudflareDns({
   }
 
   const action = existing ? "update" : "create";
+  let previousIpv4 = null;
+  let previousProxied = null;
+  if (existing) {
+    previousIpv4 = String(existing.content || "").trim();
+    previousProxied = existing.proxied === true;
+    if (net.isIP(previousIpv4) !== 4) {
+      fail("existing Cloudflare A record has an invalid IPv4 content value");
+    }
+
+    const expected = String(expectedCurrentIpv4 || "").trim();
+    if (!expected) {
+      if (!apply) {
+        return {
+          ok: true,
+          action: "would_update_requires_precondition",
+          hostname,
+          ipv4: checkedIpv4,
+          proxied: false,
+          previous_ipv4: previousIpv4,
+          previous_proxied: previousProxied,
+          zone_source: zone.source,
+        };
+      }
+      fail("existing A record update requires ZSSH_DNS_EXPECTED_CURRENT_IPV4 to match the reviewed current value");
+    }
+    if (net.isIP(expected) !== 4) {
+      fail("ZSSH_DNS_EXPECTED_CURRENT_IPV4 must be a valid IPv4 address");
+    }
+    if (previousIpv4 !== expected) {
+      fail("existing A record changed since the reviewed DNS precondition; refusing mutation");
+    }
+  }
+
   if (!apply) {
-    return { ok: true, action: `would_${action}`, hostname, ipv4: checkedIpv4, proxied: false, zone_source: zone.source };
+    return {
+      ok: true,
+      action: `would_${action}`,
+      hostname,
+      ipv4: checkedIpv4,
+      proxied: false,
+      ...(existing ? { previous_ipv4: previousIpv4, previous_proxied: previousProxied } : {}),
+      zone_source: zone.source,
+    };
   }
 
   const targetUrl = existing
@@ -228,6 +270,7 @@ export async function reconcileCloudflareDns({
     hostname,
     ipv4: checkedIpv4,
     proxied: false,
+    ...(existing ? { previous_ipv4: previousIpv4, previous_proxied: previousProxied } : {}),
     zone_source: zone.source,
   };
 }
@@ -239,6 +282,7 @@ export async function main({ env = process.env, stdout = process.stdout } = {}) 
     apiToken: env.CLOUDFLARE_API_TOKEN,
     publicBaseUrl: env.ZSSH_PUBLIC_BASE_URL,
     ipv4: env.ZSSH_PUBLIC_IPV4,
+    expectedCurrentIpv4: env.ZSSH_DNS_EXPECTED_CURRENT_IPV4,
     apply: env.ZSSH_DNS_APPLY === "1",
   });
   stdout.write(JSON.stringify(result, null, 2) + "\n");

@@ -152,10 +152,40 @@ test("apply updates one existing A record but preserves unrelated coexisting rec
     calls.push({ url: String(url), init });
     if (calls.length === 1) return response(listed);
     return response({ id: recordId, type: "A", name: "zssh.cheapgpt.shop", content: "198.244.191.182", proxied: false });
-  }, { apply: true }));
+  }, { apply: true, expectedCurrentIpv4: "203.0.113.10" }));
   assert.equal(result.action, "updated");
+  assert.equal(result.previous_ipv4, "203.0.113.10");
+  assert.equal(result.previous_proxied, true);
   assert.equal(calls[1].init.method, "PATCH");
   assert.match(calls[1].url, new RegExp(recordId + "$"));
+});
+
+test("dry-run exposes an existing A record but requires an explicit update precondition", async () => {
+  const result = await reconcileCloudflareDns(baseArgs(async () => response([
+    { id: recordId, type: "A", name: "zssh.cheapgpt.shop", content: "203.0.113.10", proxied: true },
+  ])));
+
+  assert.equal(result.action, "would_update_requires_precondition");
+  assert.equal(result.previous_ipv4, "203.0.113.10");
+  assert.equal(result.previous_proxied, true);
+});
+
+test("apply refuses an existing A record without an exact reviewed current-IP precondition", async () => {
+  const records = [
+    { id: recordId, type: "A", name: "zssh.cheapgpt.shop", content: "203.0.113.10", proxied: true },
+  ];
+
+  await assert.rejects(
+    reconcileCloudflareDns(baseArgs(async () => response(records), { apply: true })),
+    /requires ZSSH_DNS_EXPECTED_CURRENT_IPV4/,
+  );
+  await assert.rejects(
+    reconcileCloudflareDns(baseArgs(async () => response(records), {
+      apply: true,
+      expectedCurrentIpv4: "203.0.113.11",
+    })),
+    /changed since the reviewed DNS precondition/,
+  );
 });
 
 test("exact record is idempotent and does not write", async () => {
@@ -200,7 +230,12 @@ test("autodiscovered zone ID is reused for update writes", async () => {
     }
     if (calls.length === 2) return response(listed);
     return response({ id: recordId, type: "A", name: "zssh.cheapgpt.shop", content: "198.244.191.182", proxied: false });
-  }, { zoneId: "", zoneName: "cheapgpt.shop", apply: true }));
+  }, {
+    zoneId: "",
+    zoneName: "cheapgpt.shop",
+    apply: true,
+    expectedCurrentIpv4: "203.0.113.10",
+  }));
   assert.equal(result.action, "updated");
   assert.equal(result.zone_source, "discovered");
   assert.equal(calls.length, 3);
