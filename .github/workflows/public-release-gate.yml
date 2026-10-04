@@ -30,6 +30,7 @@ on:
       - "scripts/check-host-surface-review-binding.mjs"
       - "scripts/check-tool-scan-binding.mjs"
       - "scripts/check-main-provenance.mjs"
+      - "scripts/check-main-protection.mjs"
       - "scripts/check-public-ingress.mjs"
       - "scripts/observe-public-origin-readiness.mjs"
       - "scripts/publish-cloudflare-dns.mjs"
@@ -45,6 +46,7 @@ on:
       - "test/host-surface-review-binding.test.mjs"
       - "test/tool-scan-binding.test.mjs"
       - "test/main-provenance.test.mjs"
+      - "test/main-protection.test.mjs"
       - "test/public-caddy-renderer.test.mjs"
       - "test/public-ingress-preflight.test.mjs"
       - "test/public-origin-observation.test.mjs"
@@ -82,6 +84,7 @@ on:
       - "scripts/check-host-surface-review-binding.mjs"
       - "scripts/check-tool-scan-binding.mjs"
       - "scripts/check-main-provenance.mjs"
+      - "scripts/check-main-protection.mjs"
       - "scripts/check-public-ingress.mjs"
       - "scripts/observe-public-origin-readiness.mjs"
       - "scripts/publish-cloudflare-dns.mjs"
@@ -97,6 +100,7 @@ on:
       - "test/host-surface-review-binding.test.mjs"
       - "test/tool-scan-binding.test.mjs"
       - "test/main-provenance.test.mjs"
+      - "test/main-protection.test.mjs"
       - "test/public-caddy-renderer.test.mjs"
       - "test/public-ingress-preflight.test.mjs"
       - "test/public-origin-observation.test.mjs"
@@ -128,7 +132,7 @@ jobs:
       - name: Self-test release configuration guard
         run: node scripts/check-public-release-config.mjs --self-test
       - name: Exercise release and portal binding contracts
-        run: node --test test/release-contract.test.mjs test/auth0-production-readiness.test.mjs test/production-readiness-audit.test.mjs test/domain-verification-binding.test.mjs test/host-surface-review-binding.test.mjs test/tool-scan-binding.test.mjs test/annotation-justifications.test.mjs test/public-caddy-renderer.test.mjs test/public-caddy-installer.test.mjs test/public-ingress-preflight.test.mjs test/public-origin-observation.test.mjs test/cloudflare-dns-publish.test.mjs test/release-workflow-trigger.test.mjs
+        run: node --test test/release-contract.test.mjs test/auth0-production-readiness.test.mjs test/production-readiness-audit.test.mjs test/domain-verification-binding.test.mjs test/host-surface-review-binding.test.mjs test/tool-scan-binding.test.mjs test/annotation-justifications.test.mjs test/public-caddy-renderer.test.mjs test/public-caddy-installer.test.mjs test/public-ingress-preflight.test.mjs test/public-origin-observation.test.mjs test/cloudflare-dns-publish.test.mjs test/main-protection.test.mjs test/release-workflow-trigger.test.mjs
       - name: Validate release scripts
         run: |
           node --check release-contract.mjs
@@ -140,6 +144,7 @@ jobs:
           node --check scripts/check-host-surface-review-binding.mjs
           node --check scripts/check-tool-scan-binding.mjs
           node --check scripts/check-main-provenance.mjs
+          node --check scripts/check-main-protection.mjs
           node --check scripts/check-public-ingress.mjs
           node --check scripts/observe-public-origin-readiness.mjs
           node --check scripts/publish-cloudflare-dns.mjs
@@ -166,6 +171,10 @@ jobs:
           # PR #97 is the trusted quarantine-recovery boundary after accidental direct commit 25f1d284.
           ZSSH_PROVENANCE_BASE_SHA: 121411d24e288c2512d4851e973a0af80aa99733
         run: node scripts/check-main-provenance.mjs
+      - name: Require GitHub to report main protected
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node scripts/check-main-protection.mjs --public-status --require-protected
 
   production:
     name: Production submission probe
