@@ -164,6 +164,9 @@ jobs:
           if (probe.outbound_agent_transport_validated !== true) {
             throw new Error("production probe did not prove outbound-agent transport");
           }
+          if (probe.demo_recording_accessible !== true) {
+            throw new Error("production probe did not prove reviewer-accessible demo recording");
+          }
           if (probe.listing_urls_validated !== true) {
             throw new Error("production probe did not prove same-origin public listing pages");
           }
@@ -194,6 +197,10 @@ jobs:
             oauth_authorization_server_metadata_validated: true,
             oauth_pkce_s256_validated: true,
             outbound_agent_transport_validated: true,
+            demo_recording_accessible: true,
+            demo_recording_origin: probe.demo_recording_origin,
+            demo_recording_path: probe.demo_recording_path,
+            demo_recording_content_type: probe.demo_recording_content_type,
             oauth_authorization_servers: probe.oauth_authorization_servers,
             verified_at: new Date().toISOString()
           };
