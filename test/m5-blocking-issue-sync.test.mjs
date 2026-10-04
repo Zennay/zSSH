@@ -92,7 +92,7 @@ test("renders immutable readiness workflow provenance when a run ID is supplied"
   });
 
   assert.ok(
-    result.body.includes(`Readiness run: [\\`${runId}\\`](https://github.com/Zennay/zSSH/actions/runs/${runId})`),
+    result.body.includes("Readiness run: [`" + runId + "`](https://github.com/Zennay/zSSH/actions/runs/" + runId + ")"),
   );
 });
 
