@@ -253,6 +253,24 @@ test("keeps repository governance independent from provider and portal lanes", (
   assert.deepEqual(result.next_actions.map(item => item.lane), ["repository_governance"]);
 });
 
+test("rejects reviewer login evidence from a different OAuth issuer origin", () => {
+  const result = buildProductionReadinessAudit({
+    ...complete,
+    ZSSH_REVIEW_LOGIN_URL: "https://review.zssh.dev/login",
+    ZSSH_REVIEW_LOGIN_VERIFIED_URL: "https://review.zssh.dev/login",
+  });
+
+  assert.equal(result.ready.auth0_preflight, true);
+  assert.equal(result.ready.reviewer_fixture, false);
+  assert.ok(
+    result.lanes.reviewer_fixture.invalid.some(
+      item =>
+        item.name === "ZSSH_REVIEW_LOGIN_URL" &&
+        item.reason.includes("same origin as ZSSH_OAUTH_ISSUER"),
+    ),
+  );
+});
+
 test("detects stale reviewer and domain bindings before the final probe", () => {
   const result = buildProductionReadinessAudit({
     ...complete,
