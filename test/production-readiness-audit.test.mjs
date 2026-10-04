@@ -1,5 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+
+const readinessWorkflow = readFileSync(
+  new URL("../.github/workflows/openai-production-readiness.yml", import.meta.url),
+  "utf8",
+);
 import { buildProductionReadinessAudit } from "../scripts/check-production-readiness-audit.mjs";
 
 const complete = {
@@ -71,4 +77,24 @@ test("never serializes protected values", () => {
     assert.equal(serialized.includes(value), false);
   }
   assert.equal(buildProductionReadinessAudit(complete).ready.final_release_config, true);
+});
+
+
+test("protected readiness workflow proves merged-PR provenance before entering openai-production", () => {
+  assert.match(readinessWorkflow, /permissions:\n  contents: read\n  pull-requests: read/);
+  assert.match(
+    readinessWorkflow,
+    /provenance:[\s\S]*Require dispatched SHA to originate from a merged PR[\s\S]*node scripts\/check-main-provenance\.mjs/,
+  );
+  assert.match(
+    readinessWorkflow,
+    /audit:\n    name: Classify protected M5 inputs\n    needs: provenance\n    runs-on: ubuntu-latest\n    timeout-minutes: 5\n    environment: openai-production/,
+  );
+
+  const provenanceBlock = readinessWorkflow.match(/  provenance:[\s\S]*?\n  audit:/)?.[0] || "";
+  assert.doesNotMatch(
+    provenanceBlock,
+    /environment:\s*openai-production/,
+    "provenance must complete before the protected environment is entered",
+  );
 });

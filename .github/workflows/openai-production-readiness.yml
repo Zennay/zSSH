@@ -5,14 +5,30 @@ on:
 
 permissions:
   contents: read
+  pull-requests: read
 
 concurrency:
   group: zssh-openai-production-readiness
   cancel-in-progress: true
 
 jobs:
+  provenance:
+    name: Canonical main provenance
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Require dispatched SHA to originate from a merged PR
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node scripts/check-main-provenance.mjs
+
   audit:
     name: Classify protected M5 inputs
+    needs: provenance
     runs-on: ubuntu-latest
     timeout-minutes: 5
     environment: openai-production
