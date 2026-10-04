@@ -240,6 +240,14 @@ test("production DNS workflow pins all reusable actions to immutable commit SHAs
   assert.doesNotMatch(workflow, /uses:\s+[^\s]+@v\d+(?:\s|$)/);
 });
 
+test("operator DNS runbook names the reviewed Node 24 v7 action generation", () => {
+  assert.match(runbook, /Node 24-compatible v7 releases/);
+  assert.match(runbook, /actions\/checkout.*v7\.0\.1.*3d3c42e5aac5ba805825da76410c181273ba90b1/s);
+  assert.match(runbook, /actions\/setup-node.*v7\.0\.0.*820762786026740c76f36085b0efc47a31fe5020/s);
+  assert.match(runbook, /actions\/upload-artifact.*v7\.0\.1.*043fb46d1a93c77aae656e7c1c64a875d1fc6a0a/s);
+  assert.doesNotMatch(runbook, /reviewed v4 releases/);
+});
+
 
 test("Cloudflare provider credential is unavailable before canonical provenance", () => {
   const jobHeader = workflow.split("    steps:")[0];
