@@ -6,6 +6,10 @@ const readinessWorkflow = readFileSync(
   new URL("../.github/workflows/openai-production-readiness.yml", import.meta.url),
   "utf8",
 );
+const auth0Workflow = readFileSync(
+  new URL("../.github/workflows/auth0-production-preflight.yml", import.meta.url),
+  "utf8",
+);
 const publicReleaseWorkflow = readFileSync(
   new URL("../.github/workflows/public-release-gate.yml", import.meta.url),
   "utf8",
@@ -235,4 +239,18 @@ test("protected readiness workflow proves merged-PR provenance before entering o
     /environment:\s*openai-production/,
     "provenance must complete before the protected environment is entered",
   );
+});
+
+
+test("canonical non-secret production defaults stay available without environment-variable provisioning", () => {
+  const mcpDefault = "ZSSH_PLUGIN_MCP_URL: ${{ vars.ZSSH_PLUGIN_MCP_URL || 'https://zssh.cheapgpt.shop/mcp' }}";
+  const readDefault = "ZSSH_REVIEW_FILE: ${{ vars.ZSSH_REVIEW_FILE || '/srv/zssh-review/sample.txt' }}";
+  const writeDefault = "ZSSH_REVIEW_WRITE_FILE: ${{ vars.ZSSH_REVIEW_WRITE_FILE || '/srv/zssh-review/output.txt' }}";
+
+  assert.ok(auth0Workflow.includes(mcpDefault));
+  for (const workflow of [readinessWorkflow, publicReleaseWorkflow]) {
+    assert.ok(workflow.includes(mcpDefault));
+    assert.ok(workflow.includes(readDefault));
+    assert.ok(workflow.includes(writeDefault));
+  }
 });
