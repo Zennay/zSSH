@@ -1,13 +1,16 @@
 import crypto from "node:crypto";
+import { readFileSync } from "node:fs";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import {
   assertExactBearerResourceMetadata,
   assertPublicToolScopeContract,
+  assertReviewTestCasesMatchPublicToolContract,
   fetchAuthorizationServerMetadata,
   fetchNoRedirect,
   isNonPublicHostname,
   protectedResourceMetadataUrl,
+  PUBLIC_TOOL_SCOPE_CONTRACT,
   publicToolContractFingerprint,
   validateProductionServerInfo,
   validatePublicMcpUrl,
@@ -178,18 +181,11 @@ const transport = new StreamableHTTPClientTransport(mcpUrl, {
   },
 });
 
-const requiredTools = [
-  "get_profile",
-  "get_pairing_status",
-  "zssh_server_info",
-  "get_system_uptime",
-  "get_system_identity",
-  "get_kernel_info",
-  "get_disk_usage",
-  "get_memory_usage",
-  "zssh_read_file",
-  "zssh_write_file",
-];
+const pluginTemplate = JSON.parse(
+  readFileSync(new URL("./submission/plugin.template.json", import.meta.url), "utf8"),
+);
+const reviewTestCaseContract = assertReviewTestCasesMatchPublicToolContract(pluginTemplate);
+const requiredTools = Object.keys(PUBLIC_TOOL_SCOPE_CONTRACT);
 const forbiddenTools = ["zssh_exec", "zssh_run_safe"];
 
 try {
@@ -308,6 +304,10 @@ try {
     annotation_justifications_sha256: annotationJustifications.sha256,
     oauth_security_validated: true,
     oauth_tool_scope_contract_validated: true,
+    review_test_cases_bound_to_public_tools: true,
+    review_positive_case_count: reviewTestCaseContract.positive_count,
+    review_negative_case_count: reviewTestCaseContract.negative_count,
+    review_referenced_tools: reviewTestCaseContract.referenced_tools,
     oauth_authorization_server_metadata_validated: true,
     oauth_pkce_s256_validated: authorizationServerEvidence.every(item => item.pkce_s256 === true),
     oauth_client_registration_validated: authorizationServerEvidence.every(item => item.client_registration_methods.length > 0),
