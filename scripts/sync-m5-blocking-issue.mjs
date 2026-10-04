@@ -87,7 +87,11 @@ export function renderM5BlockingIssue({ readiness, canonicalSha, repository = "Z
   const laterGates = (Array.isArray(readiness.next_actions) ? readiness.next_actions : [])
     .map(item => cleanText(item?.lane, 120))
     .filter(Boolean)
-    .filter(lane => lane !== gate);
+    .filter(lane => lane !== gate)
+    .map(name => ({
+      name,
+      runbook: gateRunbookLine({ gate: name, repository, sha }),
+    }));
 
   if (!gate) {
     const finalRunbookLine = gateRunbookLine({
@@ -144,7 +148,11 @@ export function renderM5BlockingIssue({ readiness, canonicalSha, repository = "Z
       invalidSummary(action?.invalid),
       "",
       "## Later gates",
-      laterGates.length > 0 ? laterGates.map(name => `- \`${name}\``).join("\n") : "- none",
+      laterGates.length > 0
+        ? laterGates.map(({ name, runbook }) => (
+          runbook ? `- \`${name}\` — ${runbook}` : `- \`${name}\``
+        )).join("\n")
+        : "- none",
       "",
       "## Safety",
       "This issue is maintained automatically from the secret-safe protected readiness receipt. It records field names and validation reasons only. Never paste credential values into this issue, commits, artifacts, or Notion.",

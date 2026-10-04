@@ -31,6 +31,7 @@ function receipt(overrides = {}) {
       { lane: "dns_publication" },
       { lane: "auth0_preflight" },
       { lane: "reviewer_fixture" },
+      { lane: "portal_and_host_attestations" },
     ],
     ...overrides,
   };
@@ -47,6 +48,21 @@ test("renders only secret-safe blocking metadata", () => {
   assert.equal(result.title, "M5 active gate: dns_publication");
   assert.match(result.body, /CLOUDFLARE_API_TOKEN/);
   assert.match(result.body, /auth0_preflight/);
+  assert.ok(
+    result.body.includes(
+      `https://github.com/Zennay/zSSH/blob/${sha}/docs/research/auth0-production-oauth-2026-10-04.md`,
+    ),
+  );
+  assert.ok(
+    result.body.includes(
+      `https://github.com/Zennay/zSSH/blob/${sha}/docs/openai-plugin-review.md`,
+    ),
+  );
+  assert.ok(
+    result.body.includes(
+      `https://github.com/Zennay/zSSH/blob/${sha}/docs/openai-plugin-release-checklist.md`,
+    ),
+  );
   assert.match(
     result.body,
     new RegExp(`https://github\\.com/Zennay/zSSH/blob/${sha}/docs/research/cloudflare-dns-publication-2026-10-04\\.md`),
