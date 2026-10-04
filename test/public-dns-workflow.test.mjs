@@ -103,6 +103,7 @@ test("production DNS verifies the provider token read-only before planning any m
   const step = tail.split("\n      - name:")[0];
   assert.match(step, /node scripts\/verify-cloudflare-token\.mjs/);
   assert.match(step, /CLOUDFLARE_API_TOKEN: \$\{\{ secrets\.CLOUDFLARE_API_TOKEN \}\}/);
+  assert.match(step, /CLOUDFLARE_ACCOUNT_ID: \$\{\{ vars\.CLOUDFLARE_ACCOUNT_ID \}\}/);
   assert.match(workflow, /zssh-cloudflare-token-verify\.json[\s\S]*zssh-cloudflare-dns-plan\.json/);
 });
 
@@ -220,10 +221,12 @@ test("operator DNS cutover runbook stays aligned with the guarded workflow contr
     runbook,
     /GitHub \`openai-production\` environment[\s\S]*protected secret \`CLOUDFLARE_API_TOKEN\`/,
   );
-  assert.match(runbook, /My Profile > API Tokens > Create Token/);
-  assert.match(runbook, /user-owned API token/i);
+  assert.match(runbook, /My Profile > API Tokens/);
+  assert.match(runbook, /user-owned token/i);
+  assert.match(runbook, /account-owned API token/i);
   assert.match(runbook, /Zone > DNS > Edit[\s\S]*Zone > Zone > Read/);
-  assert.match(runbook, /do not use an Account API token/i);
+  assert.match(runbook, /CLOUDFLARE_ACCOUNT_ID/);
+  assert.match(runbook, /\/accounts\/\{account_id\}\/tokens\/verify/);
   assert.match(runbook, /\/user\/tokens\/verify/);
   assert.match(runbook, /Cloudflare re-read returning the idempotent \`noop\` state/);
   assert.match(runbook, /external DNS observation advancing beyond the \`dns\` stage/);
