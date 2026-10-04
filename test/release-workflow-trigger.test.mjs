@@ -80,7 +80,7 @@ test("release-critical pull_request and push path filters stay in parity", () =>
 test("final production release reruns and binds the external ingress preflight", () => {
   assert.match(workflow, /- name: Prove external production ingress/);
   assert.match(workflow, /node scripts\/check-public-ingress\.mjs "\$ZSSH_PLUGIN_MCP_URL" \| tee "\$INGRESS_REPORT_PATH"/);
-  assert.match(workflow, /const ingress = JSON\.parse\(readFileSync\(process\.env\.INGRESS_REPORT_PATH, "utf8"\)\)/);
+  assert.match(workflow, /Record non-secret release evidence[\s\S]*INGRESS_REPORT_PATH: \$\{\{ runner\.temp \}\}\/zssh-public-ingress-preflight\.json[\s\S]*const ingress = JSON\.parse\(readFileSync\(process\.env\.INGRESS_REPORT_PATH, "utf8"\)\)/);
   assert.match(workflow, /public_ingress_validated: true/);
   assert.match(workflow, /zssh-public-ingress-preflight\.json/);
 });
