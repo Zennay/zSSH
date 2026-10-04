@@ -72,3 +72,14 @@ test("production installer validation imports only exact-commit helpers", () => 
   );
   assert.doesNotMatch(targetAgentInstaller, /pathToFileURL\(sourceRoot \+ "\/pairing\.mjs"\)/);
 });
+
+
+test("all production installers verify tracked release contents against the exact commit", () => {
+  for (const source of [installer, publicGatewayInstaller, targetAgentInstaller]) {
+    assert.match(
+      source,
+      /git -C "\$SOURCE_ROOT" show "\$\{REPO_SHA\}:scripts\/verify-release-provenance\.mjs" \|[\s\S]*"\$NODE_BIN" --input-type=module - "\$SOURCE_ROOT" "\$REPO_SHA" "\$RELEASE"/,
+    );
+    assert.match(source, /\nverify_release_provenance\n/);
+  }
+});

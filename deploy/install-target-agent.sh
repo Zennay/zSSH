@@ -134,6 +134,12 @@ NODE
 rm -rf "$VALIDATION_ROOT"
 trap 'rm -rf "$STAGE"' EXIT
 
+
+verify_release_provenance() {
+  git -C "$SOURCE_ROOT" show "${REPO_SHA}:scripts/verify-release-provenance.mjs" |
+    "$NODE_BIN" --input-type=module - "$SOURCE_ROOT" "$REPO_SHA" "$RELEASE"
+}
+
 if [[ ! -d "$RELEASE" ]]; then
   mkdir -p "$STAGE"
   # Export only the exact tracked commit. Never copy the mutable worktree:
@@ -144,6 +150,8 @@ if [[ ! -d "$RELEASE" ]]; then
   "$NPM_BIN" test --prefix "$STAGE"
   mv "$STAGE" "$RELEASE"
 fi
+
+verify_release_provenance
 
 TMP_LINK="$BASE/.current.$$"
 ln -s "$RELEASE" "$TMP_LINK"
