@@ -146,9 +146,13 @@ test("exact record is idempotent and does not write", async () => {
   assert.equal(calls, 1);
 });
 
-test("refuses CNAME/NS conflicts and multi-A RRsets", async () => {
+test("refuses alternate routing records and multi-A RRsets", async () => {
   for (const records of [
+    [{ id: recordId, type: "AAAA", name: "zssh.cheapgpt.shop", content: "2606:4700:4700::1111", proxied: false }],
     [{ id: recordId, type: "CNAME", name: "zssh.cheapgpt.shop", content: "other.example.net" }],
+    [{ id: recordId, type: "HTTPS", name: "zssh.cheapgpt.shop", content: "1 alt.example.net alpn=\"h2\"" }],
+    [{ id: recordId, type: "NS", name: "zssh.cheapgpt.shop", content: "ns1.example.net" }],
+    [{ id: recordId, type: "SVCB", name: "zssh.cheapgpt.shop", content: "1 alt.example.net alpn=\"h2\"" }],
     [
       { id: recordId, type: "A", name: "zssh.cheapgpt.shop", content: "198.244.191.182", proxied: false },
       { id: "11111111111111111111111111111111", type: "A", name: "zssh.cheapgpt.shop", content: "1.1.1.1", proxied: false },
@@ -159,6 +163,22 @@ test("refuses CNAME/NS conflicts and multi-A RRsets", async () => {
       /refusing/,
     );
   }
+});
+
+test("reports all conflicting routing record types without exposing provider secrets", async () => {
+  const records = [
+    { id: recordId, type: "AAAA", name: "zssh.cheapgpt.shop", content: "2606:4700:4700::1111", proxied: false },
+    { id: "11111111111111111111111111111111", type: "HTTPS", name: "zssh.cheapgpt.shop", content: "1 alt.example.net" },
+  ];
+
+  await assert.rejects(
+    reconcileCloudflareDns(baseArgs(async () => response(records), { apply: true })),
+    error => {
+      assert.match(error.message, /AAAA, HTTPS/);
+      assert.equal(error.message.includes("test-token-not-secret"), false);
+      return true;
+    },
+  );
 });
 
 
