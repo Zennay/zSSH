@@ -122,7 +122,11 @@ test("README does not present the default reviewer fixture as production-compati
   assert.match(readme, /default .*development\/test fixture/i);
   assert.match(readme, /release_compatible=false/);
   assert.match(readme, /release_variables=null/);
-  assert.match(readme, /ZSSH_REVIEW_ROOT=\/srv\/zssh-review npm run review:target/);
+  assert.match(
+    readme,
+    /ZSSH_REVIEW_ROOT=\/srv\/zssh-review ZSSH_REVIEW_REQUIRE_RELEASE_COMPATIBLE=1 npm run review:target/,
+  );
+  assert.match(readme, /fails closed instead of returning a development-only fixture/);
   assert.match(readme, /Only the exact submitted files `\/srv\/zssh-review\/sample\.txt` and `\/srv\/zssh-review\/output\.txt` produce `release_compatible=true`/);
   assert.doesNotMatch(
     readme,
