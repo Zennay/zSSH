@@ -111,3 +111,12 @@ npm run repo:main-protection:configure -- --apply
 The configurator requires pull-request based changes, strict `test` status, administrator enforcement, and disables force-pushes and branch deletion. It immediately re-reads the live branch-protection endpoint through the existing verifier and emits only secret-free verification metadata.
 
 This still does **not** manufacture the final negative-test evidence. After the live policy is green, perform the separately controlled direct-write rejection test required by issue #100; only then set `ZSSH_MAIN_PROTECTION_VERIFIED=1`.
+
+## Autonomous merged-PR application trigger
+
+The guarded application lane is no longer manual-only. It now also listens for a closed pull request targeting `main`, but the provenance job runs only when that pull request was actually merged. For merged events it binds `GITHUB_SHA` to `pull_request.merge_commit_sha` before running the canonical provenance verifier.
+
+Only after that proof succeeds can the workflow enter the protected `repository-governance` environment and read `ZSSH_REPO_ADMIN_TOKEN`. The existing explicit confirmation remains required for manual dispatch; the merged-PR path supplies the fixed repository-owned confirmation value because the event itself is already constrained by merged status, exact SHA binding and provenance.
+
+This makes repository protection self-healing once the protected admin credential exists: a canonical merged change can apply/re-apply the expected policy without a separate UI dispatch. If the environment or credential is absent, the mutation job fails closed and no weaker fallback is used. The workflow still has no `contents: write`, does not use `git push`, and does not mark `ZSSH_MAIN_PROTECTION_VERIFIED=1` without the separate rejected-direct-write evidence required by issue #100.
+
