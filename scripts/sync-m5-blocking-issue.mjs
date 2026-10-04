@@ -7,6 +7,18 @@ const GATE_RUNBOOKS = Object.freeze({
     label: "Cloudflare production DNS publication",
     path: "docs/research/cloudflare-dns-publication-2026-10-04.md",
   },
+  auth0_preflight: {
+    label: "Auth0 production OAuth qualification",
+    path: "docs/research/auth0-production-oauth-2026-10-04.md",
+  },
+  reviewer_fixture: {
+    label: "OpenAI reviewer fixture",
+    path: "docs/openai-plugin-review.md",
+  },
+  portal_and_host_attestations: {
+    label: "OpenAI portal and host validation",
+    path: "docs/openai-plugin-release-checklist.md",
+  },
 });
 
 function fail(message) {
