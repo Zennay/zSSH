@@ -126,17 +126,29 @@ test("apply refuses wrong repo, weak credentials, or missing explicit confirmati
   assert.equal(called, false);
 });
 
-test("admin credential is exposed only after canonical provenance and never with contents write", () => {
+test("admin credential is exposed only to the canonical mutation step", () => {
   assert.match(workflow, /test "\$GITHUB_REF" = "refs\/heads\/main"/);
   assert.match(workflow, /node scripts\/check-main-provenance\.mjs/);
   assert.match(
     workflow,
     /protect:\n    name: Apply and verify main protection when needed[\s\S]*environment: repository-governance/,
   );
+
+  const protectJob = workflow.split("  protect:")[1];
+  assert.ok(protectJob, "missing protect job");
+  const jobHeader = protectJob.split("    steps:")[0];
+  assert.doesNotMatch(jobHeader, /ZSSH_REPO_ADMIN_TOKEN/);
+  assert.doesNotMatch(jobHeader, /ZSSH_MAIN_PROTECTION_CONFIRM/);
+
+  const applyTail = workflow.split("      - name: Apply canonical main protection")[1];
+  assert.ok(applyTail, "missing mutation step");
+  const applyStep = applyTail.split("\n      - name:")[0];
+  assert.match(applyStep, /ZSSH_REPO_ADMIN_TOKEN: \$\{\{ secrets\.ZSSH_REPO_ADMIN_TOKEN \}\}/);
   assert.match(
-    workflow,
-    /ZSSH_REPO_ADMIN_TOKEN: \$\{\{ secrets\.ZSSH_REPO_ADMIN_TOKEN \}\}/,
+    applyStep,
+    /ZSSH_MAIN_PROTECTION_CONFIRM: \$\{\{ github\.event_name == 'workflow_dispatch' && inputs\.confirmation \|\| 'PROTECT_ZSSH_MAIN' \}\}/,
   );
+
   assert.doesNotMatch(workflow, /contents: write/);
   assert.doesNotMatch(workflow, /self-hosted/);
 });
