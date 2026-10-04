@@ -60,10 +60,14 @@ const metadataUrl = protectedResourceMetadataUrl(mcpUrl);
 const healthUrl = new URL("/health", origin);
 const challengeUrl = new URL("/.well-known/openai-apps-challenge", origin);
 const listingPages = [
-  ["website", new URL("/", origin), "Your Linux target stays yours."],
-  ["support", new URL("/support", origin), "<h1>Support</h1>"],
-  ["privacy", new URL("/privacy", origin), "<h1>Privacy</h1>"],
-  ["terms", new URL("/terms", origin), "<h1>Terms</h1>"],
+  ["website", new URL("/", origin), ["Your Linux target stays yours."]],
+  ["support", new URL("/support", origin), [
+    "<h1>Support</h1>",
+    'href="https://github.com/Zennay/zSSH/issues"',
+    'href="https://github.com/Zennay/zSSH/security/advisories/new"',
+  ]],
+  ["privacy", new URL("/privacy", origin), ["<h1>Privacy</h1>"]],
+  ["terms", new URL("/terms", origin), ["<h1>Terms</h1>"]],
 ];
 
 const demoResponse = await fetch(demoRecordingUrl, {
@@ -89,7 +93,7 @@ if ((allowHttp ? !["http:", "https:"].includes(demoFinalUrl.protocol) : demoFina
 const demoContentType = demoResponse.headers.get("content-type") || "";
 await demoResponse.body?.cancel().catch(() => {});
 
-for (const [name, listingUrl, marker] of listingPages) {
+for (const [name, listingUrl, markers] of listingPages) {
   const response = await fetchNoRedirect(listingUrl, { headers: { accept: "text/html" } }, name + " listing page");
   if (!response.ok) throw new Error(name + " listing page failed: HTTP " + response.status);
   const contentType = response.headers.get("content-type") || "";
@@ -101,8 +105,10 @@ for (const [name, listingUrl, marker] of listingPages) {
     throw new Error(name + " listing page is missing the restrictive CSP");
   }
   const body = await response.text();
-  if (!body.includes(marker)) {
-    throw new Error(name + " listing page did not return the expected zSSH content");
+  for (const marker of markers) {
+    if (!body.includes(marker)) {
+      throw new Error(name + " listing page did not return the expected zSSH content");
+    }
   }
 }
 
@@ -282,6 +288,7 @@ try {
     demo_recording_content_type: demoContentType,
     no_redirect_contract_validated: true,
     listing_urls_validated: true,
+    support_contact_routes_validated: true,
     listing_paths: listingPages.map(([, listingUrl]) => listingUrl.pathname),
     exact_resource_metadata_challenge_validated: true,
     tool_count: tools.length,
