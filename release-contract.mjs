@@ -19,6 +19,7 @@ function isPrivateIpv4(hostname) {
 export function isNonPublicHostname(hostname) {
   const host = String(hostname || "").toLowerCase().replace(/^\[|\]$/g, "");
   if (!host || host === "localhost" || host === "::1" || host === "0.0.0.0") return true;
+  if (isIP(host) !== 0) return true;
   if (isPrivateIpv4(host)) return true;
   if (/^(?:fc|fd)[0-9a-f]{2}:/i.test(host) || /^fe[89ab][0-9a-f]:/i.test(host)) return true;
   if (["example.com", "example.net", "example.org"].some(domain => host === domain || host.endsWith("." + domain))) return true;
@@ -46,7 +47,7 @@ function validatePublicHttpsUrl(raw, {
   if (!allowQuery && (url.search || url.hash)) fail(`${name} must not contain query parameters or fragments`);
   if (url.hash) fail(`${name} must not contain a fragment`);
   const normalizedHostname = url.hostname.replace(/^\[|\]$/g, "");
-  if (requirePublicHostname && (isIP(normalizedHostname) !== 0 || isNonPublicHostname(normalizedHostname))) {
+  if (requirePublicHostname && isNonPublicHostname(normalizedHostname)) {
     fail(`${name} must use a public hostname`);
   }
   return url;
