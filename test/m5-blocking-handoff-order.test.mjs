@@ -5,7 +5,7 @@ import { renderM5BlockingIssue } from "../scripts/sync-m5-blocking-issue.mjs";
 
 test("managed M5 handoff includes unresolved public ingress after DNS", () => {
   const readiness = {
-    schema_version: 4,
+    schema_version: 5,
     phase: "M5",
     execution_state: "external_input_only",
     blocking_gate: "dns_publication",

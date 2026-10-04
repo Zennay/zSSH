@@ -29,6 +29,8 @@ const GATE_RUNBOOKS = Object.freeze({
   },
 });
 
+const READINESS_SCHEMA_VERSION = 5;
+
 const M5_GATE_ORDER = Object.freeze([
   "repository_governance",
   "dns_publication",
@@ -64,8 +66,13 @@ function cleanText(value, maxLength = 600) {
 function validateReadiness(readiness) {
   if (!readiness || typeof readiness !== "object") fail("readiness receipt is required");
   if (readiness.phase !== "M5") fail("readiness receipt must describe M5");
-  if (!Number.isInteger(readiness.schema_version) || readiness.schema_version < 4) {
-    fail("readiness receipt schema v4 or newer is required");
+  if (readiness.schema_version !== READINESS_SCHEMA_VERSION) {
+    const observed = Number.isInteger(readiness.schema_version)
+      ? `v${readiness.schema_version}`
+      : "missing or invalid";
+    fail(
+      `readiness receipt schema v${READINESS_SCHEMA_VERSION} is required; received ${observed}`,
+    );
   }
   const gate = readiness.blocking_gate;
   const action = readiness.blocking_action;
