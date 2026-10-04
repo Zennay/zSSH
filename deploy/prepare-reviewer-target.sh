@@ -12,7 +12,7 @@ if [[ "$(id -u)" -eq 0 ]]; then
   exit 2
 fi
 
-for required in scripts/prepare-review-target.mjs scripts/create-agent-identity.mjs package.json; do
+for required in scripts/prepare-review-target.mjs scripts/reviewer-fixture-contract.mjs scripts/create-agent-identity.mjs package.json; do
   [[ -f "$SOURCE_ROOT/$required" ]] || { echo "Missing $required" >&2; exit 2; }
 done
 
@@ -80,11 +80,13 @@ chmod 600 "$KEY_FILE" "$PUBLIC_FILE"
 chmod 700 "$REVIEW_ROOT"
 chmod 600 "$REVIEW_ROOT/sample.txt"
 
-"$NODE_BIN" --input-type=module - "$tmp_fixture" "$PUBLIC_FILE" "$KEY_FILE" <<'NODE'
+"$NODE_BIN" --input-type=module - "$tmp_fixture" "$PUBLIC_FILE" "$KEY_FILE" "$SOURCE_ROOT/scripts/reviewer-fixture-contract.mjs" <<'NODE'
 import crypto from "node:crypto";
 import { readFileSync } from "node:fs";
+import { pathToFileURL } from "node:url";
 
-const [fixtureFile, publicFile, privateKeyFile] = process.argv.slice(2);
+const [fixtureFile, publicFile, privateKeyFile, fixtureContractFile] = process.argv.slice(2);
+const { REVIEW_READ_FILE, REVIEW_WRITE_FILE } = await import(pathToFileURL(fixtureContractFile).href);
 const fixture = JSON.parse(readFileSync(fixtureFile, "utf8"));
 const pub = JSON.parse(readFileSync(publicFile, "utf8"));
 const targetId = String(Object.keys(pub.targets || {})[0] || "");
@@ -93,6 +95,9 @@ if (!/^zt_[A-Za-z0-9_-]{8,96}$/.test(targetId)) throw new Error("reviewer target
 if (!record?.public_key_pem?.includes("BEGIN PUBLIC KEY")) throw new Error("reviewer public key config is invalid");
 
 const fingerprint = crypto.createHash("sha256").update(record.public_key_pem).digest("hex");
+const releaseCompatible =
+  fixture.sample_file === REVIEW_READ_FILE &&
+  fixture.write_test_file === REVIEW_WRITE_FILE;
 console.log(JSON.stringify({
   ok: true,
   target_id: targetId,
@@ -103,9 +108,13 @@ console.log(JSON.stringify({
   review_root: fixture.review_root,
   review_file: fixture.sample_file,
   review_write_file: fixture.write_test_file,
-  release_variables: {
-    ZSSH_REVIEW_FILE: fixture.sample_file,
-    ZSSH_REVIEW_WRITE_FILE: fixture.write_test_file,
-  },
+  release_compatible: releaseCompatible,
+  release_variables: releaseCompatible ? {
+    ZSSH_REVIEW_FILE: REVIEW_READ_FILE,
+    ZSSH_REVIEW_WRITE_FILE: REVIEW_WRITE_FILE,
+  } : null,
+  release_blocker: releaseCompatible
+    ? null
+    : `reviewer fixture is not at the canonical submitted paths ${REVIEW_READ_FILE} and ${REVIEW_WRITE_FILE}; do not copy dev/test paths into openai-production`,
 }, null, 2));
 NODE
