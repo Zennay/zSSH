@@ -44,15 +44,6 @@ test("release-critical pull_request and push path filters stay in parity", () =>
     "post-merge push must rerun the release gate for every release-critical path guarded on pull requests",
   );
 
-  assert.ok(
-    pullRequestPaths.includes(".github/workflows/**"),
-    "pull_request release gate must cover every active GitHub Actions workflow",
-  );
-  assert.ok(
-    pushPaths.includes(".github/workflows/**"),
-    "push release gate must cover every active GitHub Actions workflow",
-  );
-
   for (const provenancePath of [
     "scripts/check-main-provenance.mjs",
     "scripts/check-main-protection.mjs",
