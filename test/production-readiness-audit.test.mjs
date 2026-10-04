@@ -24,6 +24,15 @@ const reviewDoc = readFileSync(
 );
 import { computeHostSurfaceReviewFingerprint } from "../scripts/check-host-surface-review-binding.mjs";
 import { buildProductionReadinessAudit } from "../scripts/check-production-readiness-audit.mjs";
+import {
+  REVIEW_READ_FILE,
+  REVIEW_WRITE_FILE,
+} from "../scripts/reviewer-fixture-contract.mjs";
+
+const pluginTemplate = JSON.parse(readFileSync(
+  new URL("../submission/plugin.template.json", import.meta.url),
+  "utf8",
+));
 
 const complete = {
   CLOUDFLARE_ZONE_ID: "0123456789abcdef0123456789abcdef",
@@ -47,8 +56,8 @@ const complete = {
   AUTH0_MANAGEMENT_BASE_URL: "https://tenant.eu.auth0.com",
   AUTH0_MANAGEMENT_API_TOKEN: "placeholder-auth0-value",
   OPENAI_APPS_CHALLENGE_TOKEN: "placeholder-challenge-value",
-  ZSSH_REVIEW_FILE: "/srv/zssh-review/sample.txt",
-  ZSSH_REVIEW_WRITE_FILE: "/srv/zssh-review/output.txt",
+  ZSSH_REVIEW_FILE: REVIEW_READ_FILE,
+  ZSSH_REVIEW_WRITE_FILE: REVIEW_WRITE_FILE,
 };
 complete.ZSSH_CHATGPT_REVIEW_SHA256 = computeHostSurfaceReviewFingerprint({
   mcpUrl: complete.ZSSH_PLUGIN_MCP_URL,
@@ -251,6 +260,38 @@ test("keeps repository governance independent from provider and portal lanes", (
   assert.equal(result.ready.portal_and_host_attestations, true);
   assert.equal(result.ready.final_release_config, false);
   assert.deepEqual(result.next_actions.map(item => item.lane), ["repository_governance"]);
+});
+
+test("binds reviewer fixture configuration to the exact submitted review prompts", () => {
+  const cases = pluginTemplate.extensions["com.openai"].review.test_cases.positive;
+  assert.ok(cases.some(item => item.prompt.includes(REVIEW_READ_FILE)));
+  assert.ok(cases.some(item => item.prompt.includes(REVIEW_WRITE_FILE)));
+
+  const wrongRead = buildProductionReadinessAudit({
+    ...complete,
+    ZSSH_REVIEW_FILE: "/srv/zssh-review/alternate.txt",
+  });
+  assert.equal(wrongRead.ready.reviewer_fixture, false);
+  assert.ok(
+    wrongRead.lanes.reviewer_fixture.invalid.some(
+      item =>
+        item.name === "ZSSH_REVIEW_FILE" &&
+        item.reason.includes(REVIEW_READ_FILE),
+    ),
+  );
+
+  const wrongWrite = buildProductionReadinessAudit({
+    ...complete,
+    ZSSH_REVIEW_WRITE_FILE: "/srv/zssh-review/alternate-output.txt",
+  });
+  assert.equal(wrongWrite.ready.reviewer_fixture, false);
+  assert.ok(
+    wrongWrite.lanes.reviewer_fixture.invalid.some(
+      item =>
+        item.name === "ZSSH_REVIEW_WRITE_FILE" &&
+        item.reason.includes(REVIEW_WRITE_FILE),
+    ),
+  );
 });
 
 test("rejects reviewer login evidence from a different OAuth issuer origin", () => {
