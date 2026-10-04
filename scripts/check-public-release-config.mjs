@@ -3,7 +3,7 @@ import net from "node:net";
 import path from "node:path";
 import process from "node:process";
 import { pathToFileURL } from "node:url";
-import { validatePublicMcpUrl } from "../release-contract.mjs";
+import { isNonPublicHostname, validatePublicMcpUrl } from "../release-contract.mjs";
 import { assertDomainVerificationBinding } from "./check-domain-verification-binding.mjs";
 import {
   assertHostSurfaceReviewBinding,
@@ -75,8 +75,7 @@ function requirePublicHttpsUrl(env, name) {
   const hostname = url.hostname.replace(/^\[|\]$/g, "").toLowerCase();
   if (
     net.isIP(hostname) ||
-    hostname === "localhost" ||
-    hostname.endsWith(".local") ||
+    isNonPublicHostname(hostname) ||
     !hostname.includes(".")
   ) {
     fail(`${name} must use a public DNS hostname reachable by OpenAI reviewers`);
@@ -89,7 +88,7 @@ export function validatePublicReleaseConfig(env = process.env) {
     requireValue(env, "ZSSH_PLUGIN_MCP_URL"),
     { name: "ZSSH_PLUGIN_MCP_URL" }
   );
-  const demoRecordingUrl = requireHttpsUrl(env, "ZSSH_PLUGIN_DEMO_RECORDING_URL");
+  const demoRecordingUrl = requirePublicHttpsUrl(env, "ZSSH_PLUGIN_DEMO_RECORDING_URL");
   const oauthIssuerUrl = requirePublicHttpsUrl(env, "ZSSH_OAUTH_ISSUER");
   const auth0ManagementBaseUrl = requirePublicHttpsUrl(env, "AUTH0_MANAGEMENT_BASE_URL");
   const auth0ManagementToken = requireValue(env, "AUTH0_MANAGEMENT_API_TOKEN", { minLength: 20 });
@@ -192,7 +191,7 @@ function assertThrows(fn, pattern) {
 export function runSelfTest() {
   const good = {
     ZSSH_PLUGIN_MCP_URL: "https://mcp.zssh.dev/mcp",
-    ZSSH_PLUGIN_DEMO_RECORDING_URL: "https://review.example/zssh-demo",
+    ZSSH_PLUGIN_DEMO_RECORDING_URL: "https://review.zssh.dev/zssh-demo",
     ZSSH_REVIEW_ACCESS_TOKEN: "review-token-0123456789abcdef",
     ZSSH_REVIEW_LOGIN_URL: "https://auth.zssh.dev/login",
     ZSSH_REVIEW_LOGIN_VERIFIED_URL: "https://auth.zssh.dev/login",
@@ -230,7 +229,8 @@ export function runSelfTest() {
   assertThrows(() => validatePublicReleaseConfig({ ...good, ZSSH_PLUGIN_MCP_URL: "https://127.0.0.1/mcp" }), /public hostname/);
   assertThrows(() => validatePublicReleaseConfig({ ...good, ZSSH_PLUGIN_MCP_URL: "https://mcp.zssh.dev/other" }), /\/mcp endpoint/);
   assertThrows(() => validatePublicReleaseConfig({ ...good, ZSSH_PLUGIN_MCP_URL: "https://mcp.zssh.dev/mcp?target=review" }), /query parameters/);
-  assertThrows(() => validatePublicReleaseConfig({ ...good, ZSSH_PLUGIN_DEMO_RECORDING_URL: "http://review.example/demo" }), /HTTPS URL/);
+  assertThrows(() => validatePublicReleaseConfig({ ...good, ZSSH_PLUGIN_DEMO_RECORDING_URL: "http://review.zssh.dev/demo" }), /HTTPS URL/);
+  assertThrows(() => validatePublicReleaseConfig({ ...good, ZSSH_PLUGIN_DEMO_RECORDING_URL: "https://127.0.0.1/demo" }), /public DNS hostname/);
   assertThrows(() => validatePublicReleaseConfig({ ...good, ZSSH_OAUTH_ISSUER: "http://tenant.eu.auth0.com" }), /HTTPS URL/);
   assertThrows(() => validatePublicReleaseConfig({ ...good, AUTH0_MANAGEMENT_BASE_URL: "https://127.0.0.1" }), /public DNS hostname/);
   assertThrows(() => validatePublicReleaseConfig({ ...good, AUTH0_MANAGEMENT_API_TOKEN: "short" }), /at least 20/);

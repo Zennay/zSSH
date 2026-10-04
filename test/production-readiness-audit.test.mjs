@@ -29,7 +29,7 @@ const complete = {
   CLOUDFLARE_ZONE_ID: "0123456789abcdef0123456789abcdef",
   CLOUDFLARE_API_TOKEN: "placeholder-cf-value",
   ZSSH_PLUGIN_MCP_URL: "https://zssh.cheapgpt.shop/mcp",
-  ZSSH_PLUGIN_DEMO_RECORDING_URL: "https://review.example/zssh-demo",
+  ZSSH_PLUGIN_DEMO_RECORDING_URL: "https://review.zssh.dev/zssh-demo",
   ZSSH_REVIEW_ACCESS_TOKEN: "placeholder-review-value",
   ZSSH_REVIEW_LOGIN_URL: "https://tenant.eu.auth0.com/u/login",
   ZSSH_REVIEW_LOGIN_VERIFIED_URL: "https://tenant.eu.auth0.com/u/login",
@@ -117,12 +117,14 @@ test("rejects malformed configured values instead of reporting a false-ready lan
     CLOUDFLARE_ZONE_ID: "not-a-zone",
     ZSSH_OAUTH_ISSUER: "http://tenant.example.test/",
     AUTH0_MANAGEMENT_API_TOKEN: "short",
+    ZSSH_PLUGIN_DEMO_RECORDING_URL: "https://127.0.0.1/demo",
     ZSSH_REVIEW_CREDENTIALS_VERIFIED: "0",
   });
 
   assert.equal(result.ready.repository_governance, false);
   assert.equal(result.ready.dns_publication, false);
   assert.equal(result.ready.auth0_preflight, false);
+  assert.equal(result.ready.reviewer_fixture, false);
   assert.equal(result.ready.portal_and_host_attestations, false);
 
   assert.deepEqual(
@@ -136,6 +138,11 @@ test("rejects malformed configured values instead of reporting a false-ready lan
   assert.deepEqual(
     result.lanes.auth0_preflight.invalid.map(item => item.name),
     ["ZSSH_OAUTH_ISSUER", "AUTH0_MANAGEMENT_API_TOKEN"],
+  );
+  assert.ok(
+    result.lanes.reviewer_fixture.invalid.some(
+      item => item.name === "ZSSH_PLUGIN_DEMO_RECORDING_URL" && item.reason.includes("public DNS hostname"),
+    ),
   );
   assert.ok(
     result.lanes.portal_and_host_attestations.invalid.some(
