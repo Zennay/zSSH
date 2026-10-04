@@ -14,6 +14,7 @@
     "mcp:claude-canary": "node mcp-claude-canary.mjs",
     "plugin:build": "python3 scripts/build-openai-plugin.py",
     "review:fixture": "node scripts/prepare-review-target.mjs",
+    "review:target": "bash deploy/prepare-reviewer-target.sh",
     "submission:probe": "node production-submission-probe.mjs",
     "mcp:client-token-canary": "node client-token-canary.mjs",
     "agent:init": "node scripts/create-agent-identity.mjs"
