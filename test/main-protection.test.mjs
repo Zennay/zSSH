@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   assessMainProtection,
   assertCurrentBranchSha,
+  fetchGitHubResponseWithRetry,
   inspectBranchProtectionFlag,
   summarizeBranchMetadata,
   verifyMainProtection,
@@ -35,6 +36,56 @@ function response(status, body) {
     },
   };
 }
+
+test("retries bounded transient GitHub main-protection API failures", async () => {
+  let calls = 0;
+  const delays = [];
+  const result = await fetchGitHubResponseWithRetry({
+    url: "https://api.github.com/repos/Zennay/zSSH/branches/main",
+    fetchImpl: async () => {
+      calls += 1;
+      return calls < 3 ? response(500, {}) : response(200, { ok: true });
+    },
+    sleepImpl: async (ms) => delays.push(ms),
+  });
+
+  assert.equal(result.status, 200);
+  assert.equal(calls, 3);
+  assert.deepEqual(delays, [250, 500]);
+});
+
+test("does not retry non-transient GitHub main-protection API failures", async () => {
+  let calls = 0;
+  const result = await fetchGitHubResponseWithRetry({
+    url: "https://api.github.com/repos/Zennay/zSSH/branches/main",
+    fetchImpl: async () => {
+      calls += 1;
+      return response(403, {});
+    },
+    sleepImpl: async () => {
+      throw new Error("sleep should not run");
+    },
+  });
+
+  assert.equal(result.status, 403);
+  assert.equal(calls, 1);
+});
+
+test("stops after bounded retries and lets callers fail closed", async () => {
+  let calls = 0;
+  const result = await fetchGitHubResponseWithRetry({
+    url: "https://api.github.com/repos/Zennay/zSSH/branches/main",
+    maxAttempts: 3,
+    fetchImpl: async () => {
+      calls += 1;
+      return response(503, {});
+    },
+    sleepImpl: async () => {},
+  });
+
+  assert.equal(result.status, 503);
+  assert.equal(calls, 3);
+});
 
 test("accepts protected main with PRs, zSSH CI test check, admins, and no bypass actors", () => {
   const result = assessMainProtection(greenProtection);
@@ -175,6 +226,27 @@ test("requires workflow SHA to equal the current protected branch head", () => {
     () => assertCurrentBranchSha(current, "not-a-sha"),
     /GITHUB_SHA/,
   );
+});
+
+test("public branch status recovers from a transient GitHub API failure", async () => {
+  let calls = 0;
+  const delays = [];
+  const result = await inspectBranchProtectionFlag({
+    repository: "Zennay/zSSH",
+    token: "token",
+    fetchImpl: async () => {
+      calls += 1;
+      if (calls === 1) return response(502, {});
+      return response(200, {
+        commit: { sha: "e".repeat(40) },
+        protected: true,
+        protection: { enabled: true, required_status_checks: { contexts: ["test"] } },
+      });
+    },
+  });
+
+  assert.equal(result.protected, true);
+  assert.equal(calls, 2);
 });
 
 test("public branch status fails closed when metadata is unavailable", async () => {

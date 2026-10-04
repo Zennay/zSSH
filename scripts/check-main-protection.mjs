@@ -4,6 +4,34 @@ import { pathToFileURL } from "node:url";
 
 const API_VERSION = "2022-11-28";
 
+const RETRIABLE_HTTP_STATUSES = new Set([429, 500, 502, 503, 504]);
+
+function defaultSleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+export async function fetchGitHubResponseWithRetry({
+  url,
+  options = {},
+  fetchImpl = fetch,
+  maxAttempts = 3,
+  sleepImpl = defaultSleep,
+}) {
+  if (!Number.isInteger(maxAttempts) || maxAttempts < 1 || maxAttempts > 5) {
+    throw new Error("maxAttempts must be an integer between 1 and 5");
+  }
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const response = await fetchImpl(url, options);
+    if (!RETRIABLE_HTTP_STATUSES.has(response.status) || attempt === maxAttempts) {
+      return response;
+    }
+    await sleepImpl(250 * (2 ** (attempt - 1)));
+  }
+
+  throw new Error("GitHub API retry loop exhausted unexpectedly");
+}
+
 function listActors(allowances = {}) {
   return ["users", "teams", "apps"].flatMap((kind) =>
     Array.isArray(allowances?.[kind])
@@ -118,10 +146,11 @@ export async function inspectBranchProtectionFlag({
   };
   if (token) headers.Authorization = `Bearer ${token}`;
 
-  const response = await fetchImpl(
-    `${apiUrl.replace(/\/$/, "")}/repos/${repository}/branches/${encodeURIComponent(branch)}`,
-    { headers },
-  );
+  const response = await fetchGitHubResponseWithRetry({
+    url: `${apiUrl.replace(/\/$/, "")}/repos/${repository}/branches/${encodeURIComponent(branch)}`,
+    options: { headers },
+    fetchImpl,
+  });
   if (!response.ok) {
     throw new Error(
       `GitHub branch metadata lookup failed with HTTP ${response.status}`,
@@ -157,9 +186,9 @@ export async function verifyMainProtection({
     throw new Error("branch must be non-empty");
   }
 
-  const response = await fetchImpl(
-    `${apiUrl.replace(/\/$/, "")}/repos/${repository}/branches/${encodeURIComponent(branch)}/protection`,
-    {
+  const response = await fetchGitHubResponseWithRetry({
+    url: `${apiUrl.replace(/\/$/, "")}/repos/${repository}/branches/${encodeURIComponent(branch)}/protection`,
+    options: {
       headers: {
         Accept: "application/vnd.github+json",
         Authorization: `Bearer ${token}`,
@@ -167,7 +196,8 @@ export async function verifyMainProtection({
         "User-Agent": "zssh-main-protection-verifier",
       },
     },
-  );
+    fetchImpl,
+  });
 
   if (response.status === 404) {
     throw new Error(`branch ${branch} is not protected`);
@@ -219,7 +249,11 @@ export async function verifyMainProtectionNegativeProof({
   if (token) headers.Authorization = "Bearer " + token;
 
   async function get(path, label) {
-    const response = await fetchImpl(root + "/repos/" + repository + "/" + path, { headers });
+    const response = await fetchGitHubResponseWithRetry({
+      url: root + "/repos/" + repository + "/" + path,
+      options: { headers },
+      fetchImpl,
+    });
     if (!response.ok) {
       throw new Error(label + " lookup failed with HTTP " + response.status);
     }
