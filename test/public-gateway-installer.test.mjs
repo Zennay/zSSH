@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import crypto from "node:crypto";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { chmod, mkdtemp, mkdir, rm, symlink, writeFile, readFile } from "node:fs/promises";
+import { chmod, mkdtemp, mkdir, readdir, rm, symlink, writeFile, readFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
@@ -61,6 +61,49 @@ test("public gateway installer validates a reviewer OAuth/outbound-agent configu
     assert.match(stdout, /"trusted_target_count": 1/);
     assert.match(stdout, /ZSSH_PUBLIC_GATEWAY_CONFIG_GREEN/);
     await assert.rejects(() => readFile(path.join(value.home, ".config", "zssh", "public-gateway.env"), "utf8"), /ENOENT/);
+  } finally {
+    await rm(value.home, { recursive: true, force: true });
+  }
+});
+
+test("public gateway installer removes first-install state when service activation fails", async () => {
+  const value = await fixture();
+  const fakeBin = path.join(value.home, "fake-bin");
+  const releaseRoot = path.join(value.home, ".local", "share", "zssh-public", "releases");
+  try {
+    await mkdir(fakeBin, { recursive: true });
+    await writeFile(
+      path.join(fakeBin, "systemctl"),
+      `#!/usr/bin/env bash
+set -Eeuo pipefail
+if [[ "\$*" == *"enable --now zssh-public.service"* ]]; then
+  exit 1
+fi
+exit 0
+`,
+      { mode: 0o755 },
+    );
+    const { stdout: repoShaRaw } = await execFileAsync("git", ["-C", ROOT, "rev-parse", "HEAD"]);
+    const repoSha = repoShaRaw.trim();
+    await mkdir(path.join(releaseRoot, repoSha), { recursive: true });
+
+    await assert.rejects(
+      () => execFileAsync("bash", ["deploy/install-public-gateway.sh", ROOT], {
+        cwd: ROOT,
+        env: envFor(value, {
+          ZSSH_PUBLIC_GATEWAY_VALIDATE_ONLY: "0",
+          PATH: fakeBin + path.delimiter + process.env.PATH,
+        }),
+      }),
+    );
+
+    const envFile = path.join(value.home, ".config", "zssh", "public-gateway.env");
+    const currentLink = path.join(value.home, ".local", "share", "zssh-public", "current");
+    await assert.rejects(() => readFile(envFile, "utf8"), /ENOENT/);
+    await assert.rejects(() => readFile(currentLink, "utf8"), /ENOENT/);
+
+    const configEntries = await readdir(path.join(value.home, ".config", "zssh"));
+    assert.equal(configEntries.some(name => name.includes("public-gateway.env.backup.")), false);
   } finally {
     await rm(value.home, { recursive: true, force: true });
   }
@@ -144,7 +187,7 @@ test("public gateway service and installer preserve isolated hardened deployment
 
   assert.match(installer, /git -C "\$SOURCE_ROOT" archive --format=tar "\$REPO_SHA"/);
   assert.doesNotMatch(installer, /cp -a "\$SOURCE_ROOT\/\."/);
-  assert.match(installer, /rollback_public_gateway/);
+  assert.match(installer, /rollback_public_gateway/);\n  assert.match(installer, /public-gateway\\.env\\.backup\\.\\$\\$/);\n  assert.match(installer, /rm -f "\\$ENV_FILE"/);
   assert.match(installer, /ZSSH_PLUGIN_PROFILE=public/);
   assert.match(installer, /ZSSH_PUBLIC_AUTH_MODE=oauth/);
   assert.match(installer, /ZSSH_PUBLIC_RATE_LIMIT_PER_MINUTE=\$RATE_LIMIT_VALUE/);
