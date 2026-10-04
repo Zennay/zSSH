@@ -153,9 +153,12 @@ test("keeps completed DNS green and exposes the guarded internal ingress rollout
   assert.equal(result.blocking_gate, "public_ingress");
   assert.equal(result.blocking_action?.gate_kind, "internal_deployment");
   assert.equal(result.blocking_action?.requires_external_input, false);
-  assert.match(result.blocking_action?.action || "", /zSSH public gateway and Caddy rollout/);
-  assert.match(result.blocking_action?.action || "", /PROMOTE_ZSSH_PUBLIC_INGRESS/);
-  assert.match(result.blocking_action?.action || "", /self-hosted VPS runner/);
+  assert.match(result.blocking_action?.action || "", /Zennay\\/zCloud/);
+  assert.match(result.blocking_action?.action || "", /zSSH public gateway activate \\(zCloud lane\\)/);
+  assert.match(result.blocking_action?.action || "", /ACTIVATE_ZSSH_PUBLIC_GATEWAY/);
+  assert.match(result.blocking_action?.action || "", /zSSH public ingress bootstrap \\(zCloud lane\\)/);
+  assert.match(result.blocking_action?.action || "", /INSTALL_ZSSH_PUBLIC_INGRESS/);
+  assert.match(result.blocking_action?.action || "", /canonical self-hosted VPS mutation boundary/);
   assert.deepEqual(result.internal_action_gates, ["public_ingress"]);
 });
 
