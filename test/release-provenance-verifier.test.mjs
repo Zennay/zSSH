@@ -35,10 +35,10 @@ function materializeRelease() {
   return { root, release };
 }
 
-function verify(release) {
+function verify(release, options = []) {
   return execFileSync(
     process.execPath,
-    [VERIFIER, ROOT, HEAD, release],
+    [VERIFIER, ROOT, HEAD, release, ...options],
     { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] },
   );
 }
@@ -98,6 +98,30 @@ test("verifier rejects untracked content added to an existing release directory"
   writeFileSync(path.join(release, ".unexpected.env"), "SECRET=must-not-survive\n");
   assert.throws(
     () => verify(release),
+    /unexpected release path: \.unexpected\.env/,
+  );
+});
+
+
+test("verifier permits only the npm-managed node_modules subtree when explicitly requested", t => {
+  const { root, release } = materializeRelease();
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+
+  const modules = path.join(release, "node_modules");
+  mkdirSync(modules);
+  writeFileSync(path.join(modules, "runtime-marker.txt"), "managed by npm ci\n");
+
+  assert.throws(
+    () => verify(release),
+    /unexpected release path: node_modules/,
+  );
+
+  const allowed = JSON.parse(verify(release, ["--allow-node-modules"]));
+  assert.equal(allowed.ok, true);
+
+  writeFileSync(path.join(release, ".unexpected.env"), "SECRET=still-rejected\n");
+  assert.throws(
+    () => verify(release, ["--allow-node-modules"]),
     /unexpected release path: \.unexpected\.env/,
   );
 });
