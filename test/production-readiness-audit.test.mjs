@@ -95,6 +95,9 @@ test("classifies an empty production environment into actionable M5 lanes", () =
   assert.match(result.next_actions[1].action, /My Profile > API Tokens/);
   assert.match(result.next_actions[1].action, /\/accounts\/\{account_id\}\/tokens\/verify/);
   assert.match(result.next_actions[1].action, /\/user\/tokens\/verify/);
+  assert.match(result.next_actions[1].action, /hourly protected readiness audit/);
+  assert.match(result.next_actions[1].action, /zSSH production DNS publish/);
+  assert.match(result.next_actions[1].action, /PUBLISH_ZSSH_PRODUCTION_DNS/);
   assert.equal(result.next_actions[2].lane, "auth0_preflight");
   assert.equal(result.next_actions[2].gate_kind, "provider_configuration");
   assert.equal(result.next_actions[2].requires_external_input, true);
@@ -128,10 +131,11 @@ test("keeps DNS as an internal execution gate when credentials exist but public 
   assert.equal(result.blocking_gate, "dns_publication");
   assert.equal(result.blocking_action?.gate_kind, "provider_execution");
   assert.equal(result.blocking_action?.requires_external_input, false);
-  assert.match(result.blocking_action?.action || "", /Run the guarded zSSH production DNS publisher/);
-  assert.match(result.blocking_action?.action || "", /\.github\/openai-production-dns-trigger/);
+  assert.match(result.blocking_action?.action || "", /Dispatch the guarded "zSSH production DNS publish" workflow/);
+  assert.match(result.blocking_action?.action || "", /exact canonical main/);
   assert.match(result.blocking_action?.action || "", /PUBLISH_ZSSH_PRODUCTION_DNS/);
-  assert.match(result.blocking_action?.action || "", /activation-id=<8-80 safe characters>/);
+  assert.match(result.blocking_action?.action || "", /re-verifies merged-PR provenance/);
+  assert.match(result.blocking_action?.action || "", /\.github\/openai-production-dns-trigger/);
   assert.deepEqual(result.internal_action_gates, ["dns_publication"]);
 });
 
