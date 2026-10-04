@@ -37,3 +37,38 @@ test("all production systemd units are rendered from immutable releases", () => 
   );
   assert.doesNotMatch(targetAgentInstaller, /"\$SOURCE_ROOT\/deploy\/zssh-agent\.service\.in"/);
 });
+
+
+test("production installer validation imports only exact-commit helpers", () => {
+  assert.match(
+    publicGatewayInstaller,
+    /git -C "\$SOURCE_ROOT" archive --format=tar "\$REPO_SHA" pairing\.mjs agent-transport\.mjs target-routing\.mjs \| tar -x -C "\$VALIDATION_ROOT"/,
+  );
+  assert.match(
+    publicGatewayInstaller,
+    /--input-type=module -\s+"\$VALIDATION_ROOT"\s+"\$ZSSH_PUBLIC_BASE_URL"/,
+  );
+  assert.match(
+    publicGatewayInstaller,
+    /pathToFileURL\(validationRoot \+ "\/pairing\.mjs"\)/,
+  );
+  assert.match(
+    publicGatewayInstaller,
+    /pathToFileURL\(validationRoot \+ "\/agent-transport\.mjs"\)/,
+  );
+  assert.doesNotMatch(publicGatewayInstaller, /pathToFileURL\(sourceRoot \+ "\/(?:pairing|agent-transport)\.mjs"\)/);
+
+  assert.match(
+    targetAgentInstaller,
+    /git -C "\$SOURCE_ROOT" archive --format=tar "\$REPO_SHA" pairing\.mjs \| tar -x -C "\$VALIDATION_ROOT"/,
+  );
+  assert.match(
+    targetAgentInstaller,
+    /--input-type=module - "\$TARGET_ID" "\$GATEWAY_URL" "\$PRIVATE_KEY_FILE" "\$VALIDATION_ROOT"/,
+  );
+  assert.match(
+    targetAgentInstaller,
+    /pathToFileURL\(validationRoot \+ "\/pairing\.mjs"\)/,
+  );
+  assert.doesNotMatch(targetAgentInstaller, /pathToFileURL\(sourceRoot \+ "\/pairing\.mjs"\)/);
+});
