@@ -10,6 +10,11 @@ import {
   assertHostSurfaceReviewBinding,
   computeHostSurfaceReviewFingerprint,
 } from "./check-host-surface-review-binding.mjs";
+import {
+  assertReviewerFixturePaths,
+  REVIEW_READ_FILE,
+  REVIEW_WRITE_FILE,
+} from "./reviewer-fixture-contract.mjs";
 
 const argv = new Set(process.argv.slice(2));
 
@@ -156,12 +161,10 @@ export function validatePublicReleaseConfig(env = process.env) {
   const reviewFile = requireValue(env, "ZSSH_REVIEW_FILE");
   const writeFile = requireValue(env, "ZSSH_REVIEW_WRITE_FILE");
 
-  if (!path.isAbsolute(reviewFile) || !path.isAbsolute(writeFile)) {
-    fail("ZSSH_REVIEW_FILE and ZSSH_REVIEW_WRITE_FILE must be absolute paths");
-  }
-  if (path.normalize(reviewFile) === path.normalize(writeFile)) {
-    fail("ZSSH_REVIEW_FILE and ZSSH_REVIEW_WRITE_FILE must be different files");
-  }
+  assertReviewerFixturePaths({
+    ZSSH_REVIEW_FILE: reviewFile,
+    ZSSH_REVIEW_WRITE_FILE: writeFile,
+  });
 
   return {
     ok: true,
@@ -225,8 +228,8 @@ export function runSelfTest() {
     AUTH0_MANAGEMENT_BASE_URL: "https://tenant.eu.auth0.com",
     AUTH0_MANAGEMENT_API_TOKEN: "management-token-0123456789abcdef",
     OPENAI_APPS_CHALLENGE_TOKEN: "challenge-0123456789abcdef",
-    ZSSH_REVIEW_FILE: "/srv/zssh-review/sample.txt",
-    ZSSH_REVIEW_WRITE_FILE: "/srv/zssh-review/output.txt"
+    ZSSH_REVIEW_FILE: REVIEW_READ_FILE,
+    ZSSH_REVIEW_WRITE_FILE: REVIEW_WRITE_FILE
   };
   good.ZSSH_CHATGPT_REVIEW_SHA256 = computeHostSurfaceReviewFingerprint({
     mcpUrl: good.ZSSH_PLUGIN_MCP_URL,
@@ -283,7 +286,14 @@ export function runSelfTest() {
     /required when ZSSH_OAUTH_ISSUER uses a custom Auth0 domain/,
   );
   assertThrows(() => validatePublicReleaseConfig({ ...good, AUTH0_MANAGEMENT_API_TOKEN: "short" }), /at least 20/);
-  assertThrows(() => validatePublicReleaseConfig({ ...good, ZSSH_REVIEW_WRITE_FILE: good.ZSSH_REVIEW_FILE }), /different files/);
+  assertThrows(
+    () => validatePublicReleaseConfig({ ...good, ZSSH_REVIEW_FILE: "/srv/zssh-review/alternate.txt" }),
+    /path published in the submission reviewer test case/,
+  );
+  assertThrows(
+    () => validatePublicReleaseConfig({ ...good, ZSSH_REVIEW_WRITE_FILE: "/srv/zssh-review/alternate-output.txt" }),
+    /path published in the submission reviewer test case/,
+  );
   assertThrows(() => validatePublicReleaseConfig({ ...good, ZSSH_REVIEW_ACCESS_TOKEN: "short" }), /at least 20/);
   assertThrows(() => validatePublicReleaseConfig({ ...good, ZSSH_REVIEW_LOGIN_URL: "https://127.0.0.1/login" }), /public DNS hostname/);
   assertThrows(() => validatePublicReleaseConfig({ ...good, ZSSH_REVIEW_LOGIN_VERIFIED_URL: "https://tenant.eu.auth0.com/u/old-login" }), /verification is stale/);
