@@ -25,6 +25,9 @@ const REQUIRED_RELEASE_CONFIG = [
   "ZSSH_OPENAI_VERIFIED_MCP_ORIGIN",
   "ZSSH_OPENAI_TOOL_SCAN_VERIFIED",
   "ZSSH_OPENAI_TOOL_SCAN_SHA256",
+  "ZSSH_OAUTH_ISSUER",
+  "AUTH0_MANAGEMENT_BASE_URL",
+  "AUTH0_MANAGEMENT_API_TOKEN",
   "OPENAI_APPS_CHALLENGE_TOKEN",
   "ZSSH_REVIEW_FILE",
   "ZSSH_REVIEW_WRITE_FILE",
@@ -85,6 +88,9 @@ export function validatePublicReleaseConfig(env = process.env) {
     { name: "ZSSH_PLUGIN_MCP_URL" }
   );
   const demoRecordingUrl = requireHttpsUrl(env, "ZSSH_PLUGIN_DEMO_RECORDING_URL");
+  const oauthIssuerUrl = requirePublicHttpsUrl(env, "ZSSH_OAUTH_ISSUER");
+  const auth0ManagementBaseUrl = requirePublicHttpsUrl(env, "AUTH0_MANAGEMENT_BASE_URL");
+  const auth0ManagementToken = requireValue(env, "AUTH0_MANAGEMENT_API_TOKEN", { minLength: 20 });
   const accessToken = requireValue(env, "ZSSH_REVIEW_ACCESS_TOKEN", { minLength: 20 });
   const reviewLoginUrl = requirePublicHttpsUrl(env, "ZSSH_REVIEW_LOGIN_URL");
   const reviewLoginVerifiedUrl = requirePublicHttpsUrl(env, "ZSSH_REVIEW_LOGIN_VERIFIED_URL");
@@ -140,6 +146,10 @@ export function validatePublicReleaseConfig(env = process.env) {
     endpoint_origin: mcpUrl.origin,
     endpoint_path: mcpUrl.pathname,
     demo_recording_origin: demoRecordingUrl.origin,
+    oauth_provider: "auth0",
+    oauth_issuer: oauthIssuerUrl.href.replace(/\/$/, ""),
+    auth0_management_origin: auth0ManagementBaseUrl.origin,
+    auth0_management_token_present: auth0ManagementToken.length > 0,
     review_login_origin: reviewLoginUrl.origin,
     review_login_path: reviewLoginUrl.pathname,
     review_login_verified_url: reviewLoginVerifiedUrl.href,
@@ -187,6 +197,9 @@ export function runSelfTest() {
     ZSSH_OPENAI_VERIFIED_MCP_ORIGIN: "https://mcp.zssh.dev",
     ZSSH_OPENAI_TOOL_SCAN_VERIFIED: "1",
     ZSSH_OPENAI_TOOL_SCAN_SHA256: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+    ZSSH_OAUTH_ISSUER: "https://tenant.eu.auth0.com/",
+    AUTH0_MANAGEMENT_BASE_URL: "https://tenant.eu.auth0.com",
+    AUTH0_MANAGEMENT_API_TOKEN: "management-token-0123456789abcdef",
     OPENAI_APPS_CHALLENGE_TOKEN: "challenge-0123456789abcdef",
     ZSSH_REVIEW_FILE: "/srv/zssh-review/sample.txt",
     ZSSH_REVIEW_WRITE_FILE: "/srv/zssh-review/output.txt"
@@ -210,6 +223,9 @@ export function runSelfTest() {
   assertThrows(() => validatePublicReleaseConfig({ ...good, ZSSH_PLUGIN_MCP_URL: "https://mcp.zssh.dev/other" }), /\/mcp endpoint/);
   assertThrows(() => validatePublicReleaseConfig({ ...good, ZSSH_PLUGIN_MCP_URL: "https://mcp.zssh.dev/mcp?target=review" }), /query parameters/);
   assertThrows(() => validatePublicReleaseConfig({ ...good, ZSSH_PLUGIN_DEMO_RECORDING_URL: "http://review.example/demo" }), /HTTPS URL/);
+  assertThrows(() => validatePublicReleaseConfig({ ...good, ZSSH_OAUTH_ISSUER: "http://tenant.eu.auth0.com" }), /HTTPS URL/);
+  assertThrows(() => validatePublicReleaseConfig({ ...good, AUTH0_MANAGEMENT_BASE_URL: "https://127.0.0.1" }), /public DNS hostname/);
+  assertThrows(() => validatePublicReleaseConfig({ ...good, AUTH0_MANAGEMENT_API_TOKEN: "short" }), /at least 20/);
   assertThrows(() => validatePublicReleaseConfig({ ...good, ZSSH_REVIEW_WRITE_FILE: good.ZSSH_REVIEW_FILE }), /different files/);
   assertThrows(() => validatePublicReleaseConfig({ ...good, ZSSH_REVIEW_ACCESS_TOKEN: "short" }), /at least 20/);
   assertThrows(() => validatePublicReleaseConfig({ ...good, ZSSH_REVIEW_LOGIN_URL: "https://127.0.0.1/login" }), /public DNS hostname/);
