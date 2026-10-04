@@ -103,9 +103,8 @@ console.log(JSON.stringify({
   review_root: fixture.review_root,
   review_file: fixture.sample_file,
   review_write_file: fixture.write_test_file,
-  release_variables: {
-    ZSSH_REVIEW_FILE: fixture.sample_file,
-    ZSSH_REVIEW_WRITE_FILE: fixture.write_test_file,
-  },
+  release_compatible: fixture.release_compatible === true,
+  release_variables: fixture.release_variables ?? null,
+  release_blocker: fixture.release_blocker ?? null,
 }, null, 2));
 NODE
