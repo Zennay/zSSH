@@ -4,6 +4,8 @@ import { readFileSync } from "node:fs";
 
 const workflowPath = new URL("../.github/workflows/public-release-gate.yml", import.meta.url);
 const workflow = readFileSync(workflowPath, "utf8");
+const auth0WorkflowPath = new URL("../.github/workflows/auth0-production-preflight.yml", import.meta.url);
+const auth0Workflow = readFileSync(auth0WorkflowPath, "utf8");
 
 function eventPaths(eventName) {
   const lines = workflow.split(/\r?\n/);
@@ -85,6 +87,7 @@ test("release-critical pull_request and push path filters stay in parity", () =>
 
   for (const authProviderPath of [
     ".github/workflows/auth0-production-preflight.yml",
+    ".github/openai-production-auth0-trigger",
     "scripts/check-auth0-production.mjs",
     "test/auth0-production-readiness.test.mjs",
   ]) {
@@ -126,4 +129,22 @@ test("final production release reruns and binds the external ingress preflight",
   assert.match(workflow, /Record non-secret release evidence[\s\S]*INGRESS_REPORT_PATH: \$\{\{ runner\.temp \}\}\/zssh-public-ingress-preflight\.json[\s\S]*const ingress = JSON\.parse\(readFileSync\(process\.env\.INGRESS_REPORT_PATH, "utf8"\)\)/);
   assert.match(workflow, /public_ingress_validated: true/);
   assert.match(workflow, /zssh-public-ingress-preflight\.json/);
+});
+
+
+test("reviewed Auth0 activation is bound to protected canonical main", () => {
+  assert.match(
+    auth0Workflow,
+    /push:\n    branches: \[main\][\s\S]*\.github\/openai-production-auth0-trigger/,
+  );
+  assert.match(
+    auth0Workflow,
+    /test "\$\(cat \.github\/openai-production-auth0-trigger\)" = "QUALIFY_ZSSH_PRODUCTION_AUTH0"/,
+  );
+  assert.match(auth0Workflow, /node scripts\/check-main-provenance\.mjs/);
+  assert.match(
+    auth0Workflow,
+    /node scripts\/check-main-protection\.mjs --public-status --require-protected/,
+  );
+  assert.match(auth0Workflow, /environment: openai-production/);
 });
