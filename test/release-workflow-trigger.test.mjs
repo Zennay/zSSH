@@ -116,6 +116,8 @@ test("release-critical pull_request and push path filters stay in parity", () =>
     "deploy/install-live.sh",
     "deploy/install-target-agent.sh",
     "test/install-live-stage-provenance.test.mjs",
+    "scripts/verify-release-provenance.mjs",
+    "test/release-provenance-verifier.test.mjs",
     "deploy/install-public-gateway.sh",
     "test/public-gateway-installer.test.mjs",
     "deploy/install-public-caddy.sh",

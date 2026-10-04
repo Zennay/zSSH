@@ -55,6 +55,11 @@ mkdir -p "$RELEASES" "$STATE" "$CONFIG" "$UNIT_DIR"
 chmod 700 "$STATE" "$CONFIG"
 trap 'rm -rf "$STAGE"' EXIT
 
+verify_release_provenance() {
+  git -C "$SOURCE_ROOT" show "${REPO_SHA}:scripts/verify-release-provenance.mjs" |
+    "$NODE_BIN" --input-type=module - "$SOURCE_ROOT" "$REPO_SHA" "$RELEASE"
+}
+
 if [[ ! -d "$RELEASE" ]]; then
   mkdir -p "$STAGE"
   # Export only files tracked by the exact release commit. The mutable worktree
@@ -68,6 +73,8 @@ if [[ ! -d "$RELEASE" ]]; then
   GIT_DIR="$SOURCE_ROOT/.git" GIT_WORK_TREE="$STAGE" "$NPM_BIN" test --prefix "$STAGE"
   mv "$STAGE" "$RELEASE"
 fi
+
+verify_release_provenance
 
 random_hex_32() {
   if command -v openssl >/dev/null 2>&1; then
