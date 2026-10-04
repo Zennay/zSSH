@@ -65,6 +65,14 @@ test("ingress preflight automatically follows successful canonical production DN
     workflow,
     /ZSSH_PLUGIN_MCP_URL: https:\/\/zssh\.cheapgpt\.shop\/mcp/,
   );
+  assert.match(
+    workflow,
+    /ZSSH_EXPECTED_PUBLIC_ADDRESSES: 198\.244\.191\.182/,
+  );
+  assert.match(
+    workflow,
+    /node scripts\/check-public-ingress\.mjs "\$ZSSH_PLUGIN_MCP_URL" "\$ZSSH_EXPECTED_PUBLIC_ADDRESSES"/,
+  );
   assert.doesNotMatch(workflow, /inputs\.mcp_url/);
 });
 
@@ -176,6 +184,31 @@ test("external ingress preflight fails closed when DNS resolves to a non-public 
       fetchImpl: async () => { throw new Error("fetch must not run"); },
     }),
     /publicly routable/,
+  );
+});
+
+test("production-bound ingress evidence rejects DNS drift to another public origin before fetch", async () => {
+  await assert.rejects(
+    () => checkPublicIngress("https://zssh.cheapgpt.shop/mcp", {
+      expectedAddresses: ["198.244.191.182"],
+      lookupImpl: async () => [{ address: "1.1.1.1", family: 4 }],
+      fetchImpl: async () => { throw new Error("fetch must not run"); },
+    }),
+    /exactly match expected production origin/,
+  );
+});
+
+test("production-bound ingress evidence rejects unexpected additional DNS addresses", async () => {
+  await assert.rejects(
+    () => checkPublicIngress("https://zssh.cheapgpt.shop/mcp", {
+      expectedAddresses: ["198.244.191.182"],
+      lookupImpl: async () => [
+        { address: "198.244.191.182", family: 4 },
+        { address: "2606:4700:4700::1111", family: 6 },
+      ],
+      fetchImpl: async () => { throw new Error("fetch must not run"); },
+    }),
+    /exactly match expected production origin/,
   );
 });
 
