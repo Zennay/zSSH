@@ -1,9 +1,40 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import {
   checkPublicIngress,
   isPublicRoutableAddress,
 } from "../scripts/check-public-ingress.mjs";
+
+const workflow = readFileSync(
+  new URL("../.github/workflows/public-ingress-preflight.yml", import.meta.url),
+  "utf8",
+);
+
+test("ingress preflight automatically follows successful canonical production DNS publication", () => {
+  assert.match(
+    workflow,
+    /workflow_run:\n    workflows: \["zSSH production DNS publish"\]\n    types: \[completed\]/,
+  );
+  assert.match(
+    workflow,
+    /if: github\.event_name == 'workflow_dispatch' \|\| github\.event\.workflow_run\.conclusion == 'success'/,
+  );
+  assert.match(
+    workflow,
+    /ref: \$\{\{ github\.event_name == 'workflow_run' && github\.event\.workflow_run\.head_sha \|\| github\.sha \}\}/,
+  );
+  assert.match(workflow, /persist-credentials: false/);
+  assert.match(workflow, /test "\$\{\{ github\.event\.workflow_run\.head_branch \}\}" = "main"/);
+  assert.match(
+    workflow,
+    /test "\$\{\{ github\.event\.workflow_run\.head_repository\.full_name \}\}" = "\$\{\{ github\.repository \}\}"/,
+  );
+  assert.match(
+    workflow,
+    /ZSSH_PLUGIN_MCP_URL: \$\{\{ github\.event_name == 'workflow_dispatch' && inputs\.mcp_url \|\| 'https:\/\/zssh\.cheapgpt\.shop\/mcp' \}\}/,
+  );
+});
 
 test("public address guard rejects private, documentation, benchmark, and link-local ranges", () => {
   for (const address of [
