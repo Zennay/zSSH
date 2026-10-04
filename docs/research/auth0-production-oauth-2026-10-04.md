@@ -47,3 +47,17 @@ The protected Management API token used with a custom issuer must therefore be a
 `scripts/check-auth0-production.mjs` reads the Auth0 Management API with a protected token and emits only non-secret configuration evidence, including whether the management origin was derived. It never prints or persists the management token, reviewer password, OAuth access token, or user data.
 
 The protected `openai-production` release workflow must run this check before the final submission probe. A green bearer-token probe alone is no longer sufficient to prove provider configuration.
+
+
+## Issuer endpoint provenance hardening — 2026-10-04
+
+OpenAI's current plugin authentication contract requires the authorization-server metadata to provide the authorization and token endpoints used for the authorization-code + PKCE flow, with the selected issuer acting as the canonical authorization-server identity:
+- https://developers.openai.com/plugins/build/auth
+
+Auth0 documents that when a custom domain is used for authentication, authorization/token operations must use that same selected domain; tokens carry the issuer of the domain used to obtain them:
+- https://auth0.com/docs/customize/custom-domains/configure-features-to-use-custom-domains
+- https://auth0.com/docs/secure/tokens/access-tokens/get-access-tokens
+
+**Decision:** the zSSH Auth0 production preflight now fails closed unless `authorization_endpoint`, `token_endpoint`, `registration_endpoint`, and `jwks_uri` all use the exact origin of `ZSSH_OAUTH_ISSUER`. This prevents a syntactically valid but mixed-origin discovery document from passing production readiness and keeps authorization, code exchange, DCR, and signing-key discovery bound to the same Auth0 issuer selected by protected-resource metadata.
+
+This is an Auth0-specific production invariant. The generic OAuth metadata validator remains provider-neutral.
