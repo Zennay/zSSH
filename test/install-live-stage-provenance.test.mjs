@@ -13,3 +13,11 @@ test("staged release tests borrow source Git metadata without copying .git", () 
   assert.doesNotMatch(installer, /cp\s+-[^\n]*\.git/);
   assert.doesNotMatch(installer, /mv\s+[^\n]*\.git/);
 });
+
+test("live service unit is rendered from the immutable release, not the source worktree", () => {
+  assert.match(
+    installer,
+    /sed "s\|@NODE_BIN@\|\$NODE_BIN\|g" "\$RELEASE\/deploy\/zssh\.service\.in" > "\$UNIT"/,
+  );
+  assert.doesNotMatch(installer, /"\$SOURCE(?:_ROOT)?\/deploy\/zssh\.service\.in"/);
+});
