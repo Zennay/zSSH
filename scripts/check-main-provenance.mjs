@@ -10,24 +10,13 @@ export function findMergedPullForSha(pulls, sha) {
   ) || null;
 }
 
-export async function verifyMainProvenance({
-  repository,
-  sha,
-  token,
-  apiUrl = "https://api.github.com",
-  fetchImpl = fetch,
-}) {
-  if (!/^[^/]+\/[^/]+$/.test(String(repository || ""))) {
-    throw new Error("GITHUB_REPOSITORY must be owner/name");
+function assertSha(value, name) {
+  if (!/^[a-f0-9]{40}$/i.test(String(value || ""))) {
+    throw new Error(`${name} must be a 40-character commit SHA`);
   }
-  if (!/^[a-f0-9]{40}$/i.test(String(sha || ""))) {
-    throw new Error("GITHUB_SHA must be a 40-character commit SHA");
-  }
-  if (!token) {
-    throw new Error("GITHUB_TOKEN is required for provenance verification");
-  }
+}
 
-  const url = `${apiUrl.replace(/\/$/, "")}/repos/${repository}/commits/${sha}/pulls`;
+async function fetchJson(url, token, fetchImpl) {
   const response = await fetchImpl(url, {
     headers: {
       Accept: "application/vnd.github+json",
@@ -40,23 +29,118 @@ export async function verifyMainProvenance({
   if (!response.ok) {
     throw new Error(`GitHub commit provenance lookup failed with HTTP ${response.status}`);
   }
+  return response.json();
+}
 
-  const pulls = await response.json();
-  const mergedPull = findMergedPullForSha(pulls, sha);
-  if (!mergedPull) {
-    throw new Error(
-      "current main SHA is not the merge_commit_sha of an associated merged pull request"
-    );
+async function mergedPullForCommit({ repository, sha, token, apiUrl, fetchImpl }) {
+  const pulls = await fetchJson(
+    `${apiUrl}/repos/${repository}/commits/${sha}/pulls`,
+    token,
+    fetchImpl,
+  );
+  return findMergedPullForSha(pulls, sha);
+}
+
+async function firstParentForCommit({ repository, sha, token, apiUrl, fetchImpl }) {
+  const commit = await fetchJson(
+    `${apiUrl}/repos/${repository}/commits/${sha}`,
+    token,
+    fetchImpl,
+  );
+  const parent = commit?.parents?.[0]?.sha;
+  if (!/^[a-f0-9]{40}$/i.test(String(parent || ""))) {
+    throw new Error(`commit ${sha} has no valid first parent before provenance baseline`);
+  }
+  return parent;
+}
+
+export async function verifyMainProvenance({
+  repository,
+  sha,
+  token,
+  baseSha = "",
+  apiUrl = "https://api.github.com",
+  fetchImpl = fetch,
+  maxDepth = 200,
+}) {
+  if (!/^[^/]+\/[^/]+$/.test(String(repository || ""))) {
+    throw new Error("GITHUB_REPOSITORY must be owner/name");
+  }
+  assertSha(sha, "GITHUB_SHA");
+  if (baseSha) assertSha(baseSha, "ZSSH_PROVENANCE_BASE_SHA");
+  if (!token) {
+    throw new Error("GITHUB_TOKEN is required for provenance verification");
+  }
+  if (!Number.isInteger(maxDepth) || maxDepth < 1 || maxDepth > 1000) {
+    throw new Error("maxDepth must be an integer between 1 and 1000");
   }
 
-  return {
+  const normalizedApiUrl = apiUrl.replace(/\/$/, "");
+  const verified = [];
+  let current = sha;
+
+  while (true) {
+    const mergedPull = await mergedPullForCommit({
+      repository,
+      sha: current,
+      token,
+      apiUrl: normalizedApiUrl,
+      fetchImpl,
+    });
+    if (!mergedPull) {
+      if (!baseSha && current === sha) {
+        throw new Error(
+          "current main SHA is not the merge_commit_sha of an associated merged pull request"
+        );
+      }
+      throw new Error(
+        `first-parent commit ${current} has no merged PR provenance`
+      );
+    }
+
+    verified.push({
+      commit_sha: current,
+      pull_request: mergedPull.number,
+      pull_request_url: mergedPull.html_url,
+      merged_at: mergedPull.merged_at,
+    });
+
+    if (!baseSha || current === baseSha) break;
+    if (verified.length >= maxDepth) {
+      throw new Error(
+        `provenance baseline ${baseSha} was not reached within ${maxDepth} first-parent commits`
+      );
+    }
+
+    current = await firstParentForCommit({
+      repository,
+      sha: current,
+      token,
+      apiUrl: normalizedApiUrl,
+      fetchImpl,
+    });
+  }
+
+  const head = verified[0];
+  const result = {
     ok: true,
     repository,
     commit_sha: sha,
-    pull_request: mergedPull.number,
-    pull_request_url: mergedPull.html_url,
-    merged_at: mergedPull.merged_at,
+    pull_request: head.pull_request,
+    pull_request_url: head.pull_request_url,
+    merged_at: head.merged_at,
   };
+
+  if (baseSha) {
+    result.provenance_base_sha = baseSha;
+    result.verified_first_parent_commits = verified.length;
+    result.first_parent_chain = verified.map(({ commit_sha, pull_request }) => ({
+      commit_sha,
+      pull_request,
+    }));
+  }
+
+  return result;
 }
 
 async function main() {
@@ -64,6 +148,7 @@ async function main() {
     repository: process.env.GITHUB_REPOSITORY,
     sha: process.env.GITHUB_SHA,
     token: process.env.GITHUB_TOKEN,
+    baseSha: process.env.ZSSH_PROVENANCE_BASE_SHA || "",
     apiUrl: process.env.GITHUB_API_URL || "https://api.github.com",
   });
   console.log("ZSSH_MAIN_PROVENANCE_GREEN", JSON.stringify(result));
