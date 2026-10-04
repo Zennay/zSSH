@@ -87,31 +87,6 @@ GitHub's branch-protection REST endpoint requires repository Administration (wri
 
 The workflow does **not** set `ZSSH_MAIN_PROTECTION_VERIFIED=1`. Issue #100 remains open until a controlled normal direct-write attempt is rejected and that negative evidence is captured.
 
-
-## Guarded repository-admin configuration command
-
-The repository now also owns the exact mutation needed to close the preventive-policy half of issue #100. The command is deliberately double-gated: without `--apply` it only prints the intended policy, and mutation additionally requires `ZSSH_MAIN_PROTECTION_APPLY=1`.
-
-Preview the policy without changing GitHub:
-
-```bash
-GITHUB_REPOSITORY=Zennay/zSSH \
-npm run repo:main-protection:configure
-```
-
-Apply with a short-lived repository-admin token:
-
-```bash
-GITHUB_REPOSITORY=Zennay/zSSH \
-GITHUB_TOKEN="<short-lived repository-admin token>" \
-ZSSH_MAIN_PROTECTION_APPLY=1 \
-npm run repo:main-protection:configure -- --apply
-```
-
-The configurator requires pull-request based changes, strict `test` status, administrator enforcement, and disables force-pushes and branch deletion. It immediately re-reads the live branch-protection endpoint through the existing verifier and emits only secret-free verification metadata.
-
-This still does **not** manufacture the final negative-test evidence. After the live policy is green, perform the separately controlled direct-write rejection test required by issue #100; only then set `ZSSH_MAIN_PROTECTION_VERIFIED=1`.
-
 ## Autonomous merged-PR application trigger
 
 The guarded application lane is no longer manual-only. It now also listens for a closed pull request targeting `main`, but the provenance job runs only when that pull request was actually merged. For merged events it binds `GITHUB_SHA` to `pull_request.merge_commit_sha` before running the canonical provenance verifier.
