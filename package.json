@@ -21,7 +21,8 @@
     "gateway:public:ingress-preflight": "node scripts/check-public-ingress.mjs",
     "submission:probe": "node production-submission-probe.mjs",
     "mcp:client-token-canary": "node client-token-canary.mjs",
-    "agent:init": "node scripts/create-agent-identity.mjs"
+    "agent:init": "node scripts/create-agent-identity.mjs",
+    "gateway:public:caddy:install": "bash deploy/install-public-caddy.sh"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.20.2",
