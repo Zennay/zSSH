@@ -85,3 +85,16 @@ Decision:
 - execute the guard in normal CI and in the OpenAI public release contract so workflow-security regressions cannot bypass the M5 release lane.
 
 The guard intentionally does not prohibit Actions expressions in declarative YAML fields such as `if:`, `env:`, artifact names, paths, or concurrency groups. Its scope is generated shell source, where direct substitution creates the script-injection boundary documented by GitHub.
+
+
+## Sensitive configuration extension — 2026-10-04
+
+The repository-wide shell-source guard now also treats `secrets.*` and repository/environment `vars.*` as data-only contexts inside `run:` source.
+
+Rationale:
+- secrets and configuration variables can contain whitespace or shell-significant characters;
+- direct expression expansion happens before the shell parses the generated script;
+- zSSH already carries protected provider and governance credentials through `env:`, so widening the invariant does not require changing the live workflow contract;
+- the guard now fails closed if a future workflow bypasses that pattern by embedding `secrets.*` or `vars.*` directly into inline or block-scalar shell source.
+
+This remains a source-generation safeguard only. Expressions in declarative workflow fields remain allowed, and no credential value, permission, production endpoint, OAuth scope, or provider mutation is changed.
