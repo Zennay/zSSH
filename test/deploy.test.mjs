@@ -141,6 +141,8 @@ test("outbound target agent installer is immutable, non-root, and shell-eval fre
   assert.equal(installer.includes('BASE="$HOME/.local/share/zssh-agent"'), true);
   assert.equal(installer.includes('RELEASES="$BASE/releases"'), true);
   assert.equal(installer.includes("ZSSH_EXPECTED_SHA"), true);
+  assert.equal(installer.includes('git -C "$SOURCE_ROOT" archive --format=tar "$REPO_SHA" | tar -x -C "$STAGE"'), true);
+  assert.equal(installer.includes('cp -a "$SOURCE_ROOT/." "$STAGE/"'), false);
   assert.equal(installer.includes('chmod 600 "$ENV_FILE"'), true);
   assert.equal(installer.includes("read_env_value"), true);
   assert.equal(installer.includes('source "$ENV_FILE"'), false);
