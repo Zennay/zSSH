@@ -132,7 +132,7 @@ npm run submission:probe
 # ZSSH_OPENAI_TOOL_SCAN_VERIFIED=1
 ```
 
-The probe checks the health endpoint, OAuth protected-resource metadata, unauthenticated challenge behavior, tool scan, OAuth schemes, annotations, absence of generic executors, profile and pairing state, public metadata minimization, read-only system tools, and the reviewer file read/write roundtrip. It never prints the access token.
+The probe checks the health endpoint, OAuth protected-resource metadata, unauthenticated challenge behavior, tool scan, OAuth schemes, annotations, the exact per-tool reviewer-justification table, absence of generic executors, profile and pairing state, public metadata minimization, read-only system tools, and the reviewer file read/write roundtrip. The reviewer-justification SHA-256 is recorded in release evidence so Scan Tools metadata and human review rationale cannot silently drift apart. It never prints the access token.
 
 ## Release rule
 
