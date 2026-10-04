@@ -47,6 +47,10 @@ test("renders only secret-safe blocking metadata", () => {
   assert.equal(result.title, "M5 active gate: dns_publication");
   assert.match(result.body, /CLOUDFLARE_API_TOKEN/);
   assert.match(result.body, /auth0_preflight/);
+  assert.match(
+    result.body,
+    new RegExp(`https://github\\.com/Zennay/zSSH/blob/${sha}/docs/research/cloudflare-dns-publication-2026-10-04\\.md`),
+  );
   assert.doesNotMatch(result.body, /super-secret-value-that-must-never-render/);
   assert.match(result.body, new RegExp(sha));
 });
@@ -109,6 +113,7 @@ test("sync uses the token only as an Authorization header", async () => {
   assert.equal(request.init.headers.authorization, `Bearer ${token}`);
   assert.doesNotMatch(request.init.body, new RegExp(token));
   assert.match(request.init.body, /M5 active gate: dns_publication/);
+  assert.match(request.init.body, /Cloudflare production DNS publication/);
 });
 
 test("protected readiness audit grants issue write only to the audit job and syncs issue 159", () => {
