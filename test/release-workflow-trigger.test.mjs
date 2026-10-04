@@ -148,3 +148,19 @@ test("reviewed Auth0 activation is bound to protected canonical main", () => {
   );
   assert.match(auth0Workflow, /environment: openai-production/);
 });
+
+test("manual Auth0 production preflight is bound to exact current protected main", () => {
+  assert.match(auth0Workflow, /workflow_dispatch:\s*\n/);
+  assert.match(
+    auth0Workflow,
+    /Require canonical protected-main manual Auth0 preflight[\s\S]*test "\$GITHUB_REF" = "refs\/heads\/main"/,
+  );
+  assert.match(
+    auth0Workflow,
+    /Require canonical protected-main manual Auth0 preflight[\s\S]*node scripts\/check-main-provenance\.mjs/,
+  );
+  assert.match(
+    auth0Workflow,
+    /Require canonical protected-main manual Auth0 preflight[\s\S]*check-main-protection\.mjs --public-status --require-protected --require-current-sha/,
+  );
+});

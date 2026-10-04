@@ -41,6 +41,16 @@ jobs:
           test "$(cat .github/openai-production-auth0-trigger)" = "QUALIFY_ZSSH_PRODUCTION_AUTH0"
           node scripts/check-main-provenance.mjs
           node scripts/check-main-protection.mjs --public-status --require-protected
+      - name: Require canonical protected-main manual Auth0 preflight
+        if: github.event_name == 'workflow_dispatch'
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -Eeuo pipefail
+          test "$GITHUB_REF" = "refs/heads/main"
+          node scripts/check-main-provenance.mjs
+          node scripts/check-main-protection.mjs --public-status --require-protected --require-current-sha
       - name: Validate Auth0 tenant, API and DCR grant
         shell: bash
         env:
