@@ -145,6 +145,69 @@ test("final production release reruns and binds the external ingress preflight",
 });
 
 
+test("final production release scopes protected secrets to only required steps", () => {
+  const productionStart = workflow.indexOf("  production:");
+  assert.ok(productionStart >= 0, "missing final production job");
+  const production = workflow.slice(productionStart);
+  const productionHeader = production.split("\n    steps:")[0] || "";
+
+  for (const secretName of [
+    "ZSSH_REVIEW_ACCESS_TOKEN",
+    "AUTH0_MANAGEMENT_API_TOKEN",
+    "OPENAI_APPS_CHALLENGE_TOKEN",
+  ]) {
+    assert.doesNotMatch(
+      productionHeader,
+      new RegExp(secretName),
+      `${secretName} must not be available to every final-release step`,
+    );
+  }
+
+  function step(name) {
+    const tail = production.split(`      - name: ${name}`)[1];
+    assert.ok(tail, `missing ${name} step`);
+    return tail.split("\n      - name:")[0] || "";
+  }
+
+  const presence = step("Record secret-safe release configuration presence");
+  const validation = step("Fail closed on incomplete or non-public release configuration");
+  for (const secretName of [
+    "ZSSH_REVIEW_ACCESS_TOKEN",
+    "AUTH0_MANAGEMENT_API_TOKEN",
+    "OPENAI_APPS_CHALLENGE_TOKEN",
+  ]) {
+    const secretReference = secretName + ": " + "${{ secrets." + secretName + " }}";
+    assert.ok(presence.includes(secretReference), `${secretName} must be available to presence classification`);
+    assert.ok(validation.includes(secretReference), `${secretName} must be available to final config validation`);
+  }
+
+  const auth0 = step("Prove Auth0 production tenant, API and DCR grant");
+  assert.ok(auth0.includes("AUTH0_MANAGEMENT_API_TOKEN: ${{ secrets.AUTH0_MANAGEMENT_API_TOKEN }}"));
+  assert.doesNotMatch(auth0, /ZSSH_REVIEW_ACCESS_TOKEN|OPENAI_APPS_CHALLENGE_TOKEN/);
+
+  const probe = step("Run end-to-end OpenAI submission probe");
+  assert.ok(probe.includes("ZSSH_REVIEW_ACCESS_TOKEN: ${{ secrets.ZSSH_REVIEW_ACCESS_TOKEN }}"));
+  assert.ok(probe.includes("OPENAI_APPS_CHALLENGE_TOKEN: ${{ secrets.OPENAI_APPS_CHALLENGE_TOKEN }}"));
+  assert.doesNotMatch(probe, /AUTH0_MANAGEMENT_API_TOKEN/);
+
+  for (const secretFreeStep of [
+    "Prove external production ingress",
+    "Upload preflight evidence",
+    "Bind Verify Domain evidence to exact production origin",
+    "Build exact OpenAI submission bundle",
+    "Bind portal Scan Tools evidence to exact live contract",
+    "Record non-secret release evidence",
+    "Upload release bundle and evidence",
+  ]) {
+    assert.doesNotMatch(
+      step(secretFreeStep),
+      /ZSSH_REVIEW_ACCESS_TOKEN|AUTH0_MANAGEMENT_API_TOKEN|OPENAI_APPS_CHALLENGE_TOKEN/,
+      `${secretFreeStep} must remain secret-free`,
+    );
+  }
+});
+
+
 test("reviewed Auth0 activation is bound to exact current protected main", () => {
   assert.match(
     auth0Workflow,
