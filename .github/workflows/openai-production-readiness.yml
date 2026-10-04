@@ -94,17 +94,18 @@ jobs:
           const lines = [
             "# zSSH M5 production readiness",
             "",
-            `- Main protection: ${result.ready.repository_governance ? "verified" : "not verified"}`,
-            `- DNS publication inputs: ${result.ready.dns_publication ? "ready" : "missing inputs"}`,
-            `- Auth0 preflight inputs: ${result.ready.auth0_preflight ? "ready" : "missing inputs"}`,
-            `- Reviewer fixture inputs: ${result.ready.reviewer_fixture ? "ready" : "missing inputs"}`,
+            `- Main protection: ${result.ready.repository_governance ? "verified" : "not ready"}`,
+            `- DNS publication inputs: ${result.ready.dns_publication ? "ready" : "not ready"}`,
+            `- Auth0 preflight inputs: ${result.ready.auth0_preflight ? "ready" : "not ready"}`,
+            `- Reviewer fixture inputs: ${result.ready.reviewer_fixture ? "ready" : "not ready"}`,
             `- Portal/host attestations: ${result.ready.portal_and_host_attestations ? "ready" : "pending"}`,
-            `- Final release config presence: ${result.ready.final_release_config ? "complete" : "incomplete"}`,
+            `- Final release config validation: ${result.ready.final_release_config ? "green" : "not ready"}`,
             "",
             "## Next actions",
             ...result.next_actions.flatMap(item => [
               `- **${item.lane}** — ${item.action}`,
               `  - Missing: ${item.missing.join(", ") || "none"}`,
+              `  - Invalid: ${(item.invalid || []).map(issue => `${issue.name}: ${issue.reason}`).join("; ") || "none"}`,
             ]),
           ];
           appendFileSync(process.env.GITHUB_STEP_SUMMARY, lines.join("\n") + "\n");
