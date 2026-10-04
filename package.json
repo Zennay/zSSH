@@ -25,7 +25,8 @@
     "gateway:public:caddy:install": "bash deploy/install-public-caddy.sh",
     "gateway:public:dns": "node scripts/publish-cloudflare-dns.mjs",
     "oauth:auth0:preflight": "node scripts/check-auth0-production.mjs",
-    "release:readiness": "node scripts/check-production-readiness-audit.mjs"
+    "release:readiness": "node scripts/check-production-readiness-audit.mjs",
+    "repo:protect-main": "node scripts/apply-main-protection.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.20.2",
