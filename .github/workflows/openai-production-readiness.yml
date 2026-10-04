@@ -162,6 +162,8 @@ jobs:
           const lines = [
             "# zSSH M5 production readiness",
             "",
+            `- Execution state: ${result.execution_state}`,
+            `- Next external gate: ${result.next_external_action?.lane || "none"}`,
             `- Main protection: ${result.ready.repository_governance ? "verified" : "not ready"}`,
             `- DNS publication inputs: ${result.ready.dns_publication ? "ready" : "not ready"}`,
             `- Auth0 preflight inputs: ${result.ready.auth0_preflight ? "ready" : "not ready"}`,
