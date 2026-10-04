@@ -1,4 +1,4 @@
-import { readdirSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
@@ -21,6 +21,14 @@ for (const name of names) {
       violations.push({ name, reason: rule.reason });
       break;
     }
+  }
+
+  const workflow = readFileSync(join(workflowDir, name), "utf8");
+  if (/\bself-hosted\b/i.test(workflow)) {
+    violations.push({
+      name,
+      reason: "VPS/self-hosted execution belongs to the zCloud control-plane repository, not the zSSH release repository",
+    });
   }
 }
 
