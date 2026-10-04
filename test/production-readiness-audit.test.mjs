@@ -281,6 +281,10 @@ test("protected readiness workflow runs automatically only for merged PRs and ke
     readinessWorkflow,
     /Bind merged PR event to canonical main SHA[\s\S]*if: github\.event_name == 'pull_request'[\s\S]*MERGED_PR_SHA: \$\{\{ github\.event\.pull_request\.merge_commit_sha \}\}[\s\S]*test "\$GITHUB_SHA" = "\$MERGED_PR_SHA"/,
   );
+  assert.match(
+    readinessWorkflow,
+    /Require canonical main ref for manual readiness audit[\s\S]*if: github\.event_name == 'workflow_dispatch'[\s\S]*test "\$GITHUB_REF" = "refs\/heads\/main"/,
+  );
   assert.doesNotMatch(
     readinessWorkflow,
     /^  push:/m,
@@ -296,8 +300,8 @@ test("protected readiness workflow proves merged-PR provenance before entering o
   );
   assert.match(
     readinessWorkflow,
-    /Inspect live main protection[\s\S]*check-main-protection\.mjs --public-status[\s\S]*main_protected/,
-    "readiness provenance must derive GitHub live protection status",
+    /Require exact current protected main[\s\S]*check-main-protection\.mjs --public-status --require-protected --require-current-sha[\s\S]*main_protected/,
+    "readiness provenance must fail closed unless the executing SHA is exact current protected main",
   );
   assert.match(
     readinessWorkflow,
