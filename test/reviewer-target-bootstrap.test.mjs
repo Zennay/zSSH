@@ -42,7 +42,6 @@ test("reviewer target bootstrap is idempotent and never prints private key mater
     assert.equal(first.report.review_file, path.join(first.reviewRoot, "sample.txt"));
     assert.equal(first.report.review_write_file, path.join(first.reviewRoot, "output.txt"));
     assert.equal(first.report.release_guard_enforced, false);
-    assert.equal(first.report.release_guard_enforced, false);
     assert.equal(first.report.release_compatible, false);
     assert.equal(first.report.release_variables, null);
     assert.match(first.report.release_blocker, /do not copy dev\/test paths into openai-production/);
@@ -95,18 +94,6 @@ test("reviewer target bootstrap release guard rejects non-canonical dev fixture"
   }
 });
 
-test("reviewer target bootstrap release guard rejects non-canonical dev fixture", async () => {
-  const home = await mkdtemp(path.join(os.tmpdir(), "zssh-review-bootstrap-release-guard-"));
-
-  try {
-    await assert.rejects(
-      () => runBootstrap(home, { ZSSH_REVIEW_REQUIRE_RELEASE_COMPATIBLE: "1" }),
-      /reviewer fixture is not at the canonical submitted paths/,
-    );
-  } finally {
-    await rm(home, { recursive: true, force: true });
-  }
-});
 
 test("reviewer target bootstrap fails closed on partial identity state", async () => {
   const home = await mkdtemp(path.join(os.tmpdir(), "zssh-review-bootstrap-partial-"));
