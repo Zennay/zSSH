@@ -57,7 +57,9 @@ trap 'rm -rf "$STAGE"' EXIT
 
 if [[ ! -d "$RELEASE" ]]; then
   mkdir -p "$STAGE"
-  cp -a "$SOURCE/." "$STAGE/"
+  # Export only files tracked by the exact release commit. The mutable worktree
+  # may contain untracked .env files, credentials, or local operator state.
+  git -C "$SOURCE_ROOT" archive --format=tar "$REPO_SHA" | tar -x -C "$STAGE"
   rm -rf "$STAGE/node_modules" "$STAGE/data"
   "$NPM_BIN" install --prefix "$STAGE" --omit=dev --ignore-scripts --no-audit --no-fund
   "$NPM_BIN" test --prefix "$STAGE"
