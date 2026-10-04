@@ -127,7 +127,7 @@ test("unexpected successful direct write fails critically rather than producing 
 test("workflow gates the proof behind canonical main, public protection, and repository-governance secrets", () => {
   assert.match(workflow, /test "\$GITHUB_REF" = "refs\/heads\/main"/);
   assert.match(workflow, /check-main-provenance\.mjs/);
-  assert.match(workflow, /--public-status --require-protected/);
+  assert.match(workflow, /--public-status --require-protected --require-current-sha/);
   assert.match(workflow, /environment: repository-governance/);
   assert.match(workflow, /ZSSH_MAIN_PROTECTION_CANARY_TOKEN: \$\{\{ secrets\.ZSSH_MAIN_PROTECTION_CANARY_TOKEN \}\}/);
   assert.doesNotMatch(workflow, /contents: write/);

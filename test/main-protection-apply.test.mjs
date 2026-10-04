@@ -156,7 +156,7 @@ test("merged PRs verify live protection and only self-heal when it is absent", (
   );
   assert.match(
     workflow,
-    /status:\n    name: Check current main protection[\s\S]*node scripts\/check-main-protection\.mjs --public-status/,
+    /status:\n    name: Check current main protection[\s\S]*node scripts\/check-main-protection\.mjs --public-status --require-current-sha/,
   );
   assert.match(
     workflow,
