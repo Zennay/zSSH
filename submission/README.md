@@ -43,6 +43,8 @@ The username/password or other reviewer credentials must **not** be committed, p
 
 - `ZSSH_REVIEW_LOGIN_URL` as a non-secret variable;
 - `ZSSH_REVIEW_CREDENTIALS_VERIFIED=1` as a non-secret operator attestation after the login has actually been tested;
+- `ZSSH_CHATGPT_DESKTOP_REVIEWED=1` only after the production connection card has been exercised successfully in ChatGPT desktop;
+- `ZSSH_CHATGPT_MOBILE_REVIEWED=1` only after the production connection card has been exercised successfully in ChatGPT mobile;
 - `ZSSH_REVIEW_ACCESS_TOKEN` separately as a secret used only by the automated end-to-end MCP probe;
 - `ZSSH_OPENAI_DOMAIN_VERIFIED=1` only after OpenAI Verify Domain succeeds;
 - `ZSSH_OPENAI_TOOL_SCAN_VERIFIED=1` only after the current production Scan Tools run succeeds and required findings are resolved.
@@ -56,6 +58,8 @@ ZSSH_PLUGIN_MCP_URL=https://mcp.example.com/mcp \
 ZSSH_REVIEW_ACCESS_TOKEN='<short-lived reviewer access token>' \
 ZSSH_REVIEW_LOGIN_URL=https://auth.example.com/login \
 ZSSH_REVIEW_CREDENTIALS_VERIFIED=1 \
+ZSSH_CHATGPT_DESKTOP_REVIEWED=1 \
+ZSSH_CHATGPT_MOBILE_REVIEWED=1 \
 ZSSH_REVIEW_FILE=/srv/zssh-review/sample.txt \
 ZSSH_REVIEW_WRITE_FILE=/srv/zssh-review/output.txt \
 OPENAI_APPS_CHALLENGE_TOKEN='<current dashboard challenge token>' \
