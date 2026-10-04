@@ -34,4 +34,12 @@ The helper deliberately requires non-interactive sudo and an already-active Cadd
 
 ## Release boundary
 
-A green local/unit test proves transaction and rollback semantics only. Live promotion requires the canonical zCloud self-hosted runner to prove the current Caddy topology, production DNS readiness, exact canonical zSSH SHA and the real public origin before invoking the mutating helper.
+A green local/unit test proves transaction and rollback semantics only. Live VPS mutation is deliberately owned by the **Zennay/zCloud control plane**, not this release repository. The zSSH repository must remain free of self-hosted/VPS execution workflows.
+
+After guarded production DNS convergence, use the existing zCloud lanes in this order:
+
+1. **zSSH public gateway activate (zCloud lane)** — bind to the exact current canonical zSSH SHA, require the real production HTTPS origin plus OAuth issuer/JWKS, prepare the bounded reviewer target, run installer regression evidence and activate only the isolated loopback `zssh-public.service`.
+2. **zSSH public ingress bootstrap (zCloud lane)** — require the same exact canonical zSSH SHA, exact DNS to `198.244.191.182`, a healthy loopback gateway and explicit `INSTALL_ZSSH_PUBLIC_INGRESS`, then perform the transactional Caddy promotion on `vps-bb300bba`.
+3. **zSSH public ingress external preflight** — run from GitHub-hosted infrastructure after the VPS mutation to prove public TLS, health, MCP authentication and OAuth metadata from outside the server.
+
+Readiness must not report the VPS rollout as internally executable while the real production `ZSSH_OAUTH_ISSUER` is absent. Placeholder issuers and duplicate self-hosted workflows in zSSH are rejected by design.

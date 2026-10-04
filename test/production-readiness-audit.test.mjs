@@ -139,7 +139,7 @@ test("keeps DNS as an internal execution gate when credentials exist but public 
   assert.deepEqual(result.internal_action_gates, ["dns_publication"]);
 });
 
-test("keeps completed DNS green and exposes the remaining internal ingress rollout", () => {
+test("keeps completed DNS green and points internal ingress rollout at canonical zCloud lanes", () => {
   const result = buildProductionReadinessAudit({
     ...complete,
     CLOUDFLARE_API_TOKEN: "",
@@ -149,12 +149,36 @@ test("keeps completed DNS green and exposes the remaining internal ingress rollo
   assert.equal(result.ready.dns_publication, true);
   assert.equal(result.ready.public_ingress, false);
   assert.deepEqual(result.lanes.dns_publication.missing, []);
+  assert.deepEqual(result.lanes.public_ingress.missing, []);
   assert.equal(result.blocking_gate, "public_ingress");
   assert.equal(result.blocking_action?.gate_kind, "internal_deployment");
   assert.equal(result.blocking_action?.requires_external_input, false);
-  assert.match(result.blocking_action?.action || "", /zssh-public\.service/);
-  assert.match(result.blocking_action?.action || "", /Caddy promotion/);
+  assert.match(result.blocking_action?.action || "", /Zennay\/zCloud/);
+  assert.match(result.blocking_action?.action || "", /zSSH public gateway activate \(zCloud lane\)/);
+  assert.match(result.blocking_action?.action || "", /ACTIVATE_ZSSH_PUBLIC_GATEWAY/);
+  assert.match(result.blocking_action?.action || "", /zSSH public ingress bootstrap \(zCloud lane\)/);
+  assert.match(result.blocking_action?.action || "", /INSTALL_ZSSH_PUBLIC_INGRESS/);
+  assert.match(result.blocking_action?.action || "", /exact canonical zSSH SHA/);
   assert.deepEqual(result.internal_action_gates, ["public_ingress"]);
+});
+
+test("does not classify public ingress as internally executable before production OAuth issuer exists", () => {
+  const result = buildProductionReadinessAudit({
+    ...complete,
+    CLOUDFLARE_API_TOKEN: "",
+    ZSSH_PUBLIC_ORIGIN_STAGE: "mcp_auth",
+    ZSSH_OAUTH_ISSUER: "",
+  });
+
+  assert.equal(result.ready.dns_publication, true);
+  assert.equal(result.ready.public_ingress, false);
+  assert.deepEqual(result.lanes.public_ingress.missing, ["ZSSH_OAUTH_ISSUER"]);
+  assert.equal(result.blocking_gate, "public_ingress");
+  assert.equal(result.blocking_action?.gate_kind, "provider_configuration");
+  assert.equal(result.blocking_action?.requires_external_input, true);
+  assert.match(result.blocking_action?.action || "", /Zennay\/zCloud/);
+  assert.match(result.blocking_action?.action || "", /do not add VPS\/self-hosted workflows to the zSSH release repository/);
+  assert.deepEqual(result.internal_action_gates, []);
 });
 
 test("treats the public ingress boundary as proven once health and MCP auth reach OAuth metadata", () => {

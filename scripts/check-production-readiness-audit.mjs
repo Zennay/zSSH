@@ -428,13 +428,21 @@ export function buildProductionReadinessAudit(env = process.env) {
     ])
   );
   const publicOriginStage = value(env, "ZSSH_PUBLIC_ORIGIN_STAGE");
+  const publicIngressReady = PUBLIC_INGRESS_READY_STAGES.has(publicOriginStage);
+  const publicIngressNeedsRollout = dnsPublicationObserved(env) && !publicIngressReady;
+  const publicIngressIssuerIssue = publicIngressNeedsRollout
+    ? validateHttpsUrl(env, "ZSSH_OAUTH_ISSUER", { requirePublicHostname: true })
+    : null;
   lanes.public_ingress = {
-    ready: PUBLIC_INGRESS_READY_STAGES.has(publicOriginStage),
+    ready: publicIngressReady,
     configured: {
       ZSSH_PUBLIC_ORIGIN_STAGE: configured(env, "ZSSH_PUBLIC_ORIGIN_STAGE"),
+      ZSSH_OAUTH_ISSUER: configured(env, "ZSSH_OAUTH_ISSUER"),
     },
-    missing: [],
-    invalid: [],
+    missing: publicIngressNeedsRollout && !configured(env, "ZSSH_OAUTH_ISSUER")
+      ? ["ZSSH_OAUTH_ISSUER"]
+      : [],
+    invalid: compactIssues([publicIngressIssuerIssue]),
   };
   const releasePresence = publicReleaseConfigPresence(env);
   const releaseConfig = finalReleaseValidation(env, releasePresence);
@@ -471,13 +479,18 @@ export function buildProductionReadinessAudit(env = process.env) {
     });
   }
   if (lanes.dns_publication.ready && !lanes.public_ingress.ready) {
+    const rolloutConfigReady =
+      lanes.public_ingress.missing.length === 0 &&
+      lanes.public_ingress.invalid.length === 0;
     nextActions.push({
       lane: "public_ingress",
-      gate_kind: "internal_deployment",
-      requires_external_input: false,
-      action: `Public DNS is resolved but the zSSH public origin is stalled at stage ${publicOriginStage || "unknown"}. Run the canonical zCloud VPS rollout for zssh-public.service plus transactional Caddy promotion, then rerun the GitHub-hosted external ingress preflight.`,
-      missing: [],
-      invalid: [],
+      gate_kind: rolloutConfigReady ? "internal_deployment" : "provider_configuration",
+      requires_external_input: !rolloutConfigReady,
+      action: rolloutConfigReady
+        ? `Public DNS is resolved but the zSSH public origin is stalled at stage ${publicOriginStage || "unknown"}. In Zennay/zCloud, dispatch "zSSH public gateway activate (zCloud lane)" for this exact canonical zSSH SHA with https://zssh.cheapgpt.shop, the production OAuth issuer/JWKS and ACTIVATE_ZSSH_PUBLIC_GATEWAY. After the loopback gateway is green, dispatch "zSSH public ingress bootstrap (zCloud lane)" with the same exact zSSH SHA and INSTALL_ZSSH_PUBLIC_INGRESS. Then run the GitHub-hosted zSSH external public-ingress preflight.`
+        : "Provision a real production ZSSH_OAUTH_ISSUER before the public gateway activation. The canonical self-hosted deployment is owned by Zennay/zCloud; do not add VPS/self-hosted workflows to the zSSH release repository or fabricate a placeholder issuer. Protected readiness will reclassify this lane once the issuer is present.",
+      missing: lanes.public_ingress.missing,
+      invalid: lanes.public_ingress.invalid,
     });
   }
   if (!lanes.auth0_preflight.ready) {
