@@ -115,10 +115,10 @@ test("release-critical pull_request and push path filters stay in parity", () =>
 });
 
 
-test("final production release requires GitHub to report main protected", () => {
+test("final production release is bound to exact current protected main", () => {
   assert.match(
     workflow,
-    /provenance:[\s\S]*Require GitHub to report main protected[\s\S]*check-main-protection\.mjs --public-status --require-protected[\s\S]*production:/,
+    /provenance:[\s\S]*Require canonical main ref[\s\S]*test "\$GITHUB_REF" = "refs\/heads\/main"[\s\S]*Require exact current protected main[\s\S]*check-main-protection\.mjs --public-status --require-protected --require-current-sha[\s\S]*production:/,
   );
 });
 
