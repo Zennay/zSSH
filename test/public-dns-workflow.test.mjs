@@ -27,3 +27,23 @@ test("post-publication origin evidence is retained with Cloudflare DNS evidence"
     /zssh-cloudflare-dns-verify\.json[\s\S]*zssh-public-origin-after-dns\.json/,
   );
 });
+
+
+test("reviewed marker can trigger the exact production DNS publish after main is protected", () => {
+  assert.match(workflow, /push:\n    branches: \[main\][\s\S]*\.github\/openai-production-dns-trigger/);
+  assert.match(workflow, /test "\$\(cat \.github\/openai-production-dns-trigger\)" = "PUBLISH_ZSSH_PRODUCTION_DNS"/);
+  assert.match(workflow, /node scripts\/check-main-provenance\.mjs/);
+  assert.match(workflow, /check-main-protection\.mjs --public-status --require-protected/);
+  assert.match(
+    workflow,
+    /ZSSH_PUBLIC_BASE_URL: \$\{\{ github\.event_name == 'workflow_dispatch' && inputs\.public_base_url \|\| 'https:\/\/zssh\.cheapgpt\.shop' \}\}/,
+  );
+  assert.match(
+    workflow,
+    /ZSSH_PUBLIC_IPV4: \$\{\{ github\.event_name == 'workflow_dispatch' && inputs\.ipv4 \|\| '198\.244\.191\.182' \}\}/,
+  );
+});
+
+test("manual DNS publication still requires explicit confirmation", () => {
+  assert.match(workflow, /if: github\.event_name == 'workflow_dispatch'[\s\S]*PUBLISH_ZSSH_PRODUCTION_DNS/);
+});
