@@ -12,6 +12,7 @@ import { bearerChallenge, oauthConfigFromEnv, protectedResourceMetadata, require
 import { getPairingStatus, profileIdFromAuth, targetIdFromEnv } from "./pairing.mjs";
 import { TargetSessionRegistry, resolveAuthenticatedTarget } from "./target-routing.mjs";
 import { AGENT_ENDPOINTS, OutboundAgentBroker, createAgentRequestVerifier, readJsonBody } from "./agent-transport.mjs";
+import { AGENT_PAIRING_ENDPOINTS, executeAgentPairingControl } from "./agent-pairing-control.mjs";
 import { publicSiteResponse } from "./public-site.mjs";
 import { verifyClientToken } from "./auth-store.mjs";
 import { VERSION } from "./version.mjs";
@@ -1227,7 +1228,14 @@ export function start() {
         const targetId = verified.target_id;
         const value = body.value;
         let payload;
-        if (url.pathname === "/agent/v1/session") {
+        if (AGENT_PAIRING_ENDPOINTS.includes(url.pathname)) {
+          payload = await executeAgentPairingControl({
+            pathname: url.pathname,
+            targetId,
+            body: value,
+            env: process.env,
+          });
+        } else if (url.pathname === "/agent/v1/session") {
           payload = AGENT_BROKER.open(targetId);
         } else if (url.pathname === "/agent/v1/poll") {
           const command = await AGENT_BROKER.next(targetId, value.session_id);
