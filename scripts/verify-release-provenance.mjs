@@ -19,6 +19,16 @@ if (!/^[0-9a-f]{40}$/.test(repoSha)) {
 }
 
 const releaseRoot = path.resolve(releaseDir);
+let releaseRootStat;
+try {
+  releaseRootStat = lstatSync(releaseRoot);
+} catch {
+  fail("release root is missing");
+}
+if (!releaseRootStat.isDirectory() || releaseRootStat.isSymbolicLink()) {
+  fail("release root must be a real directory, not a symlink");
+}
+
 const tree = execFileSync(
   "git",
   ["-C", sourceRoot, "ls-tree", "-r", "-z", "--full-tree", repoSha],
