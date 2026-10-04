@@ -686,7 +686,14 @@ function createMcpServer() {
       if (PLUGIN_PROFILE === "public") {
         if (OUTBOUND_AGENT_MODE) {
           try {
-            return agentToolResult(await forwardPublicAgentTool(extra, "zssh_server_info", {}));
+            const targetInfo = await forwardPublicAgentTool(extra, "zssh_server_info", {});
+            return agentToolResult({
+              ...targetInfo,
+              plugin_profile: PLUGIN_PROFILE,
+              auth_mode: PUBLIC_AUTH_MODE,
+              pairing_required: PAIRING_REQUIRED,
+              transport: "outbound-agent",
+            });
           } catch (err) {
             return result({ ok: false, error: String(err?.message || err), code: err?.code || "target_unavailable" }, true);
           }
