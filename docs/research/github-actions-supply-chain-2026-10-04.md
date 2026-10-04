@@ -27,3 +27,11 @@ This extends the M5 DNS-workflow hardening from PR #169 across governance, relea
 The OpenAI public release gate treats every active `.github/workflows/**` change as release-critical on both pull requests and canonical-main pushes. This avoids a denylist-style gap where a new or previously omitted workflow (for example CI or provenance) could change release/security behavior without rerunning the release-contract gate. Explicit high-value paths remain listed for readability, while the wildcard is the fail-closed coverage boundary.
 
 Regression coverage in `test/release-workflow-trigger.test.mjs` requires pull-request/push parity and requires the workflow wildcard on both triggers.
+
+## Checkout credential persistence invariant
+
+GitHub's `actions/checkout` action persists the workflow authentication token into the local Git configuration unless `persist-credentials: false` is set. zSSH does not need that persisted Git credential in its active workflows: repository mutations use explicitly scoped API credentials or GitHub's job token at the exact consuming step.
+
+All active `.github/workflows/*.yml` / `.yaml` checkout steps therefore set `persist-credentials: false`. The existing repository-wide workflow regression test also scans every active checkout step and rejects any future workflow that omits this setting.
+
+This reduces ambient credential lifetime inside CI, governance, readiness and production-release jobs without changing branch-protection, provider, or release permissions.
