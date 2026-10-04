@@ -361,6 +361,23 @@ function laneStatus(env, laneName, names) {
     };
   }
 
+  if (laneName === "auth0_preflight") {
+    const missing = names.filter(name => !present[name]);
+    const attempted = value(env, "ZSSH_AUTH0_PREFLIGHT_ATTEMPTED") === "1";
+    const verified = value(env, "ZSSH_AUTH0_PREFLIGHT_VERIFIED") === "1";
+    return {
+      ready: missing.length === 0 && invalid.length === 0 && verified,
+      configured: {
+        ...present,
+        ZSSH_AUTH0_PREFLIGHT_ATTEMPTED: attempted,
+        ZSSH_AUTH0_PREFLIGHT_VERIFIED: verified,
+      },
+      missing,
+      invalid,
+      verification: { attempted, verified },
+    };
+  }
+
   const missing = names.filter(name => !present[name]);
   return {
     ready: missing.length === 0 && invalid.length === 0,
@@ -464,11 +481,21 @@ export function buildProductionReadinessAudit(env = process.env) {
     });
   }
   if (!lanes.auth0_preflight.ready) {
+    const configReady =
+      lanes.auth0_preflight.missing.length === 0 &&
+      lanes.auth0_preflight.invalid.length === 0;
+    const attempted = lanes.auth0_preflight.verification?.attempted === true;
     nextActions.push({
       lane: "auth0_preflight",
-      gate_kind: "provider_configuration",
-      requires_external_input: true,
-      action: "Provision the production Auth0 issuer and Management API token, then trigger Auth0 production qualification through a reviewed change to .github/openai-production-auth0-trigger: keep line 1 exactly QUALIFY_ZSSH_PRODUCTION_AUTH0 and add or rotate line 2 as activation-id=<8-80 safe characters>, then merge to protected main. Never place a credential in the marker. For canonical *.auth0.com issuers the management origin is derived automatically; custom Auth0 domains still require an explicit canonical *.auth0.com AUTH0_MANAGEMENT_BASE_URL.",
+      gate_kind: !configReady || attempted
+        ? "provider_configuration"
+        : "provider_execution",
+      requires_external_input: !configReady || attempted,
+      action: !configReady
+        ? "Provision the production Auth0 issuer and Management API token. For canonical *.auth0.com issuers the management origin is derived automatically; custom Auth0 domains still require an explicit canonical *.auth0.com AUTH0_MANAGEMENT_BASE_URL. Once public ingress is ready, the protected readiness audit performs the live Auth0 tenant/API/DCR qualification itself."
+        : attempted
+          ? "Live Auth0 production qualification failed. Repair the tenant/API/DCR/grant configuration reported by check-auth0-production.mjs, then rerun the protected readiness audit (or the reviewed Auth0 production readiness workflow)."
+          : "Auth0 inputs are configured but no live qualification evidence is present. Run the protected OpenAI production readiness audit on exact canonical main; once public ingress is ready it executes check-auth0-production.mjs inside the existing secret-scoped classifier step.",
       missing: lanes.auth0_preflight.missing,
       invalid: lanes.auth0_preflight.invalid,
     });
@@ -522,7 +549,7 @@ export function buildProductionReadinessAudit(env = process.env) {
   const blockingAction = nextActions[0] || null;
 
   return {
-    schema_version: 4,
+    schema_version: 5,
     phase: "M5",
     goal: "public-plugin production submission",
     ready: {
