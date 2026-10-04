@@ -1,0 +1,57 @@
+name: zSSH public origin watch
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 */2 * * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: zssh-public-origin-watch
+  cancel-in-progress: true
+
+jobs:
+  observe:
+    name: Observe public production origin
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Observe DNS, HTTPS, MCP auth and OAuth metadata
+        shell: bash
+        env:
+          ORIGIN_REPORT_PATH: ${{ runner.temp }}/zssh-public-origin-observation.json
+        run: |
+          set -Eeuo pipefail
+          node scripts/observe-public-origin-readiness.mjs https://zssh.cheapgpt.shop/mcp | tee "$ORIGIN_REPORT_PATH"
+      - name: Summarize public origin state
+        shell: bash
+        env:
+          ORIGIN_REPORT_PATH: ${{ runner.temp }}/zssh-public-origin-observation.json
+        run: |
+          set -Eeuo pipefail
+          node --input-type=module - "$ORIGIN_REPORT_PATH" <<'NODE'
+          import { readFileSync, appendFileSync } from "node:fs";
+          const result = JSON.parse(readFileSync(process.argv[2], "utf8"));
+          const lines = [
+            "# zSSH public origin watch",
+            "",
+            `- URL: ${result.mcp_url}`,
+            `- Ready: ${result.ready ? "yes" : "no"}`,
+            `- Current stage: ${result.stage}`,
+          ];
+          if (result.reason) lines.push(`- Reason: ${result.reason}`);
+          appendFileSync(process.env.GITHUB_STEP_SUMMARY, lines.join("\n") + "\n");
+          NODE
+      - name: Upload public origin observation
+        uses: actions/upload-artifact@v4
+        with:
+          name: zssh-public-origin-watch-${{ github.run_id }}
+          path: ${{ runner.temp }}/zssh-public-origin-observation.json
+          if-no-files-found: error
+          retention-days: 7
