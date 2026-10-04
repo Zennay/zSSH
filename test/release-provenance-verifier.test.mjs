@@ -89,3 +89,25 @@ test("verifier rejects executable-bit drift", t => {
     /tracked executable mode drifted: deploy\/install-live\.sh/,
   );
 });
+
+test("verifier permits only the regenerated node_modules root", t => {
+  const { root, release } = materializeRelease();
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+
+  const generated = path.join(release, "node_modules", "example");
+  mkdirSync(generated, { recursive: true });
+  appendFileSync(path.join(generated, "index.js"), "export {};\n");
+
+  assert.doesNotThrow(() => verify(release));
+});
+
+test("verifier rejects other untracked files in an existing release directory", t => {
+  const { root, release } = materializeRelease();
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+
+  appendFileSync(path.join(release, "runtime-injected.mjs"), "export {};\n");
+  assert.throws(
+    () => verify(release),
+    /unexpected untracked path runtime-injected\.mjs/,
+  );
+});
