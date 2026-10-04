@@ -276,10 +276,10 @@ test("repository governance attestation is derived before protected release envi
 
 test("operator docs do not require the retired mutable governance attestation", () => {
   for (const doc of [releaseChecklist, reviewDoc]) {
-    assert.equal(doc.includes("only then set \`ZSSH_MAIN_PROTECTION_VERIFIED=1\`"), false);
+    assert.equal(doc.includes("only then set \\`ZSSH_MAIN_PROTECTION_VERIFIED=1\\`"), false);
     assert.equal(doc.includes("# ZSSH_MAIN_PROTECTION_VERIFIED=1"), false);
   }
-  assert.ok(releaseChecklist.includes("check-main-protection.mjs --require-negative-proof"));
-  assert.ok(releaseChecklist.includes("is not a mutable \`openai-production\` variable"));
-  assert.ok(reviewDoc.includes("ZSSH_MAIN_PROTECTION_VERIFIED is derived automatically from immutable GitHub governance evidence"));
+  assert.ok(releaseChecklist.includes("issue #100"));
+  assert.ok(releaseChecklist.includes("derive \\`ZSSH_MAIN_PROTECTION_VERIFIED=1\\` in-process"));
+  assert.ok(reviewDoc.includes("Repository governance is derived live from protected main + immutable issue #100 negative-proof evidence."));
 });
