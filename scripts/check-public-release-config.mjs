@@ -16,6 +16,7 @@ const REQUIRED_RELEASE_CONFIG = [
   "ZSSH_CHATGPT_MOBILE_REVIEWED",
   "ZSSH_OPENAI_DOMAIN_VERIFIED",
   "ZSSH_OPENAI_TOOL_SCAN_VERIFIED",
+  "ZSSH_OPENAI_TOOL_SCAN_SHA256",
   "OPENAI_APPS_CHALLENGE_TOKEN",
   "ZSSH_REVIEW_FILE",
   "ZSSH_REVIEW_WRITE_FILE",
@@ -98,6 +99,10 @@ export function validatePublicReleaseConfig(env = process.env) {
   if (openaiToolScanVerified !== "1") {
     fail("ZSSH_OPENAI_TOOL_SCAN_VERIFIED must be exactly 1 only after Scan Tools has completed successfully against the current production MCP server");
   }
+  const openaiToolScanSha256 = requireValue(env, "ZSSH_OPENAI_TOOL_SCAN_SHA256");
+  if (!/^[a-f0-9]{64}$/.test(openaiToolScanSha256)) {
+    fail("ZSSH_OPENAI_TOOL_SCAN_SHA256 must be the 64-character lowercase SHA-256 fingerprint from the exact production tool contract that was scanned in the OpenAI portal");
+  }
   const challengeToken = requireValue(env, "OPENAI_APPS_CHALLENGE_TOKEN", { minLength: 16 });
   const reviewFile = requireValue(env, "ZSSH_REVIEW_FILE");
   const writeFile = requireValue(env, "ZSSH_REVIEW_WRITE_FILE");
@@ -121,6 +126,7 @@ export function validatePublicReleaseConfig(env = process.env) {
     chatgpt_mobile_reviewed: true,
     openai_domain_verified: true,
     openai_tool_scan_verified: true,
+    openai_tool_scan_sha256: openaiToolScanSha256,
     review_file_name: path.basename(reviewFile),
     write_file_name: path.basename(writeFile),
     access_token_present: accessToken.length > 0,
@@ -152,6 +158,7 @@ export function runSelfTest() {
     ZSSH_CHATGPT_MOBILE_REVIEWED: "1",
     ZSSH_OPENAI_DOMAIN_VERIFIED: "1",
     ZSSH_OPENAI_TOOL_SCAN_VERIFIED: "1",
+    ZSSH_OPENAI_TOOL_SCAN_SHA256: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
     OPENAI_APPS_CHALLENGE_TOKEN: "challenge-0123456789abcdef",
     ZSSH_REVIEW_FILE: "/srv/zssh-review/sample.txt",
     ZSSH_REVIEW_WRITE_FILE: "/srv/zssh-review/output.txt"
@@ -179,6 +186,7 @@ export function runSelfTest() {
   assertThrows(() => validatePublicReleaseConfig({ ...good, ZSSH_CHATGPT_MOBILE_REVIEWED: "0" }), /ChatGPT mobile/);
   assertThrows(() => validatePublicReleaseConfig({ ...good, ZSSH_OPENAI_DOMAIN_VERIFIED: "0" }), /Verify Domain has passed/);
   assertThrows(() => validatePublicReleaseConfig({ ...good, ZSSH_OPENAI_TOOL_SCAN_VERIFIED: "0" }), /Scan Tools has completed successfully/);
+  assertThrows(() => validatePublicReleaseConfig({ ...good, ZSSH_OPENAI_TOOL_SCAN_SHA256: "stale" }), /64-character lowercase SHA-256/);
 
   console.log("PUBLIC_RELEASE_PREFLIGHT_SELF_TEST_GREEN");
 }

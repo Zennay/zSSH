@@ -16,6 +16,7 @@ This checklist tracks the production path from the current review-ready MCP prof
 - [ ] Dedicated paired target fixture is available
 - [ ] Production connection card exercised successfully in ChatGPT desktop; only then set `ZSSH_CHATGPT_DESKTOP_REVIEWED=1`
 - [ ] Production connection card exercised successfully in ChatGPT mobile; only then set `ZSSH_CHATGPT_MOBILE_REVIEWED=1`
+- [ ] OpenAI Scan Tools is green for the exact production tool contract; set `ZSSH_OPENAI_TOOL_SCAN_VERIFIED=1` and `ZSSH_OPENAI_TOOL_SCAN_SHA256=<live tool_scan_sha256>` only after that exact scan
 
 ## Canonical release provenance
 
@@ -54,7 +55,7 @@ Record:
 - CI run result for the exact commit;
 - merged PR number and merge timestamp proving canonical main provenance;
 - VPS rollout proof from the dedicated `Zennay/zCloud` `zSSH standalone VPS release` workflow, pinned to the exact canonical zSSH commit;
-- SHA-256 fingerprint of the exact public tool metadata returned by the production scan;
+- SHA-256 fingerprint of the exact public tool metadata returned by the production probe, with `ZSSH_OPENAI_TOOL_SCAN_SHA256` required to match it exactly after the portal scan;
 - SHA-256 of the exact `zssh-openai-plugin.zip` uploaded by the production release gate;
 - plugin version, currently `0.1.2`, matching `package.json` and `submission/plugin.template.json`;
 - authorization-server metadata URL(s), issuer(s), and PKCE S256 evidence emitted by the production probe;

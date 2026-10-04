@@ -10,12 +10,14 @@ on:
       - "public-site.mjs"
       - "test/public-site.test.mjs"
       - "scripts/check-public-release-config.mjs"
+      - "scripts/check-tool-scan-binding.mjs"
       - "scripts/check-main-provenance.mjs"
       - "scripts/build-openai-plugin.py"
       - "package.json"
       - "production-submission-probe.mjs"
       - "production-submission-probe-canary.mjs"
       - "test/release-contract.test.mjs"
+      - "test/tool-scan-binding.test.mjs"
       - "test/main-provenance.test.mjs"
       - "submission/**"
       - "docs/openai-plugin-*.md"
@@ -28,11 +30,13 @@ on:
       - "public-site.mjs"
       - "test/public-site.test.mjs"
       - "scripts/check-public-release-config.mjs"
+      - "scripts/check-tool-scan-binding.mjs"
       - "scripts/build-openai-plugin.py"
       - "package.json"
       - "production-submission-probe.mjs"
       - "production-submission-probe-canary.mjs"
       - "test/release-contract.test.mjs"
+      - "test/tool-scan-binding.test.mjs"
       - "submission/**"
       - "docs/openai-plugin-*.md"
   workflow_dispatch:
@@ -63,6 +67,7 @@ jobs:
         run: |
           node --check release-contract.mjs
           node --check scripts/check-public-release-config.mjs
+          node --check scripts/check-tool-scan-binding.mjs
           node --check scripts/check-main-provenance.mjs
           node --check production-submission-probe.mjs
           node --check production-submission-probe-canary.mjs
@@ -104,6 +109,7 @@ jobs:
       ZSSH_CHATGPT_MOBILE_REVIEWED: ${{ vars.ZSSH_CHATGPT_MOBILE_REVIEWED }}
       ZSSH_OPENAI_DOMAIN_VERIFIED: ${{ vars.ZSSH_OPENAI_DOMAIN_VERIFIED }}
       ZSSH_OPENAI_TOOL_SCAN_VERIFIED: ${{ vars.ZSSH_OPENAI_TOOL_SCAN_VERIFIED }}
+      ZSSH_OPENAI_TOOL_SCAN_SHA256: ${{ vars.ZSSH_OPENAI_TOOL_SCAN_SHA256 }}
       OPENAI_APPS_CHALLENGE_TOKEN: ${{ secrets.OPENAI_APPS_CHALLENGE_TOKEN }}
       ZSSH_REQUIRE_OUTBOUND_AGENT: "1"
     steps:
@@ -145,6 +151,10 @@ jobs:
         run: |
           set -Eeuo pipefail
           node production-submission-probe.mjs | tee "$PROBE_REPORT_PATH"
+      - name: Bind portal Scan Tools evidence to exact live contract
+        env:
+          PROBE_REPORT_PATH: ${{ runner.temp }}/zssh-openai-production-probe.json
+        run: node scripts/check-tool-scan-binding.mjs
       - name: Record non-secret release evidence
         shell: bash
         env:
@@ -161,6 +171,9 @@ jobs:
           const bundle = JSON.parse(readFileSync(process.env.BUNDLE_REPORT_PATH, "utf8"));
           if (!/^[a-f0-9]{64}$/.test(String(probe.tool_scan_sha256 || ""))) {
             throw new Error("production probe did not emit a valid tool scan fingerprint");
+          }
+          if (process.env.ZSSH_OPENAI_TOOL_SCAN_SHA256 !== probe.tool_scan_sha256) {
+            throw new Error("OpenAI portal Scan Tools attestation is stale: configured fingerprint does not match the exact live production tool contract");
           }
           if (probe.oauth_authorization_server_metadata_validated !== true || probe.oauth_pkce_s256_validated !== true) {
             throw new Error("production probe did not prove OAuth authorization-server metadata + PKCE S256");
@@ -207,6 +220,7 @@ jobs:
             chatgpt_mobile_reviewed: true,
             openai_domain_verified: true,
             openai_tool_scan_verified: true,
+            openai_tool_scan_sha256: process.env.ZSSH_OPENAI_TOOL_SCAN_SHA256,
             tool_scan_sha256: probe.tool_scan_sha256,
             plugin_version: bundle.version,
             submission_bundle_sha256: bundle.zip_sha256,

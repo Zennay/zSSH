@@ -48,6 +48,7 @@ The username/password or other reviewer credentials must **not** be committed, p
 - `ZSSH_REVIEW_ACCESS_TOKEN` separately as a secret used only by the automated end-to-end MCP probe;
 - `ZSSH_OPENAI_DOMAIN_VERIFIED=1` only after OpenAI Verify Domain succeeds;
 - `ZSSH_OPENAI_TOOL_SCAN_VERIFIED=1` only after the current production Scan Tools run succeeds and required findings are resolved.
+- `ZSSH_OPENAI_TOOL_SCAN_SHA256` set to the exact lowercase SHA-256 emitted by the production probe for the tool contract that was scanned; any later tool-contract change requires a fresh portal scan and a refreshed fingerprint.
 
 ## Production readiness probe
 
