@@ -131,7 +131,11 @@ test("production DNS apply is bound to the exact dry-run record-state fingerprin
   const plan = planTail.split("\n      - name:")[0];
   assert.match(plan, /id: dns_plan/);
   assert.match(plan, /evidence\.previous_state_sha256 \|\| ""/);
-  assert.match(plan, /current_state_sha256=%s/);
+  assert.match(plan, /would_update_requires_precondition/);
+  assert.match(plan, /refusing to enter the mutation-capable step/);
+  assert.match(plan, /new Set\(\["noop", "would_create", "would_update"\]\)/);
+  assert.match(plan, /action === "would_update"[\s\S]*\^\[a-f0-9\]\{64\}\$/);
+  assert.match(plan, /current_state_sha256=\$\{fingerprint\}/);
   assert.match(plan, /"\$GITHUB_OUTPUT"/);
 
   const applyTail = workflow.split("      - name: Publish exact DNS-only A record")[1];
@@ -148,6 +152,18 @@ test("production DNS apply is bound to the exact dry-run record-state fingerprin
 
   assert.match(runbook, /plan-to-apply/);
   assert.match(runbook, /state fingerprint/i);
+});
+
+test("production DNS never enters the apply step when human replacement review is missing", () => {
+  const planIndex = workflow.indexOf("      - name: Validate desired Cloudflare DNS change without mutation");
+  const applyIndex = workflow.indexOf("      - name: Publish exact DNS-only A record");
+  assert.ok(planIndex > 0 && applyIndex > planIndex, "plan must precede apply");
+
+  const plan = workflow
+    .slice(planIndex, applyIndex);
+  assert.match(plan, /action === "would_update_requires_precondition"/);
+  assert.match(plan, /throw new Error\([\s\S]*reviewed ZSSH_DNS_EXPECTED_CURRENT_IPV4/);
+  assert.match(runbook, /stops before the mutation-capable apply step/i);
 });
 
 test("operator DNS cutover runbook stays aligned with the guarded workflow contract", () => {
