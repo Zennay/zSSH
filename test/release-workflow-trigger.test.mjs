@@ -129,6 +129,8 @@ test("release-critical pull_request and push path filters stay in parity", () =>
     ".github/workflows/public-dns-publish.yml",
     ".github/openai-production-dns-trigger",
     "scripts/publish-cloudflare-dns.mjs",
+    "scripts/verify-cloudflare-token.mjs",
+    "test/cloudflare-token-verify.test.mjs",
     "test/cloudflare-dns-publish.test.mjs",
     "test/cloudflare-request-timeout.test.mjs",
     "test/public-dns-workflow.test.mjs",
