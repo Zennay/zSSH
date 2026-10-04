@@ -108,6 +108,8 @@ test("release-critical pull_request and push path filters stay in parity", () =>
     "server.mjs",
     "rate-limit.mjs",
     "test/rate-limit.test.mjs",
+    "deploy/install-live.sh",
+    "test/install-live-stage-provenance.test.mjs",
     "deploy/install-public-gateway.sh",
     "test/public-gateway-installer.test.mjs",
     "deploy/install-public-caddy.sh",
