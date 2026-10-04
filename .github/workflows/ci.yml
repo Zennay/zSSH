@@ -8,12 +8,45 @@ on:
 
 permissions:
   contents: read
+  actions: write
 
 jobs:
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
+      - name: Cancel quarantined foreign workflow run
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TARGET_RUN_ID: "37177345220"
+          TARGET_HEAD_SHA: "25f1d28494f60ca057acda2d5223bbb91c2f3ecb"
+          TARGET_WORKFLOW_PATH: ".github/workflows/ftmo-pr521-runner-recovery-haxlab.yml"
+        run: |
+          set -euo pipefail
+          payload="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${TARGET_RUN_ID}")"
+          test "$(jq -r '.head_sha' <<<"$payload")" = "$TARGET_HEAD_SHA"
+          test "$(jq -r '.path' <<<"$payload")" = "$TARGET_WORKFLOW_PATH"
+          status="$(jq -r '.status' <<<"$payload")"
+          if [[ "$status" == "queued" || "$status" == "in_progress" || "$status" == "waiting" || "$status" == "pending" ]]; then
+            gh api --method POST "repos/${GITHUB_REPOSITORY}/actions/runs/${TARGET_RUN_ID}/cancel" >/dev/null
+          elif [[ "$status" != "completed" ]]; then
+            echo "Unexpected foreign workflow status: $status" >&2
+            exit 1
+          fi
+          for _ in $(seq 1 20); do
+            payload="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${TARGET_RUN_ID}")"
+            status="$(jq -r '.status' <<<"$payload")"
+            conclusion="$(jq -r '.conclusion // ""' <<<"$payload")"
+            echo "foreign_run status=$status conclusion=$conclusion"
+            if [[ "$status" == "completed" ]]; then
+              [[ "$conclusion" == "cancelled" || "$conclusion" == "skipped" ]]
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Foreign workflow did not reach a safe terminal state" >&2
+          exit 1
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
