@@ -1,0 +1,154 @@
+name: zSSH public gateway VPS preflight
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/public-gateway-vps-preflight.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: zssh-public-gateway-vps-preflight
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: Validate-only proof on vps-bb300bba
+    runs-on: [self-hosted, zcloud, vps]
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Prove public gateway configuration without starting it
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          test "$(hostname)" = "vps-bb300bba"
+          test "$(id -u)" -ne 0
+          node_major="$(node -p 'Number(process.versions.node.split(".")[0])')"
+          test "$node_major" -ge 20
+
+          npm install --ignore-scripts --no-audit --no-fund
+
+          export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+          export DBUS_SESSION_BUS_ADDRESS="${DBUS_SESSION_BUS_ADDRESS:-unix:path=$XDG_RUNTIME_DIR/bus}"
+
+          env_file="$HOME/.config/zssh/public-gateway.env"
+          current_link="$HOME/.local/share/zssh-public/current"
+
+          file_state() {
+            local file="$1"
+            if [[ -f "$file" ]]; then
+              printf 'present:%s' "$(sha256sum "$file" | awk '{print $1}')"
+            elif [[ -e "$file" ]]; then
+              printf 'present-nonregular'
+            else
+              printf 'absent'
+            fi
+          }
+
+          before_env="$(file_state "$env_file")"
+          before_current="$(readlink -f "$current_link" 2>/dev/null || true)"
+          before_active="$(systemctl --user is-active zssh-public.service 2>/dev/null || true)"
+          before_enabled="$(systemctl --user is-enabled zssh-public.service 2>/dev/null || true)"
+
+          reviewer_report="$RUNNER_TEMP/zssh-reviewer-target.json"
+          npm run review:target -- "$GITHUB_WORKSPACE" > "$reviewer_report"
+
+          target_id="$(node -e 'const x=require(process.argv[1]); process.stdout.write(x.target_id)' "$reviewer_report")"
+          trust_file="$(node -e 'const x=require(process.argv[1]); process.stdout.write(x.gateway_public_key_config_file)' "$reviewer_report")"
+          review_root="$(node -e 'const x=require(process.argv[1]); process.stdout.write(x.review_root)' "$reviewer_report")"
+          fingerprint="$(node -e 'const x=require(process.argv[1]); process.stdout.write(x.public_key_sha256)' "$reviewer_report")"
+
+          test "$trust_file" = "$HOME/.config/zssh/reviewer-agent-public.json"
+          test "$review_root" = "$HOME/zssh-review"
+          [[ "$target_id" =~ ^zt_[A-Za-z0-9_-]{8,96}$ ]]
+          [[ "$fingerprint" =~ ^[a-f0-9]{64}$ ]]
+
+          export ZSSH_PUBLIC_BASE_URL="https://mcp.zssh-preflight.invalid"
+          export ZSSH_OAUTH_ISSUER="https://auth.zssh-preflight.invalid"
+          export ZSSH_OAUTH_JWKS_URI="https://auth.zssh-preflight.invalid/.well-known/jwks.json"
+          export ZSSH_TARGET_ID="$target_id"
+          export ZSSH_AGENT_PUBLIC_KEYS_FILE="$trust_file"
+          export ZSSH_PUBLIC_ALLOWED_ROOTS="$review_root"
+          export ZSSH_PUBLIC_GATEWAY_VALIDATE_ONLY=1
+          export ZSSH_EXPECTED_SHA="$GITHUB_SHA"
+
+          preflight_output="$RUNNER_TEMP/zssh-public-gateway-preflight.txt"
+          npm run gateway:public:install -- "$GITHUB_WORKSPACE" | tee "$preflight_output"
+          grep -F "ZSSH_PUBLIC_GATEWAY_CONFIG_GREEN sha=$GITHUB_SHA" "$preflight_output"
+
+          after_env="$(file_state "$env_file")"
+          after_current="$(readlink -f "$current_link" 2>/dev/null || true)"
+          after_active="$(systemctl --user is-active zssh-public.service 2>/dev/null || true)"
+          after_enabled="$(systemctl --user is-enabled zssh-public.service 2>/dev/null || true)"
+
+          test "$after_env" = "$before_env"
+          test "$after_current" = "$before_current"
+          test "$after_active" = "$before_active"
+          test "$after_enabled" = "$before_enabled"
+
+          export RECEIPT="$RUNNER_TEMP/zssh-public-gateway-vps-preflight.json"
+          export TARGET_ID="$target_id"
+          export TRUST_FILE="$trust_file"
+          export REVIEW_ROOT="$review_root"
+          export FINGERPRINT="$fingerprint"
+          export BEFORE_ENV="$before_env"
+          export AFTER_ENV="$after_env"
+          export BEFORE_CURRENT="$before_current"
+          export AFTER_CURRENT="$after_current"
+          export BEFORE_ACTIVE="$before_active"
+          export AFTER_ACTIVE="$after_active"
+          export BEFORE_ENABLED="$before_enabled"
+          export AFTER_ENABLED="$after_enabled"
+          node --input-type=module <<'NODE'
+          import { writeFileSync } from "node:fs";
+          const receipt = {
+            ok: true,
+            repository: process.env.GITHUB_REPOSITORY,
+            commit_sha: process.env.GITHUB_SHA,
+            workflow_run_id: process.env.GITHUB_RUN_ID,
+            runner_name: process.env.RUNNER_NAME,
+            hostname: "vps-bb300bba",
+            mode: "validate-only",
+            placeholder_external_inputs: true,
+            target_id: process.env.TARGET_ID,
+            public_key_sha256: process.env.FINGERPRINT,
+            trust_file: process.env.TRUST_FILE,
+            review_root: process.env.REVIEW_ROOT,
+            public_gateway_env_before: process.env.BEFORE_ENV,
+            public_gateway_env_after: process.env.AFTER_ENV,
+            public_release_before: process.env.BEFORE_CURRENT,
+            public_release_after: process.env.AFTER_CURRENT,
+            public_service_active_before: process.env.BEFORE_ACTIVE,
+            public_service_active_after: process.env.AFTER_ACTIVE,
+            public_service_enabled_before: process.env.BEFORE_ENABLED,
+            public_service_enabled_after: process.env.AFTER_ENABLED,
+            external_gate_remaining: [
+              "stable public DNS/TLS ingress",
+              "production OAuth/OIDC issuer and reviewer account",
+              "OpenAI domain challenge token",
+              "demo recording URL",
+              "openai-production variables and secrets"
+            ]
+          };
+          writeFileSync(process.env.RECEIPT, JSON.stringify(receipt, null, 2) + "\n");
+          console.log("ZSSH_PUBLIC_GATEWAY_VPS_PREFLIGHT_GREEN", JSON.stringify({
+            commit_sha: receipt.commit_sha,
+            workflow_run_id: receipt.workflow_run_id,
+            target_id: receipt.target_id,
+            public_key_sha256: receipt.public_key_sha256
+          }));
+          NODE
+
+      - name: Upload non-secret preflight receipt
+        uses: actions/upload-artifact@v4
+        with:
+          name: zssh-public-gateway-vps-preflight-${{ github.run_id }}
+          path: ${{ runner.temp }}/zssh-public-gateway-vps-preflight.json
+          if-no-files-found: error
+          retention-days: 30
