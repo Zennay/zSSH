@@ -15,6 +15,7 @@ const REQUIRED_RELEASE_CONFIG = [
   "ZSSH_CHATGPT_DESKTOP_REVIEWED",
   "ZSSH_CHATGPT_MOBILE_REVIEWED",
   "ZSSH_OPENAI_DOMAIN_VERIFIED",
+  "ZSSH_OPENAI_DOMAIN_VERIFIED_HOST",
   "ZSSH_OPENAI_TOOL_SCAN_VERIFIED",
   "ZSSH_OPENAI_TOOL_SCAN_SHA256",
   "OPENAI_APPS_CHALLENGE_TOKEN",
@@ -71,6 +72,32 @@ function requirePublicHttpsUrl(env, name) {
   return url;
 }
 
+function requirePublicDnsHostname(env, name) {
+  const value = requireValue(env, name).replace(/\.$/, "").toLowerCase();
+  let url;
+  try {
+    url = new URL(`https://${value}`);
+  } catch {
+    fail(`${name} must be a plain public DNS hostname`);
+  }
+  if (
+    url.hostname !== value ||
+    url.port ||
+    url.username ||
+    url.password ||
+    url.pathname !== "/" ||
+    url.search ||
+    url.hash ||
+    net.isIP(value) ||
+    value === "localhost" ||
+    value.endsWith(".local") ||
+    !value.includes(".")
+  ) {
+    fail(`${name} must be a plain public DNS hostname`);
+  }
+  return value;
+}
+
 export function validatePublicReleaseConfig(env = process.env) {
   const mcpUrl = validatePublicMcpUrl(
     requireValue(env, "ZSSH_PLUGIN_MCP_URL"),
@@ -94,6 +121,14 @@ export function validatePublicReleaseConfig(env = process.env) {
   const openaiDomainVerified = requireValue(env, "ZSSH_OPENAI_DOMAIN_VERIFIED");
   if (openaiDomainVerified !== "1") {
     fail("ZSSH_OPENAI_DOMAIN_VERIFIED must be exactly 1 only after Verify Domain has passed in the OpenAI plugin submission portal");
+  }
+  const openaiDomainVerifiedHost = requirePublicDnsHostname(env, "ZSSH_OPENAI_DOMAIN_VERIFIED_HOST");
+  const productionMcpHost = mcpUrl.hostname.toLowerCase();
+  if (
+    openaiDomainVerifiedHost !== productionMcpHost &&
+    !productionMcpHost.endsWith(`.${openaiDomainVerifiedHost}`)
+  ) {
+    fail("ZSSH_OPENAI_DOMAIN_VERIFIED_HOST must match the production MCP hostname or the exact eligible parent domain used for the OpenAI verification challenge");
   }
   const openaiToolScanVerified = requireValue(env, "ZSSH_OPENAI_TOOL_SCAN_VERIFIED");
   if (openaiToolScanVerified !== "1") {
@@ -125,6 +160,7 @@ export function validatePublicReleaseConfig(env = process.env) {
     chatgpt_desktop_reviewed: true,
     chatgpt_mobile_reviewed: true,
     openai_domain_verified: true,
+    openai_domain_verified_host: openaiDomainVerifiedHost,
     openai_tool_scan_verified: true,
     openai_tool_scan_sha256: openaiToolScanSha256,
     review_file_name: path.basename(reviewFile),
@@ -157,6 +193,7 @@ export function runSelfTest() {
     ZSSH_CHATGPT_DESKTOP_REVIEWED: "1",
     ZSSH_CHATGPT_MOBILE_REVIEWED: "1",
     ZSSH_OPENAI_DOMAIN_VERIFIED: "1",
+    ZSSH_OPENAI_DOMAIN_VERIFIED_HOST: "mcp.zssh.dev",
     ZSSH_OPENAI_TOOL_SCAN_VERIFIED: "1",
     ZSSH_OPENAI_TOOL_SCAN_SHA256: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
     OPENAI_APPS_CHALLENGE_TOKEN: "challenge-0123456789abcdef",
@@ -185,6 +222,10 @@ export function runSelfTest() {
   assertThrows(() => validatePublicReleaseConfig({ ...good, ZSSH_CHATGPT_DESKTOP_REVIEWED: "0" }), /ChatGPT desktop/);
   assertThrows(() => validatePublicReleaseConfig({ ...good, ZSSH_CHATGPT_MOBILE_REVIEWED: "0" }), /ChatGPT mobile/);
   assertThrows(() => validatePublicReleaseConfig({ ...good, ZSSH_OPENAI_DOMAIN_VERIFIED: "0" }), /Verify Domain has passed/);
+  const parentDomain = validatePublicReleaseConfig({ ...good, ZSSH_OPENAI_DOMAIN_VERIFIED_HOST: "zssh.dev" });
+  if (parentDomain.openai_domain_verified_host !== "zssh.dev") fail("self-test eligible parent-domain binding failed");
+  assertThrows(() => validatePublicReleaseConfig({ ...good, ZSSH_OPENAI_DOMAIN_VERIFIED_HOST: "other.example" }), /must match the production MCP hostname or the exact eligible parent domain/);
+  assertThrows(() => validatePublicReleaseConfig({ ...good, ZSSH_OPENAI_DOMAIN_VERIFIED_HOST: "https:\/\/mcp.zssh.dev" }), /plain public DNS hostname/);
   assertThrows(() => validatePublicReleaseConfig({ ...good, ZSSH_OPENAI_TOOL_SCAN_VERIFIED: "0" }), /Scan Tools has completed successfully/);
   assertThrows(() => validatePublicReleaseConfig({ ...good, ZSSH_OPENAI_TOOL_SCAN_SHA256: "stale" }), /64-character lowercase SHA-256/);
 
