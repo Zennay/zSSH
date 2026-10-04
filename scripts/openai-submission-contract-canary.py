@@ -86,4 +86,12 @@ expect_failure(
     "exactly one MCP server named zssh",
 )
 
+
+review_cases = plugin["extensions"]["com.openai"]["review"]["test_cases"]["positive"]
+review_case_text = json.dumps(review_cases, sort_keys=True)
+if "ZSSH_ALLOWED_ROOTS" in review_case_text:
+    raise AssertionError("public submission review cases must not reference private ZSSH_ALLOWED_ROOTS")
+if "ZSSH_PUBLIC_ALLOWED_ROOTS" not in review_case_text:
+    raise AssertionError("public submission review cases must name ZSSH_PUBLIC_ALLOWED_ROOTS for reviewer file access")
+
 print("OPENAI_SUBMISSION_CONTRACT_CANARY_GREEN")

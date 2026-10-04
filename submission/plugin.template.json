@@ -60,7 +60,7 @@
               "description": "Read a deterministic reviewer fixture inside the configured allowed root.",
               "prompt": "Read /srv/zssh-review/sample.txt from my paired Linux target.",
               "tools_triggered": "zssh_read_file",
-              "expected_behavior": "Return the UTF-8 contents of /srv/zssh-review/sample.txt. The file must be inside the reviewer target's configured ZSSH_ALLOWED_ROOTS."
+              "expected_behavior": "Return the UTF-8 contents of /srv/zssh-review/sample.txt. The file must be inside the reviewer target's configured ZSSH_PUBLIC_ALLOWED_ROOTS."
             },
             {
               "description": "Perform an explicit scoped file write requested by the reviewer.",
