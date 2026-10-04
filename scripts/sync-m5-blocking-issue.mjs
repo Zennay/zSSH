@@ -25,6 +25,15 @@ const GATE_RUNBOOKS = Object.freeze({
   },
 });
 
+const M5_GATE_ORDER = Object.freeze([
+  "repository_governance",
+  "dns_publication",
+  "public_ingress",
+  "auth0_preflight",
+  "reviewer_fixture",
+  "portal_and_host_attestations",
+]);
+
 function fail(message) {
   throw new Error(message);
 }
@@ -88,14 +97,29 @@ export function renderM5BlockingIssue({ readiness, canonicalSha, repository = "Z
   const gate = readiness.blocking_gate;
   const action = readiness.blocking_action;
   const executionState = cleanText(readiness.execution_state, 120) || "unknown";
-  const laterGates = (Array.isArray(readiness.next_actions) ? readiness.next_actions : [])
+  const nextActionLanes = (Array.isArray(readiness.next_actions) ? readiness.next_actions : [])
     .map(item => cleanText(item?.lane, 120))
     .filter(Boolean)
-    .filter(lane => lane !== gate)
-    .map(name => ({
-      name,
-      runbook: gateRunbookLine({ gate: name, repository, sha }),
-    }));
+    .filter(lane => lane !== gate);
+  const gateIndex = M5_GATE_ORDER.indexOf(gate);
+  const unresolvedFutureLanes = gateIndex >= 0
+    ? M5_GATE_ORDER
+      .slice(gateIndex + 1)
+      .filter(name => readiness.ready?.[name] === false)
+    : [];
+  const laterGateNames = [...new Set([...unresolvedFutureLanes, ...nextActionLanes])]
+    .sort((left, right) => {
+      const leftIndex = M5_GATE_ORDER.indexOf(left);
+      const rightIndex = M5_GATE_ORDER.indexOf(right);
+      if (leftIndex === -1 && rightIndex === -1) return 0;
+      if (leftIndex === -1) return 1;
+      if (rightIndex === -1) return -1;
+      return leftIndex - rightIndex;
+    });
+  const laterGates = laterGateNames.map(name => ({
+    name,
+    runbook: gateRunbookLine({ gate: name, repository, sha }),
+  }));
 
   if (!gate) {
     const finalRunbookLine = gateRunbookLine({
