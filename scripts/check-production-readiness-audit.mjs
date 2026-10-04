@@ -13,6 +13,7 @@ import {
 } from "./check-public-release-config.mjs";
 import { resolveAuth0ManagementBaseUrl } from "./check-auth0-production.mjs";
 import { validateCloudflareZoneId } from "./publish-cloudflare-dns.mjs";
+import { reviewerFixturePathIssues } from "./reviewer-fixture-contract.mjs";
 
 const PROVIDER_LANES = {
   repository_governance: [
@@ -235,25 +236,7 @@ function validateReviewerFixtureLane(env) {
     }
   }
 
-  for (const name of ["ZSSH_REVIEW_FILE", "ZSSH_REVIEW_WRITE_FILE"]) {
-    if (configured(env, name) && !path.isAbsolute(value(env, name))) {
-      issues.push(validationIssue(name, "must be an absolute path on the reviewer target"));
-    }
-  }
-
-  if (
-    configured(env, "ZSSH_REVIEW_FILE") &&
-    configured(env, "ZSSH_REVIEW_WRITE_FILE") &&
-    path.normalize(value(env, "ZSSH_REVIEW_FILE")) ===
-      path.normalize(value(env, "ZSSH_REVIEW_WRITE_FILE"))
-  ) {
-    issues.push(
-      validationIssue(
-        "ZSSH_REVIEW_WRITE_FILE",
-        "must be different from ZSSH_REVIEW_FILE",
-      ),
-    );
-  }
+  issues.push(...reviewerFixturePathIssues(env));
 
   return issues;
 }

@@ -20,7 +20,7 @@ This checklist tracks the production path from the current review-ready MCP prof
 - [ ] Verify Domain is green for the exact production MCP origin; only then set `ZSSH_OPENAI_DOMAIN_VERIFIED=1` and `ZSSH_OPENAI_VERIFIED_MCP_ORIGIN=<scheme://hostname[:port]>`
 - [ ] Reviewer account exists without private user data
 - [ ] Dedicated reviewer credentials work at the exact public `ZSSH_REVIEW_LOGIN_URL` without MFA, email/SMS confirmation, magic links, private-network access, or operator approval; only then set `ZSSH_REVIEW_LOGIN_VERIFIED_URL` to that exact URL and `ZSSH_REVIEW_CREDENTIALS_VERIFIED=1`
-- [ ] Dedicated paired target fixture is available
+- [ ] Dedicated paired target fixture is available; protected release values must remain exactly `ZSSH_REVIEW_FILE=/srv/zssh-review/sample.txt` and `ZSSH_REVIEW_WRITE_FILE=/srv/zssh-review/output.txt` because those are the paths published in the submitted reviewer test cases
 - [ ] OpenAI Scan Tools is green for the exact production tool contract; set `ZSSH_OPENAI_TOOL_SCAN_VERIFIED=1` and `ZSSH_OPENAI_TOOL_SCAN_SHA256=<live tool_scan_sha256>` only after that exact scan
 - [ ] Compute the current host-surface fingerprint with `ZSSH_PLUGIN_MCP_URL=<production /mcp URL> ZSSH_OPENAI_TOOL_SCAN_SHA256=<live tool_scan_sha256> node scripts/check-host-surface-review-binding.mjs --compute`
 - [ ] Production connection card exercised successfully in ChatGPT desktop against that exact fingerprint; only then set `ZSSH_CHATGPT_DESKTOP_REVIEWED=1`
