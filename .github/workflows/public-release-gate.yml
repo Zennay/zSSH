@@ -21,6 +21,8 @@ on:
       - "rate-limit.mjs"
       - "test/rate-limit.test.mjs"
       - "test/runtime-dependency-policy.test.mjs"
+      - "test/workflow-node-runtime.test.mjs"
+      - "docs/research/node-runtime-support-2026-10-04.md"
       - "deploy/install-live.sh"
       - "deploy/install-target-agent.sh"
       - "test/install-live-stage-provenance.test.mjs"
@@ -100,6 +102,8 @@ on:
       - "rate-limit.mjs"
       - "test/rate-limit.test.mjs"
       - "test/runtime-dependency-policy.test.mjs"
+      - "test/workflow-node-runtime.test.mjs"
+      - "docs/research/node-runtime-support-2026-10-04.md"
       - "deploy/install-live.sh"
       - "deploy/install-target-agent.sh"
       - "test/install-live-stage-provenance.test.mjs"
@@ -185,7 +189,7 @@ jobs:
       - name: Self-test release configuration guard
         run: node scripts/check-public-release-config.mjs --self-test
       - name: Exercise release and portal binding contracts
-        run: node --test test/release-contract.test.mjs test/auth0-production-readiness.test.mjs test/production-readiness-audit.test.mjs test/m5-blocking-issue-sync.test.mjs test/domain-verification-binding.test.mjs test/host-surface-review-binding.test.mjs test/tool-scan-binding.test.mjs test/annotation-justifications.test.mjs test/rate-limit.test.mjs test/runtime-dependency-policy.test.mjs test/install-live-stage-provenance.test.mjs test/public-site.test.mjs test/public-gateway-installer.test.mjs test/public-caddy-renderer.test.mjs test/public-caddy-installer.test.mjs test/reviewer-target-bootstrap.test.mjs test/public-ingress-preflight.test.mjs test/public-origin-observation.test.mjs test/cloudflare-dns-publish.test.mjs test/cloudflare-request-timeout.test.mjs test/public-dns-workflow.test.mjs test/main-provenance.test.mjs test/main-protection.test.mjs test/main-protection-apply.test.mjs test/main-protection-negative-proof.test.mjs test/release-workflow-trigger.test.mjs test/workflow-action-pins.test.mjs
+        run: node --test test/release-contract.test.mjs test/auth0-production-readiness.test.mjs test/production-readiness-audit.test.mjs test/m5-blocking-issue-sync.test.mjs test/domain-verification-binding.test.mjs test/host-surface-review-binding.test.mjs test/tool-scan-binding.test.mjs test/annotation-justifications.test.mjs test/rate-limit.test.mjs test/runtime-dependency-policy.test.mjs test/workflow-node-runtime.test.mjs test/install-live-stage-provenance.test.mjs test/public-site.test.mjs test/public-gateway-installer.test.mjs test/public-caddy-renderer.test.mjs test/public-caddy-installer.test.mjs test/reviewer-target-bootstrap.test.mjs test/public-ingress-preflight.test.mjs test/public-origin-observation.test.mjs test/cloudflare-dns-publish.test.mjs test/cloudflare-request-timeout.test.mjs test/public-dns-workflow.test.mjs test/main-provenance.test.mjs test/main-protection.test.mjs test/main-protection-apply.test.mjs test/main-protection-negative-proof.test.mjs test/release-workflow-trigger.test.mjs test/workflow-action-pins.test.mjs
       - name: Validate release scripts
         run: |
           node --check release-contract.mjs

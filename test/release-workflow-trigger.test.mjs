@@ -108,6 +108,8 @@ test("release-critical pull_request and push path filters stay in parity", () =>
     "package.json",
     "package-lock.json",
     "test/runtime-dependency-policy.test.mjs",
+    "test/workflow-node-runtime.test.mjs",
+    "docs/research/node-runtime-support-2026-10-04.md",
     "server.mjs",
     "rate-limit.mjs",
     "test/rate-limit.test.mjs",
