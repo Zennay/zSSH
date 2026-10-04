@@ -3,6 +3,7 @@ import net from "node:net";
 import path from "node:path";
 import process from "node:process";
 import { validatePublicMcpUrl } from "../release-contract.mjs";
+import { assertDomainVerificationBinding } from "./check-domain-verification-binding.mjs";
 
 const argv = new Set(process.argv.slice(2));
 
@@ -15,6 +16,7 @@ const REQUIRED_RELEASE_CONFIG = [
   "ZSSH_CHATGPT_DESKTOP_REVIEWED",
   "ZSSH_CHATGPT_MOBILE_REVIEWED",
   "ZSSH_OPENAI_DOMAIN_VERIFIED",
+  "ZSSH_OPENAI_VERIFIED_MCP_ORIGIN",
   "ZSSH_OPENAI_TOOL_SCAN_VERIFIED",
   "ZSSH_OPENAI_TOOL_SCAN_SHA256",
   "OPENAI_APPS_CHALLENGE_TOKEN",
@@ -95,6 +97,10 @@ export function validatePublicReleaseConfig(env = process.env) {
   if (openaiDomainVerified !== "1") {
     fail("ZSSH_OPENAI_DOMAIN_VERIFIED must be exactly 1 only after Verify Domain has passed in the OpenAI plugin submission portal");
   }
+  const domainBinding = assertDomainVerificationBinding(
+    mcpUrl.href,
+    requireValue(env, "ZSSH_OPENAI_VERIFIED_MCP_ORIGIN")
+  );
   const openaiToolScanVerified = requireValue(env, "ZSSH_OPENAI_TOOL_SCAN_VERIFIED");
   if (openaiToolScanVerified !== "1") {
     fail("ZSSH_OPENAI_TOOL_SCAN_VERIFIED must be exactly 1 only after Scan Tools has completed successfully against the current production MCP server");
@@ -125,6 +131,7 @@ export function validatePublicReleaseConfig(env = process.env) {
     chatgpt_desktop_reviewed: true,
     chatgpt_mobile_reviewed: true,
     openai_domain_verified: true,
+    verified_mcp_origin: domainBinding.verified_mcp_origin,
     openai_tool_scan_verified: true,
     openai_tool_scan_sha256: openaiToolScanSha256,
     review_file_name: path.basename(reviewFile),
@@ -157,6 +164,7 @@ export function runSelfTest() {
     ZSSH_CHATGPT_DESKTOP_REVIEWED: "1",
     ZSSH_CHATGPT_MOBILE_REVIEWED: "1",
     ZSSH_OPENAI_DOMAIN_VERIFIED: "1",
+    ZSSH_OPENAI_VERIFIED_MCP_ORIGIN: "https://mcp.zssh.dev",
     ZSSH_OPENAI_TOOL_SCAN_VERIFIED: "1",
     ZSSH_OPENAI_TOOL_SCAN_SHA256: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
     OPENAI_APPS_CHALLENGE_TOKEN: "challenge-0123456789abcdef",
@@ -185,6 +193,7 @@ export function runSelfTest() {
   assertThrows(() => validatePublicReleaseConfig({ ...good, ZSSH_CHATGPT_DESKTOP_REVIEWED: "0" }), /ChatGPT desktop/);
   assertThrows(() => validatePublicReleaseConfig({ ...good, ZSSH_CHATGPT_MOBILE_REVIEWED: "0" }), /ChatGPT mobile/);
   assertThrows(() => validatePublicReleaseConfig({ ...good, ZSSH_OPENAI_DOMAIN_VERIFIED: "0" }), /Verify Domain has passed/);
+  assertThrows(() => validatePublicReleaseConfig({ ...good, ZSSH_OPENAI_VERIFIED_MCP_ORIGIN: "https://old-mcp.zssh.dev" }), /stale or for a different endpoint/);
   assertThrows(() => validatePublicReleaseConfig({ ...good, ZSSH_OPENAI_TOOL_SCAN_VERIFIED: "0" }), /Scan Tools has completed successfully/);
   assertThrows(() => validatePublicReleaseConfig({ ...good, ZSSH_OPENAI_TOOL_SCAN_SHA256: "stale" }), /64-character lowercase SHA-256/);
 
