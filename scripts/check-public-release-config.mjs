@@ -112,6 +112,9 @@ export function validatePublicReleaseConfig(env = process.env) {
   if (reviewLoginVerifiedUrl.href !== reviewLoginUrl.href) {
     fail("reviewer login verification is stale: ZSSH_REVIEW_LOGIN_VERIFIED_URL must match the exact ZSSH_REVIEW_LOGIN_URL that was tested");
   }
+  if (reviewLoginUrl.origin !== oauthIssuerUrl.origin) {
+    fail("ZSSH_REVIEW_LOGIN_URL must use the same origin as ZSSH_OAUTH_ISSUER");
+  }
   const reviewCredentialsVerified = requireValue(env, "ZSSH_REVIEW_CREDENTIALS_VERIFIED");
   if (reviewCredentialsVerified !== "1") {
     fail("ZSSH_REVIEW_CREDENTIALS_VERIFIED must be exactly 1 after the dedicated reviewer login has been tested without MFA, email/SMS confirmation, magic links, or private-network access");
@@ -207,8 +210,8 @@ export function runSelfTest() {
     ZSSH_PLUGIN_MCP_URL: "https://mcp.zssh.dev/mcp",
     ZSSH_PLUGIN_DEMO_RECORDING_URL: "https://review.zssh.dev/zssh-demo",
     ZSSH_REVIEW_ACCESS_TOKEN: "review-token-0123456789abcdef",
-    ZSSH_REVIEW_LOGIN_URL: "https://auth.zssh.dev/login",
-    ZSSH_REVIEW_LOGIN_VERIFIED_URL: "https://auth.zssh.dev/login",
+    ZSSH_REVIEW_LOGIN_URL: "https://tenant.eu.auth0.com/u/login",
+    ZSSH_REVIEW_LOGIN_VERIFIED_URL: "https://tenant.eu.auth0.com/u/login",
     ZSSH_REVIEW_CREDENTIALS_VERIFIED: "1",
     ZSSH_MAIN_PROTECTION_VERIFIED: "1",
     ZSSH_CHATGPT_DESKTOP_REVIEWED: "1",
@@ -283,7 +286,15 @@ export function runSelfTest() {
   assertThrows(() => validatePublicReleaseConfig({ ...good, ZSSH_REVIEW_WRITE_FILE: good.ZSSH_REVIEW_FILE }), /different files/);
   assertThrows(() => validatePublicReleaseConfig({ ...good, ZSSH_REVIEW_ACCESS_TOKEN: "short" }), /at least 20/);
   assertThrows(() => validatePublicReleaseConfig({ ...good, ZSSH_REVIEW_LOGIN_URL: "https://127.0.0.1/login" }), /public DNS hostname/);
-  assertThrows(() => validatePublicReleaseConfig({ ...good, ZSSH_REVIEW_LOGIN_VERIFIED_URL: "https://auth.zssh.dev/old-login" }), /verification is stale/);
+  assertThrows(() => validatePublicReleaseConfig({ ...good, ZSSH_REVIEW_LOGIN_VERIFIED_URL: "https://tenant.eu.auth0.com/u/old-login" }), /verification is stale/);
+  assertThrows(
+    () => validatePublicReleaseConfig({
+      ...good,
+      ZSSH_REVIEW_LOGIN_URL: "https://review.zssh.dev/login",
+      ZSSH_REVIEW_LOGIN_VERIFIED_URL: "https://review.zssh.dev/login",
+    }),
+    /same origin as ZSSH_OAUTH_ISSUER/,
+  );
   assertThrows(() => validatePublicReleaseConfig({ ...good, ZSSH_REVIEW_CREDENTIALS_VERIFIED: "0" }), /must be exactly 1/);
   assertThrows(() => validatePublicReleaseConfig({ ...good, ZSSH_MAIN_PROTECTION_VERIFIED: "0" }), /main rejects direct pushes/);
   assertThrows(() => validatePublicReleaseConfig({ ...good, ZSSH_CHATGPT_DESKTOP_REVIEWED: "0" }), /ChatGPT desktop/);
