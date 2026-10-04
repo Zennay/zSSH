@@ -86,7 +86,7 @@ import { readFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 
 const [fixtureFile, publicFile, privateKeyFile, fixtureContractFile] = process.argv.slice(2);
-const { REVIEW_READ_FILE, REVIEW_WRITE_FILE } = await import(pathToFileURL(fixtureContractFile).href);
+const { reviewerFixtureReleaseMetadata } = await import(pathToFileURL(fixtureContractFile).href);
 const fixture = JSON.parse(readFileSync(fixtureFile, "utf8"));
 const pub = JSON.parse(readFileSync(publicFile, "utf8"));
 const targetId = String(Object.keys(pub.targets || {})[0] || "");
@@ -95,9 +95,10 @@ if (!/^zt_[A-Za-z0-9_-]{8,96}$/.test(targetId)) throw new Error("reviewer target
 if (!record?.public_key_pem?.includes("BEGIN PUBLIC KEY")) throw new Error("reviewer public key config is invalid");
 
 const fingerprint = crypto.createHash("sha256").update(record.public_key_pem).digest("hex");
-const releaseCompatible =
-  fixture.sample_file === REVIEW_READ_FILE &&
-  fixture.write_test_file === REVIEW_WRITE_FILE;
+const release = reviewerFixtureReleaseMetadata({
+  reviewFile: fixture.sample_file,
+  reviewWriteFile: fixture.write_test_file,
+});
 console.log(JSON.stringify({
   ok: true,
   target_id: targetId,
@@ -108,13 +109,6 @@ console.log(JSON.stringify({
   review_root: fixture.review_root,
   review_file: fixture.sample_file,
   review_write_file: fixture.write_test_file,
-  release_compatible: releaseCompatible,
-  release_variables: releaseCompatible ? {
-    ZSSH_REVIEW_FILE: REVIEW_READ_FILE,
-    ZSSH_REVIEW_WRITE_FILE: REVIEW_WRITE_FILE,
-  } : null,
-  release_blocker: releaseCompatible
-    ? null
-    : `reviewer fixture is not at the canonical submitted paths ${REVIEW_READ_FILE} and ${REVIEW_WRITE_FILE}; do not copy dev/test paths into openai-production`,
+  ...release,
 }, null, 2));
 NODE
