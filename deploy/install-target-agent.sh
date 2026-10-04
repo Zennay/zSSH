@@ -46,6 +46,14 @@ mkdir -p "$CONFIG" "$STATE" "$RELEASES" "$UNIT_DIR"
 chmod 700 "$CONFIG" "$STATE"
 trap 'rm -rf "$STAGE"' EXIT
 
+
+verify_release_provenance() {
+  git -C "$SOURCE_ROOT" show "${REPO_SHA}:scripts/verify-release-provenance.mjs" |
+    "$NODE_BIN" --input-type=module - "$SOURCE_ROOT" "$REPO_SHA" "$RELEASE"
+}
+
+verify_release_provenance
+
 validate_plain_env_value() {
   local name="$1"
   local value="$2"
