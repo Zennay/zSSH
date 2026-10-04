@@ -169,6 +169,7 @@ jobs:
             `- Portal/host attestations: ${result.ready.portal_and_host_attestations ? "ready" : "pending"}`,
             `- Final release config validation: ${result.ready.final_release_config ? "green" : "not ready"}`,
             `- Execution state: ${result.execution_state}`,
+            `- Blocking gate: ${result.blocking_gate || "none"}`,
             `- Internal action gates: ${result.internal_action_gates.join(", ") || "none"}`,
             `- External input gates: ${result.external_input_gates.join(", ") || "none"}`,
             "",
