@@ -31,3 +31,5 @@ jobs:
           echo "service_user=$(systemctl show zssh.service -p User --value 2>/dev/null || echo unavailable)"
           echo "service_exec_start=$(systemctl show zssh.service -p ExecStart --value 2>/dev/null || echo unavailable)"
           echo "service_fragment=$(systemctl show zssh.service -p FragmentPath --value 2>/dev/null || echo unavailable)"
+
+# probe-trigger: second push after workflow registration
