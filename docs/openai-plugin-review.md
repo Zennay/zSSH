@@ -119,6 +119,8 @@ OPENAI_APPS_CHALLENGE_TOKEN='<current dashboard challenge token>' \
 npm run submission:probe
 
 # The protected GitHub openai-production release environment additionally requires:
+# ZSSH_CHATGPT_DESKTOP_REVIEWED=1
+# ZSSH_CHATGPT_MOBILE_REVIEWED=1
 # ZSSH_OPENAI_DOMAIN_VERIFIED=1
 # ZSSH_OPENAI_TOOL_SCAN_VERIFIED=1
 ```
@@ -127,4 +129,4 @@ The probe checks the health endpoint, OAuth protected-resource metadata, unauthe
 
 ## Release rule
 
-A green local or CI canary is not enough to call the plugin submitted or accepted. Submission readiness requires the production endpoint, production OAuth flow, current portal scan, reviewer credentials, domain verification, and reviewer-facing test cases to be green together.
+A green local or CI canary is not enough to call the plugin submitted or accepted. Submission readiness requires the production endpoint, production OAuth flow, current portal scan, reviewer credentials, domain verification, reviewer-facing test cases, and a successful live production connection-card check in both ChatGPT desktop and mobile to be green together. Keep `ZSSH_CHATGPT_DESKTOP_REVIEWED` and `ZSSH_CHATGPT_MOBILE_REVIEWED` unset until those real host-surface checks have passed.
