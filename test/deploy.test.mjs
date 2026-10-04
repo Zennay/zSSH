@@ -131,3 +131,28 @@ test("hosted MCP auth avoids browser OAuth and accepts no-sign-in capability URL
   assert.match(server, /authorization/);
   assert.doesNotMatch(server, /oauth\/approve|claude-auth\.mjs|mcpAuthRouter/);
 });
+
+
+test("outbound target agent installer is immutable, non-root, and shell-eval free", async () => {
+  const installer = await readFile(path.join(ROOT, "deploy", "install-target-agent.sh"), "utf8");
+  const unit = await readFile(path.join(ROOT, "deploy", "zssh-agent.service.in"), "utf8");
+
+  assert.equal(installer.includes("Refusing to install zSSH target agent as root."), true);
+  assert.equal(installer.includes('BASE="$HOME/.local/share/zssh-agent"'), true);
+  assert.equal(installer.includes('RELEASES="$BASE/releases"'), true);
+  assert.equal(installer.includes("ZSSH_EXPECTED_SHA"), true);
+  assert.equal(installer.includes('chmod 600 "$ENV_FILE"'), true);
+  assert.equal(installer.includes("read_env_value"), true);
+  assert.equal(installer.includes('source "$ENV_FILE"'), false);
+  assert.equal(installer.includes('url.protocol !== "https:"'), true);
+  assert.equal(installer.includes("agent private key must not be group/world accessible"), true);
+  assert.equal(installer.includes("systemctl --user enable --now zssh-agent.service"), true);
+
+  assert.equal(unit.includes("EnvironmentFile=%h/.config/zssh/agent.env"), true);
+  assert.equal(unit.includes("Restart=always"), true);
+  assert.equal(unit.includes("NoNewPrivileges=true"), true);
+  assert.equal(unit.includes("PrivateTmp=true"), true);
+  assert.equal(unit.includes("PrivateDevices=true"), true);
+  assert.equal(unit.includes("RestrictSUIDSGID=true"), true);
+  assert.equal(unit.includes("ExecStart=@NODE_BIN@ %h/.local/share/zssh-agent/current/agent.mjs"), true);
+});
