@@ -106,13 +106,17 @@ validate_plain_env_value ZSSH_GATEWAY_URL "$GATEWAY_URL"
 validate_plain_env_value ZSSH_AGENT_PRIVATE_KEY_FILE "$PRIVATE_KEY_FILE"
 validate_plain_env_value ZSSH_PUBLIC_ALLOWED_ROOTS "$PUBLIC_ROOTS"
 
-"$NODE_BIN" --input-type=module - "$TARGET_ID" "$GATEWAY_URL" "$PRIVATE_KEY_FILE" "$SOURCE_ROOT" <<'NODE'
+VALIDATION_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/zssh-agent-validate.XXXXXX")"
+trap 'rm -rf "$STAGE" "$VALIDATION_ROOT"' EXIT
+git -C "$SOURCE_ROOT" archive --format=tar "$REPO_SHA" pairing.mjs | tar -x -C "$VALIDATION_ROOT"
+
+"$NODE_BIN" --input-type=module - "$TARGET_ID" "$GATEWAY_URL" "$PRIVATE_KEY_FILE" "$VALIDATION_ROOT" <<'NODE'
 import { lstat, readFile } from "node:fs/promises";
 import crypto from "node:crypto";
 import { pathToFileURL } from "node:url";
 
-const [targetId, gatewayUrl, keyFile, sourceRoot] = process.argv.slice(2);
-const { normalizeTargetId } = await import(pathToFileURL(sourceRoot + "/pairing.mjs"));
+const [targetId, gatewayUrl, keyFile, validationRoot] = process.argv.slice(2);
+const { normalizeTargetId } = await import(pathToFileURL(validationRoot + "/pairing.mjs"));
 if (normalizeTargetId(targetId) === "local") throw new Error("outbound target agent requires an opaque zt_ target id");
 
 const url = new URL(gatewayUrl);
@@ -126,6 +130,9 @@ if ((stat.mode & 0o077) !== 0) throw new Error("agent private key must not be gr
 const key = crypto.createPrivateKey(await readFile(keyFile, "utf8"));
 if (key.asymmetricKeyType !== "ed25519") throw new Error("agent private key must use Ed25519");
 NODE
+
+rm -rf "$VALIDATION_ROOT"
+trap 'rm -rf "$STAGE"' EXIT
 
 if [[ ! -d "$RELEASE" ]]; then
   mkdir -p "$STAGE"
