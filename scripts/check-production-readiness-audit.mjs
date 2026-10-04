@@ -416,7 +416,7 @@ export function buildProductionReadinessAudit(env = process.env) {
         ? "Repair or remove the invalid optional Cloudflare zone override, then rerun protected readiness."
         : tokenPresent
           ? `Run the guarded zSSH production DNS publisher; live public-origin evidence is still at stage ${value(env, "ZSSH_PUBLIC_ORIGIN_STAGE") || "unknown"}.`
-          : "Provision a protected user-owned Cloudflare API token from My Profile > API Tokens, scoped only to cheapgpt.shop with Zone Read + DNS Write, then run zSSH production DNS publish. The current preflight verifies /user/tokens/verify, so do not use an Account API token. CLOUDFLARE_ZONE_ID remains an optional legacy override for DNS-write-only tokens.",
+          : "Provision a protected Cloudflare API token scoped only to cheapgpt.shop with Zone > DNS > Edit + Zone > Zone > Read. For durable CI prefer an account-owned token and set protected CLOUDFLARE_ACCOUNT_ID to its 32-character account ID; for a user-owned token from My Profile > API Tokens leave CLOUDFLARE_ACCOUNT_ID unset. Then run zSSH production DNS publish. CLOUDFLARE_ZONE_ID remains an optional legacy override for DNS-write-only tokens.",
       missing: lanes.dns_publication.missing,
       invalid: lanes.dns_publication.invalid,
     });
