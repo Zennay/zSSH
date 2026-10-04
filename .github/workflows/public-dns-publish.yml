@@ -46,7 +46,7 @@ jobs:
           set -Eeuo pipefail
           test "$(cat .github/openai-production-dns-trigger)" = "PUBLISH_ZSSH_PRODUCTION_DNS"
           node scripts/check-main-provenance.mjs
-          node scripts/check-main-protection.mjs --public-status --require-protected
+          node scripts/check-main-protection.mjs --public-status --require-protected --require-current-sha
       - name: Require canonical protected-main manual DNS dispatch
         if: github.event_name == 'workflow_dispatch'
         shell: bash
