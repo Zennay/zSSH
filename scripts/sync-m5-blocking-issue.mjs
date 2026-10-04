@@ -23,6 +23,10 @@ const GATE_RUNBOOKS = Object.freeze({
     label: "OpenAI portal and host validation",
     path: "docs/openai-plugin-release-checklist.md",
   },
+  final_production_probe: {
+    label: "Protected production submission probe",
+    path: "docs/openai-plugin-release-checklist.md",
+  },
 });
 
 const M5_GATE_ORDER = Object.freeze([
@@ -32,6 +36,7 @@ const M5_GATE_ORDER = Object.freeze([
   "auth0_preflight",
   "reviewer_fixture",
   "portal_and_host_attestations",
+  "final_production_probe",
 ]);
 
 function fail(message) {
@@ -107,7 +112,11 @@ export function renderM5BlockingIssue({ readiness, canonicalSha, repository = "Z
       .slice(gateIndex + 1)
       .filter(name => readiness.ready?.[name] === false)
     : [];
-  const laterGateNames = [...new Set([...unresolvedFutureLanes, ...nextActionLanes])]
+  const laterGateNames = [...new Set([
+    ...unresolvedFutureLanes,
+    ...nextActionLanes,
+    ...(gate ? ["final_production_probe"] : []),
+  ])]
     .sort((left, right) => {
       const leftIndex = M5_GATE_ORDER.indexOf(left);
       const rightIndex = M5_GATE_ORDER.indexOf(right);
@@ -137,7 +146,10 @@ export function renderM5BlockingIssue({ readiness, canonicalSha, repository = "Z
         `- Execution state: \`${executionState}\``,
         "- Blocking gate: none",
         "",
-        "All machine-readable M5 readiness gates are green. Continue only with the final submission/portal operation required by the release handbook.",
+        "All machine-readable M5 readiness gates are green. Do not submit in the portal yet: first dispatch the protected OpenAI public release gate on this exact canonical main revision and require OPENAI_PUBLIC_RELEASE_GATE_GREEN plus its release-evidence artifact.",
+        "",
+        "## Next internal release action",
+        "Run the protected production submission probe on exact canonical main. Only after that succeeds should the portal submission be performed.",
         "",
         "## Canonical final-submission checklist",
         finalRunbookLine,
