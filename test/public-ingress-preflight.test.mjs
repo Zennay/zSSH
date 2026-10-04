@@ -11,69 +11,24 @@ const workflow = readFileSync(
   "utf8",
 );
 
-test("ingress preflight automatically follows successful canonical production DNS publication", () => {
-  assert.match(
-    workflow,
-    /workflow_run:\n    workflows: \["zSSH production DNS publish"\]\n    types: \[completed\]/,
-  );
-  assert.match(
-    workflow,
-    /if: github\.event_name == 'workflow_dispatch' \|\| github\.event\.workflow_run\.conclusion == 'success'/,
-  );
-  assert.match(
-    workflow,
-    /ref: \$\{\{ github\.event_name == 'workflow_run' && github\.event\.workflow_run\.head_sha \|\| github\.sha \}\}/,
-  );
+test("ingress preflight waits for explicit post-rollout dispatch", () => {
+  assert.match(workflow, /workflow_dispatch:\\s*\\n/);
+  assert.doesNotMatch(workflow, /workflow_run:/);
+  assert.doesNotMatch(workflow, /zSSH production DNS publish/);
   assert.match(workflow, /persist-credentials: false/);
-  const sourceGateIndex = workflow.indexOf("      - name: Require successful canonical production DNS source");
-  const checkoutIndex = workflow.indexOf("      - uses: actions/checkout@");
-  assert.ok(sourceGateIndex >= 0, "missing canonical production DNS source step");
-  assert.ok(checkoutIndex >= 0, "missing checkout step");
-  assert.ok(
-    sourceGateIndex < checkoutIndex,
-    "workflow_run source identity must be validated before checking out its head SHA",
-  );
-
-  const sourceTail = workflow.split("      - name: Require successful canonical production DNS source")[1];
-  assert.ok(sourceTail, "missing canonical production DNS source step");
-  const sourceStep = sourceTail.split("\n      - ")[0];
-  assert.match(sourceStep, /ZSSH_SOURCE_CONCLUSION: \$\{\{ github\.event\.workflow_run\.conclusion \}\}/);
-  assert.match(sourceStep, /ZSSH_SOURCE_HEAD_BRANCH: \$\{\{ github\.event\.workflow_run\.head_branch \}\}/);
-  assert.match(sourceStep, /ZSSH_SOURCE_REPOSITORY: \$\{\{ github\.event\.workflow_run\.head_repository\.full_name \}\}/);
-  assert.match(sourceStep, /ZSSH_EXPECTED_REPOSITORY: \$\{\{ github\.repository \}\}/);
-  const sourceScript = sourceStep.split("run: |")[1] || "";
-  assert.match(sourceScript, /test "\$ZSSH_SOURCE_CONCLUSION" = "success"/);
-  assert.match(sourceScript, /test "\$ZSSH_SOURCE_HEAD_BRANCH" = "main"/);
-  assert.match(sourceScript, /test "\$ZSSH_SOURCE_REPOSITORY" = "\$ZSSH_EXPECTED_REPOSITORY"/);
-  assert.doesNotMatch(sourceScript, /\$\{\{\s*github\./);
-
-  const freshnessTail = workflow.split("      - name: Bind automatic preflight to exact current protected main")[1];
-  assert.ok(freshnessTail, "missing automatic current-main freshness step");
-  const freshnessStep = freshnessTail.split("\n      - ")[0];
-  assert.match(freshnessStep, /if: github\.event_name == 'workflow_run'/);
-  assert.match(freshnessStep, /GITHUB_TOKEN: \$\{\{ secrets\.GITHUB_TOKEN \}\}/);
-  assert.match(
-    freshnessStep,
-    /ZSSH_EXPECTED_CURRENT_SHA: \$\{\{ github\.event\.workflow_run\.head_sha \}\}/,
-  );
-  assert.match(
-    freshnessStep,
-    /node scripts\/check-main-protection\.mjs --public-status --require-protected --require-current-sha/,
-  );
-  assert.doesNotMatch(freshnessStep.split("run: |")[1] || "", /\$\{\{\s*github\./);
   assert.match(
     workflow,
-    /ZSSH_PLUGIN_MCP_URL: https:\/\/zssh\.cheapgpt\.shop\/mcp/,
+    /ZSSH_PLUGIN_MCP_URL: https:\\/\\/zssh\\.cheapgpt\\.shop\\/mcp/,
   );
   assert.match(
     workflow,
-    /ZSSH_EXPECTED_PUBLIC_ADDRESSES: 198\.244\.191\.182/,
+    /ZSSH_EXPECTED_PUBLIC_ADDRESSES: 198\\.244\\.191\\.182/,
   );
   assert.match(
     workflow,
-    /node scripts\/check-public-ingress\.mjs "\$ZSSH_PLUGIN_MCP_URL" "\$ZSSH_EXPECTED_PUBLIC_ADDRESSES"/,
+    /node scripts\\/check-public-ingress\\.mjs "\\$ZSSH_PLUGIN_MCP_URL" "\\$ZSSH_EXPECTED_PUBLIC_ADDRESSES"/,
   );
-  assert.doesNotMatch(workflow, /inputs\.mcp_url/);
+  assert.doesNotMatch(workflow, /inputs\\.mcp_url/);
 });
 
 test("manual production ingress evidence is bound to exact current protected main", () => {
