@@ -39,3 +39,10 @@ For a custom Auth0 login domain, derivation is intentionally disabled. `AUTH0_MA
 `scripts/check-auth0-production.mjs` reads the Auth0 Management API with a protected token and emits only non-secret configuration evidence, including whether the management origin was derived. It never prints or persists the management token, reviewer password, OAuth access token, or user data.
 
 The protected `openai-production` release workflow must run this check before the final submission probe. A green bearer-token probe alone is no longer sufficient to prove provider configuration.
+
+
+## Step-level Management API credential exposure
+
+The protected `AUTH0_MANAGEMENT_API_TOKEN` is not injected at job scope. It is exposed only to the `Validate Auth0 tenant, API and DCR grant` step that calls the Management API. Checkout, reviewed/manual canonical-main gates, and evidence upload do not receive the provider credential in their environment.
+
+This preserves the existing production-readiness behavior while narrowing credential lifetime and step exposure after exact-current-main provenance has been proven. Regression coverage in `test/auth0-production-readiness.test.mjs` locks the workflow boundary.
