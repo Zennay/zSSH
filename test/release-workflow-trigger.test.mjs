@@ -88,6 +88,7 @@ test("release-critical pull_request and push path filters stay in parity", () =>
   for (const readinessPath of [
     ".github/workflows/openai-production-readiness.yml",
     "scripts/check-production-readiness-audit.mjs",
+    "scripts/sync-m5-blocking-issue.mjs",
     "test/production-readiness-audit.test.mjs",
   ]) {
     assert.ok(pullRequestPaths.includes(readinessPath), `pull_request trigger must include production-readiness path ${readinessPath}`);
@@ -138,6 +139,29 @@ test("release-critical pull_request and push path filters stay in parity", () =>
     assert.ok(pullRequestPaths.includes(runtimePath), `pull_request trigger must include release-critical runtime path ${runtimePath}`);
     assert.ok(pushPaths.includes(runtimePath), `push trigger must include release-critical runtime path ${runtimePath}`);
   }
+});
+
+
+test("managed M5 issue sync stays inside the public release contract", () => {
+  const pullRequestPaths = eventPaths("pull_request");
+  const pushPaths = eventPaths("push");
+
+  assert.ok(
+    pullRequestPaths.includes("scripts/sync-m5-blocking-issue.mjs"),
+    "pull_request release gate must include the managed M5 issue sync script",
+  );
+  assert.ok(
+    pushPaths.includes("scripts/sync-m5-blocking-issue.mjs"),
+    "push release gate must include the managed M5 issue sync script",
+  );
+
+  const validationStep = workflow
+    .split("      - name: Validate release scripts")[1]
+    ?.split("\n\n\n  provenance:")[0] || "";
+  assert.ok(
+    validationStep.includes("node --check scripts/sync-m5-blocking-issue.mjs"),
+    "release contract must syntax-validate the managed M5 issue sync script",
+  );
 });
 
 
