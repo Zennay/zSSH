@@ -449,10 +449,10 @@ test("never serializes protected values", () => {
   assert.equal(result.blocking_action, null);
 });
 
-test("protected readiness workflow follows canonical main pushes and keeps manual dispatch", () => {
+test("protected readiness workflow reclassifies after successful production gates", () => {
   assert.match(
     readinessWorkflow,
-    /on:\n  workflow_dispatch:\n  workflow_run:\n    workflows:\n      - zSSH production DNS publish\n    types:\n      - completed\n  push:\n    branches:\n      - main/,
+    /on:\n  workflow_dispatch:\n  workflow_run:\n    workflows:\n      - zSSH production DNS publish\n      - zSSH public ingress external preflight\n      - Auth0 production readiness\n    types:\n      - completed\n  push:\n    branches:\n      - main/,
   );
   assert.match(
     readinessWorkflow,
