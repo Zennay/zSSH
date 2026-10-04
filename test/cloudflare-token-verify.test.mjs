@@ -188,6 +188,33 @@ test("reports account-token guidance before parsing a rejected provider body", a
   assert.equal(parsed, false);
 });
 
+test("fails closed on account-token provider rejection inside a successful HTTP response", async () => {
+  const reflected = "account-provider-detail-must-not-leak";
+  await assert.rejects(
+    verifyCloudflareApiToken({
+      apiToken: "test-token",
+      accountId: "0123456789abcdef0123456789abcdef",
+      fetchImpl: async () => ({
+        ok: true,
+        status: 200,
+        async json() {
+          return {
+            success: false,
+            errors: [{ message: reflected }],
+          };
+        },
+      }),
+    }),
+    error => {
+      assert.match(error.message, /HTTP 200/);
+      assert.match(error.message, /account-owned API token/);
+      assert.match(error.message, /CLOUDFLARE_ACCOUNT_ID/);
+      assert.doesNotMatch(error.message, new RegExp(reflected));
+      return true;
+    },
+  );
+});
+
 test("uses stable timeout-safe errors", async () => {
   await assert.rejects(
     verifyCloudflareApiToken({
