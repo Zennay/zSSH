@@ -152,6 +152,20 @@ test("final production release reruns and binds the external ingress preflight",
 });
 
 
+test("final production release fingerprints and retains the exact dependency lockfile", () => {
+  assert.match(workflow, /import \{ createHash \} from "node:crypto";/);
+  assert.match(
+    workflow,
+    /createHash\("sha256"\)[\s\S]*\.update\(readFileSync\("package-lock\.json"\)\)[\s\S]*\.digest\("hex"\)/,
+  );
+  assert.match(workflow, /dependency_lock_sha256: dependencyLockSha256/);
+  assert.match(
+    workflow,
+    /Upload release bundle and evidence[\s\S]*dist\/zssh-openai-plugin\.zip[\s\S]*package-lock\.json[\s\S]*if-no-files-found: error/,
+  );
+});
+
+
 test("final production release scopes protected secrets to only required steps", () => {
   const productionStart = workflow.indexOf("  production:");
   assert.ok(productionStart >= 0, "missing final production job");
