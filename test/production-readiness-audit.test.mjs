@@ -55,6 +55,8 @@ const complete = {
   ZSSH_OAUTH_ISSUER: "https://tenant.eu.auth0.com/",
   AUTH0_MANAGEMENT_BASE_URL: "https://tenant.eu.auth0.com",
   AUTH0_MANAGEMENT_API_TOKEN: "placeholder-auth0-value",
+  ZSSH_AUTH0_PREFLIGHT_ATTEMPTED: "1",
+  ZSSH_AUTH0_PREFLIGHT_VERIFIED: "1",
   OPENAI_APPS_CHALLENGE_TOKEN: "placeholder-challenge-value",
   ZSSH_REVIEW_FILE: REVIEW_READ_FILE,
   ZSSH_REVIEW_WRITE_FILE: REVIEW_WRITE_FILE,
@@ -66,7 +68,7 @@ complete.ZSSH_CHATGPT_REVIEW_SHA256 = computeHostSurfaceReviewFingerprint({
 
 test("classifies an empty production environment into actionable M5 lanes", () => {
   const result = buildProductionReadinessAudit({});
-  assert.equal(result.schema_version, 4);
+  assert.equal(result.schema_version, 5);
   assert.equal(result.phase, "M5");
   assert.equal(result.execution_state, "internal_action_available");
   assert.deepEqual(result.internal_action_gates, ["repository_governance"]);
@@ -167,6 +169,35 @@ test("treats the public ingress boundary as proven once health and MCP auth reac
   assert.equal(result.blocking_gate, "auth0_preflight");
   assert.equal(result.blocking_action?.requires_external_input, true);
   assert.deepEqual(result.internal_action_gates, []);
+});
+
+test("does not treat configured Auth0 inputs as qualified without live provider evidence", () => {
+  const result = buildProductionReadinessAudit({
+    ...complete,
+    ZSSH_AUTH0_PREFLIGHT_ATTEMPTED: "",
+    ZSSH_AUTH0_PREFLIGHT_VERIFIED: "",
+  });
+
+  assert.equal(result.ready.auth0_preflight, false);
+  assert.deepEqual(result.lanes.auth0_preflight.missing, []);
+  assert.equal(result.blocking_gate, "auth0_preflight");
+  assert.equal(result.blocking_action?.gate_kind, "provider_execution");
+  assert.equal(result.blocking_action?.requires_external_input, false);
+  assert.match(result.blocking_action?.action || "", /check-auth0-production\.mjs/);
+});
+
+test("classifies failed live Auth0 qualification as provider configuration", () => {
+  const result = buildProductionReadinessAudit({
+    ...complete,
+    ZSSH_AUTH0_PREFLIGHT_ATTEMPTED: "1",
+    ZSSH_AUTH0_PREFLIGHT_VERIFIED: "",
+  });
+
+  assert.equal(result.ready.auth0_preflight, false);
+  assert.equal(result.blocking_gate, "auth0_preflight");
+  assert.equal(result.blocking_action?.gate_kind, "provider_configuration");
+  assert.equal(result.blocking_action?.requires_external_input, true);
+  assert.match(result.blocking_action?.action || "", /Live Auth0 production qualification failed/);
 });
 
 test("derives Auth0 management origin for canonical tenant issuers", () => {
@@ -565,6 +596,13 @@ test("readiness workflow carries live public-origin stage into DNS gate classifi
   assert.ok(readinessWorkflow.includes('echo "stage=$STAGE" >> "$GITHUB_OUTPUT"'));
   assert.ok(readinessWorkflow.includes("needs: [provenance, public_origin]"));
   assert.ok(readinessWorkflow.includes("ZSSH_PUBLIC_ORIGIN_STAGE: ${{ needs.public_origin.outputs.stage }}"));
+});
+
+test("protected readiness classifier derives Auth0 qualification without widening secret scope", () => {
+  assert.match(
+    readinessWorkflow,
+    /AUTH0_PREFLIGHT_ATTEMPTED=0[\s\S]*AUTH0_PREFLIGHT_VERIFIED=0[\s\S]*check-auth0-production\.mjs[\s\S]*export ZSSH_AUTH0_PREFLIGHT_ATTEMPTED ZSSH_AUTH0_PREFLIGHT_VERIFIED[\s\S]*check-production-readiness-audit\.mjs/,
+  );
 });
 
 test("readiness workflow limits protected secret references to the classifier step", () => {
