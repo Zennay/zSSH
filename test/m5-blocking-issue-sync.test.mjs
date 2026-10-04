@@ -79,6 +79,7 @@ test("renders only secret-safe blocking metadata", () => {
 
 test("links later external M5 gates to immutable canonical runbooks", () => {
   const cases = [
+    ["public_ingress", "docs/research/public-caddy-promotion-2026-10-04.md"],
     ["auth0_preflight", "docs/research/auth0-production-oauth-2026-10-04.md"],
     ["reviewer_fixture", "docs/openai-plugin-review.md"],
     ["portal_and_host_attestations", "docs/openai-plugin-release-checklist.md"],
