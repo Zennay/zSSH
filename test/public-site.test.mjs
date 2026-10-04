@@ -29,3 +29,16 @@ test("public review pages explain the local-pairing security boundary", () => {
   assert.match(overview, /generic shell execution is not exposed/i);
   assert.match(privacy, /OAuth authentication alone does not authorize a target/i);
 });
+
+
+test("public privacy page contains the minimum directory disclosures", () => {
+  const privacy = publicSiteResponse("/privacy").body;
+  for (const heading of ["Data categories", "Purpose", "Recipients", "Retention", "User controls"]) {
+    assert.match(privacy, new RegExp("<h2>" + heading + "</h2>", "i"));
+  }
+  assert.match(privacy, /15 minutes by default/i);
+  assert.match(privacy, /does not keep a separate conversation history/i);
+  assert.match(privacy, /ChatGPT or another MCP client provider processes data under its own terms and privacy policy/i);
+  assert.match(privacy, /target owner can approve or immediately revoke pairing/i);
+  assert.match(privacy, /passwords, private keys, bearer tokens, API keys, MFA\/OTP codes/i);
+});
