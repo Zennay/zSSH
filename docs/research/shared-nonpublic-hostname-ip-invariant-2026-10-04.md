@@ -23,3 +23,10 @@ The central HTTPS validator now delegates IP-literal classification to the share
 Regression tests cover public IPv4 and IPv6 literals in the shared helper and in Verify Domain binding. Existing release/probe tests cover the downstream production paths.
 
 This does not perform network access or alter OAuth scopes, public tools, credentials, target permissions, or provider state.
+
+
+## Single-label hostname follow-up
+
+The shared helper now also classifies single-label names such as `intranet` as non-public. This keeps direct helper consumers, the central release/probe URL validator, protected readiness and the submission builder on the same DNS-hostname boundary.
+
+Regression coverage verifies single-label rejection in the shared helper, public MCP URL validation and Verify Domain evidence binding. Existing development opt-outs remain unchanged.
