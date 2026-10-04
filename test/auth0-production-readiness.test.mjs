@@ -16,7 +16,7 @@ test("Auth0 management origin derives only from canonical tenant issuers", () =>
     "https://tenant.eu.auth0.com",
   );
   assert.throws(
-    () => resolveAuth0ManagementBaseUrl("https://login.example.com/", ""),
+    () => resolveAuth0ManagementBaseUrl("https://login.cheapgpt.shop/", ""),
     /required when ZSSH_OAUTH_ISSUER uses a custom Auth0 domain/,
   );
   assert.throws(
@@ -28,8 +28,8 @@ test("Auth0 management origin derives only from canonical tenant issuers", () =>
   );
   assert.throws(
     () => resolveAuth0ManagementBaseUrl(
-      "https://login.example.com/",
-      "https://management.example.com",
+      "https://login.cheapgpt.shop/",
+      "https://management.cheapgpt.shop",
     ),
     /canonical \*\.auth0\.com tenant domain/,
   );
