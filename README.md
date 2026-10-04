@@ -172,6 +172,16 @@ The registry stores opaque hashed profile IDs rather than the raw OAuth subject.
 
 Pairing records are now target-aware. Existing single-target installs use the reserved opaque target ID `local`; universal-gateway targets use stable opaque `zt_...` IDs configured with `ZSSH_TARGET_ID`. The public MCP URL never carries a target hostname, URL, or target query parameter. OAuth profile → target resolution happens internally, and a paired target without a live authenticated outbound-agent session fails closed as offline. See `docs/research/universal-endpoint-routing-2026-10-03.md`.
 
+For a universal gateway, pairing administration is target-local over the same signed outbound-agent identity. The target owner can list only that target's pending/active pairings, approve only requests for that target, and revoke only that target's pairings:
+
+```bash
+node agent.mjs pairings
+node agent.mjs approve pair_ab12...
+node agent.mjs revoke zssh_<profile-id>
+```
+
+These are signed agent control requests, not MCP tools, so an OAuth-connected model cannot self-approve access. The older `pairing-cli.mjs` remains appropriate for a gateway+target running on the same local machine. See `docs/research/target-local-pairing-control-2026-10-03.md`.
+
 ### Outbound target agent transport
 
 A universal public gateway can now keep the MCP endpoint separate from the Linux target. The target initiates outbound HTTPS requests to the gateway; the gateway never receives the target's Ed25519 private key and does not store SSH credentials.
