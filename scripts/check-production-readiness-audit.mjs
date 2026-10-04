@@ -197,11 +197,43 @@ function validateAuth0Lane(env) {
 }
 
 function validateReviewerFixtureLane(env) {
+  const reviewLoginIssue = validateHttpsUrl(
+    env,
+    "ZSSH_REVIEW_LOGIN_URL",
+    { requirePublicHostname: true },
+  );
   const issues = compactIssues([
     validateHttpsUrl(env, "ZSSH_PLUGIN_DEMO_RECORDING_URL", { requirePublicHostname: true }),
     validateMinLength(env, "ZSSH_REVIEW_ACCESS_TOKEN", 20),
-    validateHttpsUrl(env, "ZSSH_REVIEW_LOGIN_URL", { requirePublicHostname: true }),
+    reviewLoginIssue,
   ]);
+
+  const issuerIssue = validateHttpsUrl(
+    env,
+    "ZSSH_OAUTH_ISSUER",
+    { requirePublicHostname: true },
+  );
+  if (
+    !reviewLoginIssue &&
+    !issuerIssue &&
+    configured(env, "ZSSH_REVIEW_LOGIN_URL") &&
+    configured(env, "ZSSH_OAUTH_ISSUER")
+  ) {
+    try {
+      const reviewLoginUrl = new URL(value(env, "ZSSH_REVIEW_LOGIN_URL"));
+      const issuerUrl = new URL(value(env, "ZSSH_OAUTH_ISSUER"));
+      if (reviewLoginUrl.origin !== issuerUrl.origin) {
+        issues.push(
+          validationIssue(
+            "ZSSH_REVIEW_LOGIN_URL",
+            "must use the same origin as ZSSH_OAUTH_ISSUER",
+          ),
+        );
+      }
+    } catch {
+      // URL syntax is reported by the field-local validators.
+    }
+  }
 
   for (const name of ["ZSSH_REVIEW_FILE", "ZSSH_REVIEW_WRITE_FILE"]) {
     if (configured(env, name) && !path.isAbsolute(value(env, name))) {
