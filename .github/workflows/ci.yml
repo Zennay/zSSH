@@ -206,7 +206,7 @@ jobs:
           node scripts/prepare-review-target.mjs --root "$review_root" > "$RUNNER_TEMP/review-fixture.json"
           test -f "$review_root/sample.txt"
           grep -F "status=ready" "$review_root/sample.txt"
-          node -e 'const fs=require("fs"); const x=JSON.parse(fs.readFileSync(process.argv[1],"utf8")); if(!x.ok || x.review_root!==process.argv[2]) process.exit(1)' "$RUNNER_TEMP/review-fixture.json" "$review_root"
+          node -e 'const fs=require("fs"); const x=JSON.parse(fs.readFileSync(process.argv[1],"utf8")); if(!x.ok || x.review_root!==process.argv[2] || x.release_compatible!==false || x.release_variables!==null || !String(x.release_blocker||"").includes("/srv/zssh-review/sample.txt")) process.exit(1)' "$RUNNER_TEMP/review-fixture.json" "$review_root"
 
       - name: Exercise production submission readiness probe
         run: node production-submission-probe-canary.mjs
