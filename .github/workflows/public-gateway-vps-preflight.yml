@@ -17,7 +17,7 @@ concurrency:
 jobs:
   validate:
     name: Validate-only proof on vps-bb300bba
-    runs-on: [self-hosted, haxlab]
+    runs-on: self-hosted
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
