@@ -37,11 +37,23 @@ export function validateCloudflareZoneName(value) {
   return zoneName;
 }
 
-function cloudflareErrorSummary(body) {
+function redactSensitiveValue(value, sensitiveValues = []) {
+  let output = String(value || "");
+  for (const sensitiveValue of sensitiveValues) {
+    const secret = String(sensitiveValue || "");
+    if (secret) output = output.split(secret).join("[REDACTED]");
+  }
+  return output;
+}
+
+function cloudflareErrorSummary(body, sensitiveValues = []) {
   const errors = Array.isArray(body?.errors) ? body.errors : [];
   return errors.slice(0, 3).map(error => {
     const code = Number.isFinite(Number(error?.code)) ? String(error.code) : "unknown";
-    const message = String(error?.message || "Cloudflare API error").replace(/[\r\n]+/g, " ").slice(0, 180);
+    const message = redactSensitiveValue(
+      String(error?.message || "Cloudflare API error").replace(/[\r\n]+/g, " "),
+      sensitiveValues,
+    ).slice(0, 180);
     return `${code}: ${message}`;
   }).join("; ");
 }
@@ -55,7 +67,11 @@ async function cloudflareJson(fetchImpl, url, init, label) {
     fail(`${label} failed: Cloudflare returned invalid JSON (HTTP ${response.status})`);
   }
   if (!response.ok || body?.success !== true) {
-    const summary = cloudflareErrorSummary(body);
+    const authorization = init?.headers?.authorization || init?.headers?.Authorization || "";
+    const bearerToken = typeof authorization === "string" && authorization.startsWith("Bearer ")
+      ? authorization.slice("Bearer ".length)
+      : "";
+    const summary = cloudflareErrorSummary(body, [bearerToken]);
     fail(`${label} failed: HTTP ${response.status}${summary ? ` (${summary})` : ""}`);
   }
   return body;
