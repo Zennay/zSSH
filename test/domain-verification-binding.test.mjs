@@ -58,4 +58,18 @@ test("rejects non-origin, credential-bearing, and non-public attestations", () =
     ),
     /public hostname/
   );
+  assert.throws(
+    () => assertDomainVerificationBinding(
+      "https://8.8.8.8/mcp",
+      "https://8.8.8.8"
+    ),
+    /public hostname/
+  );
+  assert.throws(
+    () => assertDomainVerificationBinding(
+      "https://[2606:4700:4700::1111]/mcp",
+      "https://[2606:4700:4700::1111]"
+    ),
+    /public hostname/
+  );
 });
