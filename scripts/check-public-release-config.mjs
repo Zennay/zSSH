@@ -247,7 +247,7 @@ export function runSelfTest() {
 
   const customAuth0Missing = publicReleaseConfigPresence({
     ...good,
-    ZSSH_OAUTH_ISSUER: "https://login.example.com/",
+    ZSSH_OAUTH_ISSUER: "https://login.cheapgpt.shop/",
     AUTH0_MANAGEMENT_BASE_URL: "",
   });
   if (!customAuth0Missing.missing.includes("AUTH0_MANAGEMENT_BASE_URL")) {
@@ -274,7 +274,7 @@ export function runSelfTest() {
   assertThrows(
     () => validatePublicReleaseConfig({
       ...good,
-      ZSSH_OAUTH_ISSUER: "https://login.example.com/",
+      ZSSH_OAUTH_ISSUER: "https://login.cheapgpt.shop/",
       AUTH0_MANAGEMENT_BASE_URL: "",
     }),
     /required when ZSSH_OAUTH_ISSUER uses a custom Auth0 domain/,
