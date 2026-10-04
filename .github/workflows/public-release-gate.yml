@@ -88,6 +88,7 @@ on:
       - "submission/**"
       - "docs/openai-plugin-*.md"
       - "docs/research/cloudflare-dns-publication-2026-10-04.md"
+      - "docs/research/public-caddy-promotion-2026-10-04.md"
       - "docs/research/main-branch-protection-2026-10-04.md"
       - "docs/research/main-protection-negative-proof-2026-10-04.md"
   push:
@@ -177,6 +178,7 @@ on:
       - "submission/**"
       - "docs/openai-plugin-*.md"
       - "docs/research/cloudflare-dns-publication-2026-10-04.md"
+      - "docs/research/public-caddy-promotion-2026-10-04.md"
       - "docs/research/main-branch-protection-2026-10-04.md"
       - "docs/research/main-protection-negative-proof-2026-10-04.md"
   workflow_dispatch:
