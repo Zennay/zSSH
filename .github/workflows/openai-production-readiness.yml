@@ -5,6 +5,8 @@ on:
   workflow_run:
     workflows:
       - zSSH production DNS publish
+      - zSSH public ingress external preflight
+      - Auth0 production readiness
     types:
       - completed
   push:
