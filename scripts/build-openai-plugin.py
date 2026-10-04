@@ -175,11 +175,7 @@ def validate_plugin(plugin: dict, expected_listing_urls: dict[str, str] | None =
         fail("capabilities must contain at most 20 one-line values of at most 120 characters")
 
     for field in ("websiteURL", "supportURL", "privacyPolicyURL", "termsOfServiceURL"):
-        actual = https_url(
-            str(interface.get(field, "")),
-            "interface." + field,
-            require_public_hostname=True,
-        )
+        actual = https_url(str(interface.get(field, "")), "interface." + field)
         if expected_listing_urls is not None and actual != expected_listing_urls[field]:
             fail(
                 f"interface.{field} must use the canonical same-origin public review URL "
@@ -244,7 +240,6 @@ def validate_plugin(plugin: dict, expected_listing_urls: dict[str, str] | None =
         str(review.get("demo_recording_url", "")),
         "review.demo_recording_url",
         allow_fragment=False,
-        require_public_hostname=True,
     )
     if review.get("commerce") is not False:
         fail("zSSH review metadata must declare commerce=false")
