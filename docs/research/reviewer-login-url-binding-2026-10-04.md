@@ -15,6 +15,8 @@ The release preflight normalizes both as public HTTPS URLs and requires their ex
 
 Changing the reviewer-login host, port, path, query, or other URL component therefore requires a fresh real credentials test and an updated verified URL.
 
+The reviewer login is also release-bound to the configured OAuth issuer: `ZSSH_REVIEW_LOGIN_URL` must use the exact same HTTPS origin as `ZSSH_OAUTH_ISSUER`. This prevents a stale or unrelated public login host from satisfying the reviewer-fixture gate while the production MCP server advertises a different authorization server. Paths may differ, so Auth0 Universal Login routes such as `/u/login` remain valid.
+
 ## Safety boundary
 
 This stores only a public login URL and a non-secret boolean. Reviewer usernames, passwords, access tokens, MFA material, magic links, or other credentials remain outside the repository and release artifacts.
