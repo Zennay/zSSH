@@ -138,6 +138,7 @@ on:
 permissions:
   contents: read
   pull-requests: read
+  issues: read
 
 concurrency:
   group: zssh-openai-public-release-${{ github.event_name }}-${{ github.ref }}
@@ -186,6 +187,8 @@ jobs:
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    outputs:
+      governance_verified: ${{ steps.governance-evidence.outputs.verified }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -201,6 +204,14 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: node scripts/check-main-protection.mjs --public-status --require-protected
+      - name: Verify immutable rejected-direct-write governance evidence
+        id: governance-evidence
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -Eeuo pipefail
+          node scripts/check-main-protection.mjs --require-negative-proof
+          echo "verified=1" >> "$GITHUB_OUTPUT"
 
   production:
     name: Production submission probe
@@ -218,7 +229,7 @@ jobs:
       ZSSH_REVIEW_LOGIN_URL: ${{ vars.ZSSH_REVIEW_LOGIN_URL }}
       ZSSH_REVIEW_LOGIN_VERIFIED_URL: ${{ vars.ZSSH_REVIEW_LOGIN_VERIFIED_URL }}
       ZSSH_REVIEW_CREDENTIALS_VERIFIED: ${{ vars.ZSSH_REVIEW_CREDENTIALS_VERIFIED }}
-      ZSSH_MAIN_PROTECTION_VERIFIED: ${{ vars.ZSSH_MAIN_PROTECTION_VERIFIED }}
+      ZSSH_MAIN_PROTECTION_VERIFIED: ${{ needs.provenance.outputs.governance_verified }}
       ZSSH_CHATGPT_DESKTOP_REVIEWED: ${{ vars.ZSSH_CHATGPT_DESKTOP_REVIEWED }}
       ZSSH_CHATGPT_MOBILE_REVIEWED: ${{ vars.ZSSH_CHATGPT_MOBILE_REVIEWED }}
       ZSSH_CHATGPT_REVIEW_SHA256: ${{ vars.ZSSH_CHATGPT_REVIEW_SHA256 }}
