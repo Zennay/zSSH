@@ -452,7 +452,7 @@ test("never serializes protected values", () => {
 test("protected readiness workflow reclassifies after successful production gates", () => {
   assert.match(
     readinessWorkflow,
-    /on:\n  workflow_dispatch:\n  workflow_run:\n    workflows:\n      - zSSH production DNS publish\n      - zSSH public ingress external preflight\n      - Auth0 production readiness\n    types:\n      - completed\n  push:\n    branches:\n      - main/,
+    /on:\n  workflow_dispatch:\n  schedule:\n    - cron: "17 \* \* \* \*"\n  workflow_run:\n    workflows:\n      - zSSH production DNS publish\n      - zSSH public ingress external preflight\n      - Auth0 production readiness\n    types:\n      - completed\n  push:\n    branches:\n      - main/,
   );
   assert.match(
     readinessWorkflow,
@@ -602,4 +602,20 @@ test("readiness workflow summary exposes gate classification for autonomous cons
   assert.ok(readinessWorkflow.includes("External input gates: ${result.external_input_gates.join(\", \") || \"none\"}"));
   assert.ok(readinessWorkflow.includes("Gate kind: ${item.gate_kind}"));
   assert.ok(readinessWorkflow.includes('Requires external input: ${item.requires_external_input ? "yes" : "no"}'));
+});
+
+
+test("protected readiness refreshes hourly for environment-only gate changes", () => {
+  assert.match(
+    readinessWorkflow,
+    /schedule:\n    - cron: "17 \* \* \* \*"/,
+  );
+  assert.match(
+    readinessWorkflow,
+    /provenance:[\s\S]*Require candidate SHA to originate from a merged PR[\s\S]*Require exact current protected main/,
+  );
+  assert.match(
+    readinessWorkflow,
+    /concurrency:[\s\S]*group: zssh-openai-production-readiness[\s\S]*cancel-in-progress: true/,
+  );
 });
