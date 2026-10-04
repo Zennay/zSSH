@@ -159,3 +159,15 @@ test("merged PRs autonomously attempt canonical protection only after provenance
     /ZSSH_MAIN_PROTECTION_CONFIRM: \$\{\{ github\.event_name == 'workflow_dispatch' && inputs\.confirmation \|\| 'PROTECT_ZSSH_MAIN' \}\}/,
   );
 });
+
+test("canonical main pushes enter provenance before repository-governance", () => {
+  assert.match(workflow, /push:\n    branches:\n      - main/);
+  assert.match(
+    workflow,
+    /if: github\.event_name == 'workflow_dispatch' \|\| github\.event_name == 'push' \|\| github\.event\.pull_request\.merged == true/,
+  );
+  const provenanceIndex = workflow.indexOf("provenance:");
+  const environmentIndex = workflow.indexOf("environment: repository-governance");
+  assert.ok(provenanceIndex >= 0 && environmentIndex > provenanceIndex);
+  assert.match(workflow, /node scripts\/check-main-provenance\.mjs/);
+});
