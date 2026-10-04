@@ -22,3 +22,10 @@ When `requirePublicHostname` is enabled, reject every IPv4 or IPv6 literal befor
 ## Evidence
 
 Regression coverage asserts that both public IPv4 and IPv6 MCP URLs fail closed and that OAuth authorization-server metadata using an IP-literal issuer fails the same public-hostname contract.
+
+
+## Single-label hostname follow-up
+
+The central release validator also now rejects single-label hostnames such as `https://intranet/mcp` when `requirePublicHostname` is enabled. Protected readiness and the submission builder already enforced this shape, so accepting a single-label MCP or OAuth host in the central release/probe contract was validation drift.
+
+Regression coverage now proves both the MCP endpoint and OAuth authorization-server metadata fail closed for single-label hosts. Development-only opt-outs remain unchanged.
