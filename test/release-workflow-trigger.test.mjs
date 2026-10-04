@@ -105,10 +105,14 @@ test("release-critical pull_request and push path filters stay in parity", () =>
   }
 
   for (const runtimePath of [
+    "package.json",
+    "package-lock.json",
+    "test/runtime-dependency-policy.test.mjs",
     "server.mjs",
     "rate-limit.mjs",
     "test/rate-limit.test.mjs",
     "deploy/install-live.sh",
+    "deploy/install-target-agent.sh",
     "test/install-live-stage-provenance.test.mjs",
     "deploy/install-public-gateway.sh",
     "test/public-gateway-installer.test.mjs",

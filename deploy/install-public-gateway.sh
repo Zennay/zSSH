@@ -166,7 +166,7 @@ trap 'rm -rf "$STAGE"' EXIT
 if [[ ! -d "$RELEASE" ]]; then
   mkdir -p "$STAGE"
   git -C "$SOURCE_ROOT" archive --format=tar "$REPO_SHA" | tar -x -C "$STAGE"
-  "$NPM_BIN" install --prefix "$STAGE" --omit=dev --ignore-scripts --no-audit --no-fund
+  "$NPM_BIN" ci --prefix "$STAGE" --omit=dev --ignore-scripts --no-audit --no-fund
   "$NPM_BIN" test --prefix "$STAGE"
   mv "$STAGE" "$RELEASE"
 fi
