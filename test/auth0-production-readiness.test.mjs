@@ -5,6 +5,7 @@ import {
   resolveAuth0ManagementBaseUrl,
   validateAuth0CustomDomain,
   validateAuth0DefaultUserGrant,
+  validateAuth0IssuerEndpoints,
   validateAuth0ResourceServers,
   validateAuth0TenantSettings,
 } from "../scripts/check-auth0-production.mjs";
@@ -71,6 +72,41 @@ test("Auth0 custom issuer is bound to one ready verified domain on the managemen
     /must be verified/,
   );
   assert.equal(validateAuth0CustomDomain([], "https://tenant.eu.auth0.com/"), null);
+});
+
+test("Auth0 discovery endpoints stay on the selected issuer origin", () => {
+  const issuer = "https://login.cheapgpt.shop/";
+  const good = {
+    validated: {
+      authorization_endpoint: issuer + "authorize",
+      token_endpoint: issuer + "oauth/token",
+      registration_endpoint: issuer + "oidc/register",
+    },
+    metadata: {
+      jwks_uri: issuer + ".well-known/jwks.json",
+    },
+  };
+
+  assert.deepEqual(validateAuth0IssuerEndpoints(good, issuer), {
+    issuer_origin: "https://login.cheapgpt.shop",
+    endpoint_origins_bound: true,
+  });
+
+  for (const field of ["authorization_endpoint", "token_endpoint", "registration_endpoint"]) {
+    const mixed = structuredClone(good);
+    mixed.validated[field] = "https://other.example.com/" + field;
+    assert.throws(
+      () => validateAuth0IssuerEndpoints(mixed, issuer),
+      new RegExp(`Auth0 ${field} must use the ZSSH_OAUTH_ISSUER origin`),
+    );
+  }
+
+  const foreignJwks = structuredClone(good);
+  foreignJwks.metadata.jwks_uri = "https://other.example.com/.well-known/jwks.json";
+  assert.throws(
+    () => validateAuth0IssuerEndpoints(foreignJwks, issuer),
+    /Auth0 jwks_uri must use the ZSSH_OAUTH_ISSUER origin/,
+  );
 });
 
 test("Auth0 tenant settings enforce MCP production compatibility", () => {
@@ -213,6 +249,10 @@ test("Auth0 end-to-end preflight binds discovery to tenant settings and least-pr
   assert.equal(result.auth0_management_origin, "https://tenant.eu.auth0.com");
   assert.equal(result.auth0_management_origin_derived, true);
   assert.deepEqual(result.client_registration_methods, ["dcr"]);
+  assert.deepEqual(result.issuer_endpoint_binding, {
+    issuer_origin: "https://tenant.eu.auth0.com",
+    endpoint_origins_bound: true,
+  });
   assert.equal(result.tenant.resource_parameter_profile, "compatibility");
   assert.equal(result.custom_domain, null);
   assert.deepEqual(result.default_user_grant.scopes, ["zssh:read", "zssh:write"]);
