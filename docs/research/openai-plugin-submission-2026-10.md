@@ -264,3 +264,24 @@ Engineering decision:
 - The protected production release gate computes the live tool-contract fingerprint independently and fails closed unless it exactly matches `ZSSH_OPENAI_TOOL_SCAN_SHA256`.
 - A tool contract change therefore invalidates the prior portal-scan evidence until the production endpoint is rescanned and the attested fingerprint is refreshed.
 - The fingerprint is non-secret and is recorded in release evidence; credentials and tokens remain excluded.
+
+
+## Exact Verify Domain origin binding — 2026-10-04
+
+Primary sources re-checked on 2026-10-04:
+- https://developers.openai.com/plugins/deploy/app-review
+- https://developers.openai.com/plugins/deploy/submission
+- https://developers.openai.com/plugins/deploy/submission-errors
+
+Current platform facts:
+- Remote MCP submission requires a completed domain-verification challenge for the MCP connection.
+- The challenge token is hosted on the MCP hostname or an eligible parent origin; the portal still associates verification with the MCP connection being submitted.
+- The MCP server origin is defined by scheme, hostname and port. OpenAI's current review contract says that changing that origin requires a new plugin/review flow rather than silently carrying the old connection forward.
+- A boolean `Verify Domain passed` flag is therefore insufficient release evidence if the production MCP origin can later change.
+
+Engineering decision:
+- Keep `ZSSH_OPENAI_DOMAIN_VERIFIED=1` as the explicit operator attestation that the real OpenAI portal Verify Domain step is green.
+- Add `ZSSH_OPENAI_VERIFIED_MCP_ORIGIN` as a non-secret attestation of the exact production MCP origin for which that portal verification applies.
+- The value records the MCP server origin, not necessarily the challenge-token host when an eligible parent domain was used.
+- The protected production release gate fails closed unless this attested origin exactly matches the origin of `ZSSH_PLUGIN_MCP_URL`.
+- Any production scheme, hostname or port change therefore invalidates the previous domain-verification evidence and requires a fresh portal connection/review path as required by OpenAI.
