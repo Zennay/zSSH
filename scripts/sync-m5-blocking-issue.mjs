@@ -107,7 +107,7 @@ export function renderM5BlockingIssue({ readiness, canonicalSha, repository = "Z
   if (!/^[a-f0-9]{40}$/.test(sha)) fail("canonicalSha must be a 40-character Git SHA");
   const repo = String(repository || "Zennay/zSSH").trim();
   const repoParts = repo.split("/");
-  if (repoParts.length !== 2 || !repoParts[0] || !repoParts[1] || /\\s/.test(repo)) {
+  if (repoParts.length !== 2 || !repoParts[0] || !repoParts[1] || [...repo].some(char => char.trim() === "")) {
     fail("repository must be owner/name");
   }
   const runId = String(workflowRunId || "").trim();
