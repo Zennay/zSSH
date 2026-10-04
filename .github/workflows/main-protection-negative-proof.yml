@@ -34,7 +34,7 @@ jobs:
       - name: Require public protected flag before privileged proof
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: node scripts/check-main-protection.mjs --public-status --require-protected
+        run: node scripts/check-main-protection.mjs --public-status --require-protected --require-current-sha
 
   negative-proof:
     name: Prove normal direct main write is rejected
