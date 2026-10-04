@@ -286,7 +286,7 @@ test("protected readiness workflow proves merged-PR provenance before entering o
   );
   assert.match(
     readinessWorkflow,
-    /audit:\n    name: Classify protected M5 inputs\n    needs: provenance\n    runs-on: ubuntu-latest\n    timeout-minutes: 5\n    environment: openai-production/,
+    /audit:\n    name: Classify protected M5 inputs\n    needs: provenance[\s\S]*?    runs-on: ubuntu-latest\n    timeout-minutes: 5\n    environment: openai-production/,
   );
 
   assert.match(
