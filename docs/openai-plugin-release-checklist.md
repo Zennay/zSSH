@@ -15,6 +15,12 @@ This checklist tracks the production path from the current review-ready MCP prof
 - [ ] Reviewer account exists without private user data
 - [ ] Dedicated paired target fixture is available
 
+## Canonical release provenance
+
+Production submission is dispatched only from canonical `main`. Before the production environment is entered, the release gate verifies through GitHub's commit→pull-request association that the exact `GITHUB_SHA` is the merge commit of a closed, merged PR. Direct commits to `main` therefore cannot become production submission candidates. The separate `Canonical main provenance` workflow also checks every push to `main`.
+
+Do not use commit-message-triggered production probes. Use the `workflow_dispatch` action on the exact reviewed `main` revision.
+
 ## Automated validation
 
 Run:
@@ -44,6 +50,7 @@ Record:
 
 - production endpoint version/revision;
 - CI run result for the exact commit;
+- merged PR number and merge timestamp proving canonical main provenance;
 - VPS rollout proof from the dedicated `Zennay/zCloud` `zSSH standalone VPS release` workflow, pinned to the exact canonical zSSH commit;
 - SHA-256 fingerprint of the exact public tool metadata returned by the production scan;
 - SHA-256 of the exact `zssh-openai-plugin.zip` uploaded by the production release gate;
