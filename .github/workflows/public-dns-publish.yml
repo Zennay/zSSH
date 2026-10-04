@@ -66,6 +66,14 @@ jobs:
         run: |
           set -Eeuo pipefail
           test "$ZSSH_DNS_CONFIRMATION" = "PUBLISH_ZSSH_PRODUCTION_DNS"
+      - name: Verify Cloudflare API token is active
+        env:
+          EVIDENCE_PATH: ${{ runner.temp }}/zssh-cloudflare-token-verify.json
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          node scripts/verify-cloudflare-token.mjs | tee "$EVIDENCE_PATH"
       - name: Validate desired Cloudflare DNS change without mutation
         id: dns_plan
         env:
@@ -149,6 +157,7 @@ jobs:
         with:
           name: zssh-cloudflare-dns-${{ github.run_id }}
           path: |
+            ${{ runner.temp }}/zssh-cloudflare-token-verify.json
             ${{ runner.temp }}/zssh-cloudflare-dns-plan.json
             ${{ runner.temp }}/zssh-cloudflare-dns-result.json
             ${{ runner.temp }}/zssh-cloudflare-dns-verify.json

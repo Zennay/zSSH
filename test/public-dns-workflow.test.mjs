@@ -93,6 +93,19 @@ test("manual DNS publication keeps confirmation input out of generated shell sou
   assert.doesNotMatch(step.split("run: |")[1] || "", /\$\{\{ inputs\.confirmation \}\}/);
 });
 
+test("production DNS verifies the provider token read-only before planning any mutation", () => {
+  const verifyIndex = workflow.indexOf("      - name: Verify Cloudflare API token is active");
+  const planIndex = workflow.indexOf("      - name: Validate desired Cloudflare DNS change without mutation");
+  assert.ok(verifyIndex > 0, "missing Cloudflare token verification step");
+  assert.ok(planIndex > verifyIndex, "token verification must precede DNS planning");
+
+  const tail = workflow.split("      - name: Verify Cloudflare API token is active")[1];
+  const step = tail.split("\n      - name:")[0];
+  assert.match(step, /node scripts\/verify-cloudflare-token\.mjs/);
+  assert.match(step, /CLOUDFLARE_API_TOKEN: \$\{\{ secrets\.CLOUDFLARE_API_TOKEN \}\}/);
+  assert.match(workflow, /zssh-cloudflare-token-verify\.json[\s\S]*zssh-cloudflare-dns-plan\.json/);
+});
+
 test("production DNS replacement is bound to an explicit reviewed existing-record precondition", () => {
   for (const stepName of [
     "Validate desired Cloudflare DNS change without mutation",
@@ -183,6 +196,7 @@ test("Cloudflare provider credential is unavailable before canonical provenance"
   assert.doesNotMatch(jobHeader, /CLOUDFLARE_API_TOKEN/);
 
   for (const stepName of [
+    "Verify Cloudflare API token is active",
     "Validate desired Cloudflare DNS change without mutation",
     "Publish exact DNS-only A record",
     "Re-read Cloudflare API and prove idempotent desired state",

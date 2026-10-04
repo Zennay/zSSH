@@ -25,6 +25,9 @@ This note covers only controlled publication of that DNS-only A record. Producti
 - Cloudflare token creation guidance:
   - https://developers.cloudflare.com/fundamentals/api/get-started/create-token/
   - prefer API tokens over the legacy global API key and scope the token to the minimum required zone/resource.
+- Cloudflare token verification:
+  - https://developers.cloudflare.com/api/resources/user/subresources/tokens/methods/verify/
+  - `GET /user/tokens/verify` is a read-only validity/status check for the presented API token. zSSH uses it before DNS planning so disabled/expired/rejected credentials fail before any mutation path is considered. This verifies token activity, not the required zone/DNS permissions; the existing zone lookup and DNS read remain the scope checks.
 
 ## Engineering decision
 
@@ -45,7 +48,7 @@ The reconciler:
 11. never overwrites an unexpected existing A record: a replacement requires `ZSSH_DNS_EXPECTED_CURRENT_IPV4` to exactly match the independently reviewed current value, while an unconfigured dry-run reports `would_update_requires_precondition` plus the non-secret previous IPv4/TTL/proxy state;
 12. closes the plan-to-apply TOCTOU window by hashing the exact observed Cloudflare record ID + name + IPv4 + TTL + proxy state in the dry-run evidence. The protected workflow passes that SHA-256 directly to the apply step as `ZSSH_DNS_EXPECTED_CURRENT_STATE_SHA256`; if the record is replaced, disappears, changes TTL/proxy mode, or otherwise differs before mutation, apply fails closed. This fingerprint is runtime evidence, not a manually maintained GitHub variable.
 
-The workflow runs in the protected `openai-production` environment. Its production destination is repository-locked to `https://zssh.cheapgpt.shop` / `198.244.191.182` / zone `cheapgpt.shop`; manual dispatch cannot substitute another hostname or address. Manual dispatch is also bound to `refs/heads/main`, merged-PR provenance, live branch protection, and the exact current GitHub-reported main SHA before the protected environment may mutate DNS, then requires the explicit phrase `PUBLISH_ZSSH_PRODUCTION_DNS`. A reviewed canonical-main activation may also run through the dedicated `.github/openai-production-dns-trigger` marker after provenance and branch-protection checks pass. Both paths perform a dry-run first, apply the change, re-read Cloudflare, require an idempotent `noop` result, and then prove external DNS convergence.
+The workflow runs in the protected `openai-production` environment. Its production destination is repository-locked to `https://zssh.cheapgpt.shop` / `198.244.191.182` / zone `cheapgpt.shop`; manual dispatch cannot substitute another hostname or address. Manual dispatch is also bound to `refs/heads/main`, merged-PR provenance, live branch protection, and the exact current GitHub-reported main SHA before the protected environment may mutate DNS, then requires the explicit phrase `PUBLISH_ZSSH_PRODUCTION_DNS`. A reviewed canonical-main activation may also run through the dedicated `.github/openai-production-dns-trigger` marker after provenance and branch-protection checks pass. Both paths first verify the presented Cloudflare API token with the read-only `/user/tokens/verify` endpoint, then perform a DNS dry-run, apply the change, re-read Cloudflare, require an idempotent `noop` result, and finally prove external DNS convergence.
 
 ## Workflow dependency integrity
 
@@ -89,11 +92,12 @@ Use this sequence once the external Cloudflare credential has been created. It i
 4. Dispatch **zSSH production DNS publish** from canonical `main` and enter the exact confirmation phrase `PUBLISH_ZSSH_PRODUCTION_DNS`.
 5. Treat the run as green only when all of these stages succeed in order:
    - merged-PR provenance and current protected-main verification;
+   - read-only Cloudflare token verification returning only secret-safe `{"ok":true,"status":"active"}` evidence;
    - non-mutating Cloudflare plan, including an automatic state fingerprint whenever an existing non-converged A record is present;
    - exact DNS-only A-record publication bound to that same plan-state fingerprint;
    - Cloudflare re-read returning the idempotent `noop` state with `ttl: 1` and `proxied: false`;
    - external DNS observation advancing beyond the `dns` stage.
-6. Retain the workflow artifact. It should contain the plan, mutation result, post-write verification, and public-origin observation JSON. These are non-secret evidence and must not contain the API token or zone ID.
+6. Retain the workflow artifact. It should contain the token-status preflight, plan, mutation result, post-write verification, and public-origin observation JSON. These are non-secret evidence and must not contain the API token or zone ID.
 7. If the workflow fails before the publish step, correct the protected configuration and dispatch again; no DNS mutation should have occurred.
 8. If publication succeeds but the bounded external convergence check times out, rerun the same canonical workflow rather than making an ad-hoc DNS change. The reconciler is intentionally idempotent and will prove the already-correct Cloudflare state before checking public resolution again.
 9. After DNS is externally resolvable, continue the M5 sequence with isolated public-gateway/Caddy activation and the GitHub-hosted external ingress preflight. Do not skip directly to OAuth or portal evidence while the public MCP origin is still unproven.
