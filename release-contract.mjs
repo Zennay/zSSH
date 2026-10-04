@@ -17,9 +17,14 @@ function isPrivateIpv4(hostname) {
 }
 
 export function isNonPublicHostname(hostname) {
-  const host = String(hostname || "").toLowerCase().replace(/^\[|\]$/g, "");
+  const host = String(hostname || "")
+    .trim()
+    .toLowerCase()
+    .replace(/^\[|\]$/g, "")
+    .replace(/\.$/, "");
   if (!host || host === "localhost" || host === "::1" || host === "0.0.0.0") return true;
   if (isIP(host) !== 0) return true;
+  if (!host.includes(".")) return true;
   if (isPrivateIpv4(host)) return true;
   if (/^(?:fc|fd)[0-9a-f]{2}:/i.test(host) || /^fe[89ab][0-9a-f]:/i.test(host)) return true;
   if (["example.com", "example.net", "example.org"].some(domain => host === domain || host.endsWith("." + domain))) return true;
