@@ -452,7 +452,7 @@ test("never serializes protected values", () => {
 test("protected readiness workflow reclassifies after successful production gates", () => {
   assert.match(
     readinessWorkflow,
-    /on:\n  workflow_dispatch:\n  schedule:\n    - cron: "17 \\* \\* \\* \\*"\n  workflow_run:\n    workflows:\n      - zSSH production DNS publish\n      - zSSH public ingress external preflight\n      - Auth0 production readiness\n    types:\n      - completed\n  push:\n    branches:\n      - main/,
+    /on:\n  workflow_dispatch:\n  schedule:\n    - cron: "17 \* \* \* \*"\n  workflow_run:\n    workflows:\n      - zSSH production DNS publish\n      - zSSH public ingress external preflight\n      - Auth0 production readiness\n    types:\n      - completed\n  push:\n    branches:\n      - main/,
   );
   assert.match(
     readinessWorkflow,
@@ -608,7 +608,7 @@ test("readiness workflow summary exposes gate classification for autonomous cons
 test("protected readiness refreshes hourly for environment-only gate changes", () => {
   assert.match(
     readinessWorkflow,
-    /schedule:\n    - cron: "17 \\* \\* \\* \\*"/,
+    /schedule:\n    - cron: "17 \* \* \* \*"/,
   );
   assert.match(
     readinessWorkflow,
