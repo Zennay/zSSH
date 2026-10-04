@@ -17,7 +17,8 @@ function gateRunbookLine({ gate, repository, sha }) {
   const runbook = GATE_RUNBOOKS[gate];
   if (!runbook) return null;
   const repo = String(repository || "Zennay/zSSH").trim();
-  if (!/^[^/\\s]+\\/[^/\\s]+$/.test(repo)) fail("repository must be owner/name");
+  const [owner, name, ...extra] = repo.split("/");
+  if (!owner || !name || extra.length > 0 || /\\s/.test(repo)) fail("repository must be owner/name");
   return `[${runbook.label}](https://github.com/${repo}/blob/${sha}/${runbook.path})`;
 }
 
