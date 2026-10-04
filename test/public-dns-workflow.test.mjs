@@ -43,7 +43,10 @@ test("post-publication origin evidence is retained with Cloudflare DNS evidence"
 
 test("reviewed marker can trigger the exact production DNS publish only from current protected main", () => {
   assert.match(workflow, /push:\n    branches: \[main\][\s\S]*\.github\/openai-production-dns-trigger/);
-  assert.match(workflow, /test "\$\(cat \.github\/openai-production-dns-trigger\)" = "PUBLISH_ZSSH_PRODUCTION_DNS"/);
+  assert.match(workflow, /mapfile -t activation_lines < \.github\/openai-production-dns-trigger/);
+  assert.match(workflow, /test "\$\{activation_lines\[0\]:-\}" = "PUBLISH_ZSSH_PRODUCTION_DNS"/);
+  assert.match(workflow, /test "\$\{#activation_lines\[@\]\}" -le 2/);
+  assert.match(workflow, /activation-id=\[A-Za-z0-9\._:-\]\{8,80\}/);
   assert.match(
     workflow,
     /Require reviewed protected-main DNS activation[\s\S]*node scripts\/check-main-provenance\.mjs/,
@@ -55,6 +58,14 @@ test("reviewed marker can trigger the exact production DNS publish only from cur
   assert.match(workflow, /CLOUDFLARE_ZONE_NAME: cheapgpt\.shop/);
   assert.match(workflow, /ZSSH_PUBLIC_BASE_URL: https:\/\/zssh\.cheapgpt\.shop/);
   assert.match(workflow, /ZSSH_PUBLIC_IPV4: 198\.244\.191\.182/);
+});
+
+test("reviewed DNS activation marker supports a repeatable review nonce without weakening the confirmation phrase", () => {
+  const markerPath = new URL("../.github/openai-production-dns-trigger", import.meta.url);
+  const marker = readFileSync(markerPath, "utf8").trimEnd();
+  assert.equal(marker, "PUBLISH_ZSSH_PRODUCTION_DNS");
+  assert.match(workflow, /if \[ "\$\{#activation_lines\[@\]\}" -eq 2 \]; then/);
+  assert.match(workflow, /\^activation-id=\[A-Za-z0-9\._:-\]\{8,80\}\$/);
 });
 
 test("production DNS target cannot be overridden by manual dispatch inputs", () => {
