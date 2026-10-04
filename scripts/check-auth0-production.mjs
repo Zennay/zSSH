@@ -93,6 +93,28 @@ export function validateAuth0CustomDomain(payload, issuer) {
   };
 }
 
+export function validateAuth0IssuerEndpoints(discovered, issuer) {
+  const issuerUrl = requirePublicHttpsUrl(issuer, "ZSSH_OAUTH_ISSUER");
+  const endpoints = {
+    authorization_endpoint: discovered?.validated?.authorization_endpoint,
+    token_endpoint: discovered?.validated?.token_endpoint,
+    registration_endpoint: discovered?.validated?.registration_endpoint,
+    jwks_uri: discovered?.metadata?.jwks_uri,
+  };
+
+  for (const [field, raw] of Object.entries(endpoints)) {
+    const endpoint = requirePublicHttpsUrl(raw, `Auth0 ${field}`);
+    if (endpoint.origin !== issuerUrl.origin) {
+      fail(`Auth0 ${field} must use the ZSSH_OAUTH_ISSUER origin`);
+    }
+  }
+
+  return {
+    issuer_origin: issuerUrl.origin,
+    endpoint_origins_bound: true,
+  };
+}
+
 export function validateAuth0TenantSettings(settings) {
   if (!settings || typeof settings !== "object" || Array.isArray(settings)) {
     fail("Auth0 tenant settings must be an object");
@@ -207,11 +229,7 @@ export async function checkAuth0ProductionReadiness({
   if (discovered.validated.authorization_response_iss_parameter_supported !== true) {
     fail("Auth0 production issuer metadata must advertise RFC 9207 issuer identification");
   }
-  const registration = new URL(discovered.validated.registration_endpoint);
-  if (registration.origin !== issuerUrl.origin) {
-    fail("Auth0 DCR registration endpoint must remain on the authorization-server origin");
-  }
-
+  const issuerEndpoints = validateAuth0IssuerEndpoints(discovered, issuerUrl.href);
   const jwksUri = requirePublicHttpsUrl(discovered.metadata.jwks_uri, "Auth0 jwks_uri");
   const apiBase = new URL("/api/v2/", managementBase.origin);
   const settings = await fetchJson(new URL("tenants/settings", apiBase), token, "Auth0 tenant settings", fetchImpl);
@@ -254,6 +272,7 @@ export async function checkAuth0ProductionReadiness({
     pkce_s256: discovered.validated.pkce_s256 === true,
     authorization_code: discovered.validated.authorization_code === true,
     client_registration_methods: discovered.validated.client_registration_methods,
+    issuer_endpoint_binding: issuerEndpoints,
     tenant,
     custom_domain: customDomain,
     resource_server: resources,
