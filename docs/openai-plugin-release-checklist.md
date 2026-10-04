@@ -9,6 +9,7 @@ This checklist tracks the production path from the current review-ready MCP prof
 - [ ] Stable public HTTPS MCP endpoint configured
 - [ ] Published `/privacy` page discloses data categories, purposes, recipients, retention, and user controls for the actual production data flow
 - [ ] Production OAuth authorization server publishes discovery metadata with authorization-code flow, PKCE S256, and token endpoint auth methods
+- [ ] OAuth discovery advertises a ChatGPT-compatible client identification path: CIMD (`client_id_metadata_document_supported: true`) or DCR (`registration_endpoint`)
 - [ ] Resource-server metadata points to the production MCP resource
 - [ ] Health, OAuth metadata, challenge, and unauthenticated MCP checks do not redirect away from the submitted origin
 - [ ] `WWW-Authenticate` advertises the exact same-origin `/.well-known/oauth-protected-resource` URL
