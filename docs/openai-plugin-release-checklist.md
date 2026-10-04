@@ -11,7 +11,8 @@ This checklist tracks the production path from the current review-ready MCP prof
 - [ ] Resource-server metadata points to the production MCP resource
 - [ ] Health, OAuth metadata, challenge, and unauthenticated MCP checks do not redirect away from the submitted origin
 - [ ] `WWW-Authenticate` advertises the exact same-origin `/.well-known/oauth-protected-resource` URL
-- [ ] Domain verification challenge is live\n- [ ] Verify Domain is green for the exact production MCP origin; only then set `ZSSH_OPENAI_DOMAIN_VERIFIED=1` and `ZSSH_OPENAI_VERIFIED_MCP_ORIGIN=<scheme://hostname[:port]>`
+- [ ] Domain verification challenge is live
+- [ ] Verify Domain is green for the exact production MCP origin; only then set `ZSSH_OPENAI_DOMAIN_VERIFIED=1` and `ZSSH_OPENAI_VERIFIED_MCP_ORIGIN=<scheme://hostname[:port]>`
 - [ ] Reviewer account exists without private user data
 - [ ] Dedicated paired target fixture is available
 - [ ] Production connection card exercised successfully in ChatGPT desktop; only then set `ZSSH_CHATGPT_DESKTOP_REVIEWED=1`
@@ -63,6 +64,7 @@ Record:
 - reviewer walkthrough result;
 - live ChatGPT desktop connection-card result;
 - live ChatGPT mobile connection-card result;
-- portal scan findings and resolutions;\n- exact MCP origin bound to the successful Verify Domain portal result.
+- portal scan findings and resolutions;
+- exact MCP origin bound to the successful Verify Domain portal result.
 
 A green local canary alone does not indicate production submission readiness. The zSSH repository intentionally does not own the VPS runner; live rollout and validate-only VPS evidence is produced through zCloud-owned workflows (including `zssh-public-gateway-vps-preflight.yml`) so repository-scoped runner queues cannot masquerade as deployment proof. zSSH CI/release workflows must remain GitHub-hosted and must not schedule `self-hosted` jobs.
