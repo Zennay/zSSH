@@ -34,18 +34,12 @@ The helper deliberately requires non-interactive sudo and an already-active Cadd
 
 ## Release boundary
 
-A green local/unit test proves transaction and rollback semantics only. Live promotion is executed by the guarded **zSSH public gateway and Caddy rollout** workflow on the canonical self-hosted VPS runner.
+A green local/unit test proves transaction and rollback semantics only. VPS mutation remains in the **zCloud control-plane repository**, not in the zSSH release repository.
 
-The workflow is manual and fail-closed:
+The canonical production sequence uses the existing guarded zCloud lanes:
 
-1. it requires exact confirmation `PROMOTE_ZSSH_PUBLIC_INGRESS`;
-2. GitHub-hosted provenance verifies merged-PR ancestry, protected `main`, the immutable negative-proof evidence and exact current SHA before the protected environment is entered;
-3. the self-hosted runner repeats the exact-current-main check immediately before mutation;
-4. `zssh.cheapgpt.shop` must resolve only to the reviewed production IPv4 `198.244.191.182`;
-5. the production OAuth issuer must already be configured; the JWKS URL is derived from that issuer for the Auth0-backed public gateway;
-6. the reviewer target is derived from the local one-target trust file and public access remains rooted at `/srv/zssh-review`;
-7. both gateway and Caddy helpers run their validate-only paths before mutation;
-8. the isolated `zssh-public.service` is promoted first and remains loopback-only; only then is the transactional Caddy import promoted;
-9. local systemd/Caddy/health checks must pass before the workflow reports green.
+1. **zSSH public gateway activate (zCloud lane)** runs on `[self-hosted, zcloud, vps]`, requires the exact canonical zSSH SHA, `ACTIVATE_ZSSH_PUBLIC_GATEWAY`, the reviewed public origin, and the real OAuth issuer/JWKS URL. It prepares the release-compatible reviewer target, checks out that exact zSSH revision, regression-tests the public gateway installer, and activates isolated `zssh-public.service` on loopback port 8789.
+2. **zSSH public ingress bootstrap (zCloud lane)** requires the same exact zSSH SHA and `INSTALL_ZSSH_PUBLIC_INGRESS`. It fails closed unless `zssh.cheapgpt.shop` resolves only to `198.244.191.182`, the isolated public gateway is already healthy, and the Caddy transaction tests pass. It then promotes the canonical Caddy ingress and proves local TLS health.
+3. The separate GitHub-hosted **zSSH public ingress external preflight** must run afterward. A green VPS-local rollout is not external reviewer evidence.
 
-A successful VPS rollout is still not external-review evidence. The separate GitHub-hosted **zSSH public ingress external preflight** must run afterward to prove public TLS, health, MCP authentication and OAuth metadata from outside the VPS.
+This separation is intentional: zSSH owns the immutable release/deployment helpers and readiness contract, while zCloud owns shell/build/test/deploy execution on `vps-bb300bba`.
