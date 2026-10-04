@@ -27,10 +27,10 @@ jobs:
       main_protected: ${{ steps.main-protection.outputs.protected }}
       governance_verified: ${{ steps.governance-evidence.outputs.verified }}
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 22.23.3
       - name: Require canonical main ref for manual readiness audit
@@ -80,10 +80,10 @@ jobs:
     outputs:
       stage: ${{ steps.observe.outputs.stage }}
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 22.23.3
       - name: Observe DNS, HTTPS, MCP auth and OAuth metadata
@@ -123,7 +123,7 @@ jobs:
           appendFileSync(process.env.GITHUB_STEP_SUMMARY, lines.join("\n") + "\n");
           NODE
       - name: Upload public origin observation
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: zssh-public-origin-observation-${{ github.run_id }}
           path: ${{ runner.temp }}/zssh-public-origin-observation.json
@@ -165,10 +165,10 @@ jobs:
       ZSSH_REVIEW_FILE: ${{ vars.ZSSH_REVIEW_FILE || '/srv/zssh-review/sample.txt' }}
       ZSSH_REVIEW_WRITE_FILE: ${{ vars.ZSSH_REVIEW_WRITE_FILE || '/srv/zssh-review/output.txt' }}
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 22.23.3
       - name: Build secret-safe readiness receipt
@@ -222,7 +222,7 @@ jobs:
           set -Eeuo pipefail
           node scripts/sync-m5-blocking-issue.mjs "$READINESS_PATH"
       - name: Upload non-secret readiness receipt
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: zssh-openai-production-readiness-${{ github.run_id }}
           path: ${{ runner.temp }}/zssh-openai-production-readiness.json
