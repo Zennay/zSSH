@@ -67,3 +67,19 @@ test("manual production DNS dispatch is bound to the current protected main revi
 test("manual DNS publication still requires explicit confirmation", () => {
   assert.match(workflow, /if: github\.event_name == 'workflow_dispatch'[\s\S]*PUBLISH_ZSSH_PRODUCTION_DNS/);
 });
+
+test("production DNS workflow pins all reusable actions to immutable commit SHAs", () => {
+  assert.match(
+    workflow,
+    /uses: actions\/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4/,
+  );
+  assert.match(
+    workflow,
+    /uses: actions\/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4/,
+  );
+  assert.match(
+    workflow,
+    /uses: actions\/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4/,
+  );
+  assert.doesNotMatch(workflow, /uses:\s+[^\s]+@v\d+(?:\s|$)/);
+});
