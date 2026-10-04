@@ -32,7 +32,25 @@ test("ingress preflight automatically follows successful canonical production DN
   );
   assert.match(
     workflow,
-    /ZSSH_PLUGIN_MCP_URL: \$\{\{ github\.event_name == 'workflow_dispatch' && inputs\.mcp_url \|\| 'https:\/\/zssh\.cheapgpt\.shop\/mcp' \}\}/,
+    /ZSSH_PLUGIN_MCP_URL: https:\/\/zssh\.cheapgpt\.shop\/mcp/,
+  );
+  assert.doesNotMatch(workflow, /inputs\.mcp_url/);
+});
+
+test("manual production ingress evidence is bound to exact current protected main", () => {
+  assert.match(workflow, /workflow_dispatch:\s*\n/);
+  assert.match(workflow, /pull-requests: read/);
+  assert.match(
+    workflow,
+    /Require canonical protected-main manual preflight[\s\S]*test "\$GITHUB_REF" = "refs\/heads\/main"/,
+  );
+  assert.match(
+    workflow,
+    /Require canonical protected-main manual preflight[\s\S]*node scripts\/check-main-provenance\.mjs/,
+  );
+  assert.match(
+    workflow,
+    /Require canonical protected-main manual preflight[\s\S]*check-main-protection\.mjs --public-status --require-protected --require-current-sha/,
   );
 });
 
