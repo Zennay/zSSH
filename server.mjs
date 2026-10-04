@@ -637,6 +637,15 @@ function oauthToolError(extra, scope) {
   }
 }
 
+export function publicPairingStatus(pairing, { targetLabel = TARGET_LABEL } = {}) {
+  return {
+    paired: Boolean(pairing?.paired),
+    pending: Boolean(pairing?.pending),
+    target_label: targetLabel,
+    request_id: pairing?.request_id || null,
+  };
+}
+
 async function publicToolAuthorizationError(extra, scope, { requirePairing = true } = {}) {
   const oauthError = oauthToolError(extra, scope);
   if (oauthError) return oauthError;
@@ -653,13 +662,7 @@ async function publicToolAuthorizationError(extra, scope, { requirePairing = tru
     : "This OAuth profile is not paired to the Linux target. Call get_pairing_status to create a short-lived pairing request for local approval.";
   return {
     content: [{ type: "text", text: message }],
-    structuredContent: {
-      paired: false,
-      pending: Boolean(pairing.pending),
-      profile_id: pairing.profile_id,
-      request_id: pairing.request_id || null,
-      expires_at: pairing.expires_at || null,
-    },
+    structuredContent: publicPairingStatus(pairing),
     isError: true,
   };
 }
@@ -872,10 +875,8 @@ function createMcpServer() {
         outputSchema: {
           paired: z.boolean(),
           pending: z.boolean(),
-          profile_id: z.string().min(1),
           target_label: z.string().min(1),
           request_id: z.string().nullable().optional(),
-          expires_at: z.string().nullable().optional(),
         },
         annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
         ...publicSecurity(OAUTH_CONFIG?.readScope || "zssh:read", {
@@ -893,14 +894,7 @@ function createMcpServer() {
             resource: OAUTH_CONFIG?.resource || "",
             createRequest: true,
           });
-          const value = {
-            paired: Boolean(pairing.paired),
-            pending: Boolean(pairing.pending),
-            profile_id: pairing.profile_id,
-            target_label: TARGET_LABEL,
-            request_id: pairing.request_id || null,
-            expires_at: pairing.expires_at || null,
-          };
+          const value = publicPairingStatus(pairing);
           return {
             content: [{ type: "text", text: JSON.stringify(value) }],
             structuredContent: value,

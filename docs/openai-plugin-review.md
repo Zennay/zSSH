@@ -28,7 +28,8 @@ The public profile currently has:
 - a machine-validated Agent Plugins ZIP with five positive and three negative review cases;
 - a committed production icon plus deterministic ZIP construction, so the same inputs produce the same submission-bundle SHA-256;
 - privacy, terms, support, and annotation-justification documents;
-- the published `/privacy` listing page explicitly covers data categories, purpose, recipients, retention, and user controls, matching the self-hosted target/pairing model.
+- the published `/privacy` listing page explicitly covers data categories, purpose, recipients, retention, and user controls, matching the self-hosted target/pairing model;
+- public pairing responses expose only user-actionable connection state and the short-lived request ID; opaque profile IDs and internal expiry timestamps remain server-side.
 
 ## Connector UI
 
@@ -37,9 +38,10 @@ The only public UI is a compact connection card attached to `get_pairing_status`
 It shows:
 
 - the human-readable Linux target label;
-- the opaque zSSH profile ID;
-- whether the profile is connected, waiting for approval, or not paired;
+- whether the connection is paired, waiting for approval, or not paired;
 - the short-lived pairing request ID when one exists.
+
+The card deliberately does not render the internal opaque profile ID or request-expiry timestamp. Those values are not needed for the user's pairing action and stay server-side.
 
 The component has no external scripts, fonts, images, frames, or network origins. Its CSP therefore declares empty external allowlists.
 

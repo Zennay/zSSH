@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, writeFile, rm, symlink } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { classifyCommand, containsCredentialLikeSecret, gitCommandFor, getSystemdCapabilities, publicOutboundServerInfo, publicPathLooksSensitive, redactSecrets, resolveAllowedPath, runSafeProgram, systemdCommandFor, isMainEntry } from "../server.mjs";
+import { classifyCommand, containsCredentialLikeSecret, gitCommandFor, getSystemdCapabilities, publicOutboundServerInfo, publicPairingStatus, publicPathLooksSensitive, redactSecrets, resolveAllowedPath, runSafeProgram, systemdCommandFor, isMainEntry } from "../server.mjs";
 
 test("classifies read-only commands", () => {
   assert.equal(classifyCommand("systemctl status nginx"), "read_only");
@@ -227,4 +227,24 @@ test("outbound public server info keeps gateway policy authoritative and strips 
   for (const field of ["hostname", "uid", "allowed_roots", "safe_programs"]) {
     assert.equal(Object.hasOwn(info, field), false, field);
   }
+});
+
+
+test("public pairing status exposes only user-actionable metadata", () => {
+  const value = publicPairingStatus({
+    paired: false,
+    pending: true,
+    profile_id: "zssh_deadbeefdeadbeefdeadbeefdeadbeef",
+    request_id: "pair_0123456789abcdef01234567",
+    expires_at: "2026-10-04T04:30:00.000Z",
+  }, { targetLabel: "Reviewer target" });
+
+  assert.deepEqual(value, {
+    paired: false,
+    pending: true,
+    target_label: "Reviewer target",
+    request_id: "pair_0123456789abcdef01234567",
+  });
+  assert.equal(Object.hasOwn(value, "profile_id"), false);
+  assert.equal(Object.hasOwn(value, "expires_at"), false);
 });
