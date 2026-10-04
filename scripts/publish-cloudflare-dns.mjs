@@ -51,9 +51,9 @@ function cloudflareErrorSummary(body, sensitiveValues = []) {
   return errors.slice(0, 3).map(error => {
     const code = Number.isFinite(Number(error?.code)) ? String(error.code) : "unknown";
     const message = redactSensitiveValue(
-      String(error?.message || "Cloudflare API error").replace(/[\r\n]+/g, " ").slice(0, 180),
+      String(error?.message || "Cloudflare API error").replace(/[\r\n]+/g, " "),
       sensitiveValues,
-    );
+    ).slice(0, 180);
     return `${code}: ${message}`;
   }).join("; ");
 }
