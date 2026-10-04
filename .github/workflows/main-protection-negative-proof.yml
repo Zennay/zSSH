@@ -1,0 +1,67 @@
+name: zSSH main protection negative proof
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type PROVE_ZSSH_MAIN_PROTECTION to run the controlled rejected direct-write proof
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  provenance:
+    name: Require canonical merged-PR provenance
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require canonical main ref
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test "$GITHUB_REF" = "refs/heads/main"
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Verify canonical main provenance
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node scripts/check-main-provenance.mjs
+      - name: Require public protected flag before privileged proof
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node scripts/check-main-protection.mjs --public-status --require-protected
+
+  negative-proof:
+    name: Prove normal direct main write is rejected
+    needs: provenance
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: repository-governance
+    env:
+      ZSSH_REPO_ADMIN_TOKEN: ${{ secrets.ZSSH_REPO_ADMIN_TOKEN }}
+      ZSSH_MAIN_PROTECTION_CANARY_TOKEN: ${{ secrets.ZSSH_MAIN_PROTECTION_CANARY_TOKEN }}
+      ZSSH_MAIN_PROTECTION_PROOF_CONFIRM: ${{ inputs.confirmation }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Attempt controlled direct write and require policy rejection
+        shell: bash
+        env:
+          RECEIPT_PATH: ${{ runner.temp }}/zssh-main-protection-negative-proof.json
+        run: |
+          set -Eeuo pipefail
+          node scripts/prove-main-protection-rejection.mjs | tee "$RECEIPT_PATH"
+      - name: Upload non-secret rejection receipt
+        uses: actions/upload-artifact@v4
+        with:
+          name: zssh-main-protection-negative-proof-${{ github.run_id }}
+          path: ${{ runner.temp }}/zssh-main-protection-negative-proof.json
+          if-no-files-found: error
+          retention-days: 30
