@@ -27,7 +27,8 @@ The public profile currently has:
 - a deterministic reviewer fixture and an end-to-end production submission probe;
 - a machine-validated Agent Plugins ZIP with five positive and three negative review cases;
 - a committed production icon plus deterministic ZIP construction, so the same inputs produce the same submission-bundle SHA-256;
-- privacy, terms, support, and annotation-justification documents.
+- privacy, terms, support, and annotation-justification documents;
+- the published `/privacy` listing page explicitly covers data categories, purpose, recipients, retention, and user controls, matching the self-hosted target/pairing model.
 
 ## Connector UI
 
