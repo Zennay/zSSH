@@ -83,3 +83,11 @@ test("all production installers verify tracked release contents against the exac
     assert.match(source, /\nverify_release_provenance\n/);
   }
 });
+
+
+test("all production installers rebuild runtime dependencies from the locked graph before activation", () => {
+  const expected = /verify_release_provenance\n"\$NPM_BIN" ci --prefix "\$RELEASE" --omit=dev --ignore-scripts --no-audit --no-fund\nverify_release_provenance/;
+  for (const source of [installer, publicGatewayInstaller, targetAgentInstaller]) {
+    assert.match(source, expected);
+  }
+});
