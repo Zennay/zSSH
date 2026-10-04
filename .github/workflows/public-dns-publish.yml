@@ -1,6 +1,10 @@
 name: zSSH production DNS publish
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/openai-production-dns-trigger"
   workflow_dispatch:
     inputs:
       public_base_url:
@@ -20,6 +24,7 @@ on:
 
 permissions:
   contents: read
+  pull-requests: read
 
 concurrency:
   group: zssh-production-dns-publish
@@ -34,14 +39,25 @@ jobs:
     env:
       CLOUDFLARE_ZONE_ID: ${{ vars.CLOUDFLARE_ZONE_ID }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      ZSSH_PUBLIC_BASE_URL: ${{ inputs.public_base_url }}
-      ZSSH_PUBLIC_IPV4: ${{ inputs.ipv4 }}
+      ZSSH_PUBLIC_BASE_URL: ${{ github.event_name == 'workflow_dispatch' && inputs.public_base_url || 'https://zssh.cheapgpt.shop' }}
+      ZSSH_PUBLIC_IPV4: ${{ github.event_name == 'workflow_dispatch' && inputs.ipv4 || '198.244.191.182' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 20
+      - name: Require reviewed protected-main DNS activation
+        if: github.event_name == 'push'
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -Eeuo pipefail
+          test "$(cat .github/openai-production-dns-trigger)" = "PUBLISH_ZSSH_PRODUCTION_DNS"
+          node scripts/check-main-provenance.mjs
+          node scripts/check-main-protection.mjs --public-status --require-protected
       - name: Require explicit production DNS confirmation
+        if: github.event_name == 'workflow_dispatch'
         shell: bash
         run: |
           set -Eeuo pipefail
