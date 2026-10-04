@@ -140,3 +140,22 @@ test("admin credential is exposed only after canonical provenance and never with
   assert.doesNotMatch(workflow, /contents: write/);
   assert.doesNotMatch(workflow, /self-hosted/);
 });
+
+test("merged PRs autonomously attempt canonical protection only after provenance", () => {
+  assert.match(
+    workflow,
+    /pull_request:\n    types:\n      - closed\n    branches:\n      - main/,
+  );
+  assert.match(
+    workflow,
+    /provenance:\n    name: Require canonical merged-PR provenance\n    if: github\.event_name == 'workflow_dispatch' \|\| github\.event\.pull_request\.merged == true/,
+  );
+  assert.match(
+    workflow,
+    /Bind merged PR event to canonical main SHA[\s\S]*MERGED_PR_SHA: \$\{\{ github\.event\.pull_request\.merge_commit_sha \}\}[\s\S]*test "\$GITHUB_SHA" = "\$MERGED_PR_SHA"/,
+  );
+  assert.match(
+    workflow,
+    /ZSSH_MAIN_PROTECTION_CONFIRM: \$\{\{ github\.event_name == 'workflow_dispatch' && inputs\.confirmation \|\| 'PROTECT_ZSSH_MAIN' \}\}/,
+  );
+});
