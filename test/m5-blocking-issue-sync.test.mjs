@@ -238,7 +238,7 @@ test("sync uses the token only as an Authorization header", async () => {
   assert.doesNotMatch(request.init.body, new RegExp(token));
   assert.match(request.init.body, /M5 active gate: dns_publication/);
   assert.match(request.init.body, /Cloudflare production DNS publication/);
-  assert.match(request.init.body, /actions\\/runs\\/37299999999/);
+  assert.match(request.init.body, /actions\/runs\/37299999999/);
   assert.equal(result.workflow_run_id, "37299999999");
 });
 
