@@ -1,6 +1,9 @@
 name: zSSH public ingress external preflight
 
 on:
+  workflow_run:
+    workflows: ["zSSH production DNS publish"]
+    types: [completed]
   workflow_dispatch:
     inputs:
       mcp_url:
@@ -18,16 +21,29 @@ concurrency:
 jobs:
   preflight:
     name: Prove public DNS, TLS, health and MCP auth boundary
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    env:
+      ZSSH_PLUGIN_MCP_URL: ${{ github.event_name == 'workflow_dispatch' && inputs.mcp_url || 'https://zssh.cheapgpt.shop/mcp' }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+          persist-credentials: false
+      - name: Require successful canonical production DNS source
+        if: github.event_name == 'workflow_run'
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test "${{ github.event.workflow_run.conclusion }}" = "success"
+          test "${{ github.event.workflow_run.head_branch }}" = "main"
+          test "${{ github.event.workflow_run.head_repository.full_name }}" = "${{ github.repository }}"
       - uses: actions/setup-node@v4
         with:
           node-version: 20
       - name: Run external ingress preflight
         env:
-          ZSSH_PLUGIN_MCP_URL: ${{ inputs.mcp_url }}
           EVIDENCE_PATH: ${{ runner.temp }}/zssh-public-ingress-preflight.json
         shell: bash
         run: |
