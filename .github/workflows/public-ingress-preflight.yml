@@ -27,14 +27,18 @@ jobs:
         with:
           ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
           persist-credentials: false
-      - name: Require successful canonical production DNS source
+      - name: Require successful exact-current-main production DNS source
         if: github.event_name == 'workflow_run'
         shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -Eeuo pipefail
           test "${{ github.event.workflow_run.conclusion }}" = "success"
           test "${{ github.event.workflow_run.head_branch }}" = "main"
           test "${{ github.event.workflow_run.head_repository.full_name }}" = "${{ github.repository }}"
+          GITHUB_SHA="${{ github.event.workflow_run.head_sha }}" node scripts/check-main-provenance.mjs
+          GITHUB_SHA="${{ github.event.workflow_run.head_sha }}" node scripts/check-main-protection.mjs --public-status --require-protected --require-current-sha
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22.23.3
