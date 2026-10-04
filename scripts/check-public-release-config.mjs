@@ -89,7 +89,7 @@ export function validatePublicReleaseConfig(env = process.env) {
     requireValue(env, "ZSSH_PLUGIN_MCP_URL"),
     { name: "ZSSH_PLUGIN_MCP_URL" }
   );
-  const demoRecordingUrl = requireHttpsUrl(env, "ZSSH_PLUGIN_DEMO_RECORDING_URL");
+  const demoRecordingUrl = requirePublicHttpsUrl(env, "ZSSH_PLUGIN_DEMO_RECORDING_URL");
   const oauthIssuerUrl = requirePublicHttpsUrl(env, "ZSSH_OAUTH_ISSUER");
   const auth0ManagementBaseUrl = requirePublicHttpsUrl(env, "AUTH0_MANAGEMENT_BASE_URL");
   const auth0ManagementToken = requireValue(env, "AUTH0_MANAGEMENT_API_TOKEN", { minLength: 20 });
@@ -230,7 +230,7 @@ export function runSelfTest() {
   assertThrows(() => validatePublicReleaseConfig({ ...good, ZSSH_PLUGIN_MCP_URL: "https://127.0.0.1/mcp" }), /public hostname/);
   assertThrows(() => validatePublicReleaseConfig({ ...good, ZSSH_PLUGIN_MCP_URL: "https://mcp.zssh.dev/other" }), /\/mcp endpoint/);
   assertThrows(() => validatePublicReleaseConfig({ ...good, ZSSH_PLUGIN_MCP_URL: "https://mcp.zssh.dev/mcp?target=review" }), /query parameters/);
-  assertThrows(() => validatePublicReleaseConfig({ ...good, ZSSH_PLUGIN_DEMO_RECORDING_URL: "http://review.example/demo" }), /HTTPS URL/);
+  assertThrows(() => validatePublicReleaseConfig({ ...good, ZSSH_PLUGIN_DEMO_RECORDING_URL: "http://review.example/demo" }), /HTTPS URL/);\n  assertThrows(() => validatePublicReleaseConfig({ ...good, ZSSH_PLUGIN_DEMO_RECORDING_URL: "https://127.0.0.1/demo" }), /public DNS hostname/);
   assertThrows(() => validatePublicReleaseConfig({ ...good, ZSSH_OAUTH_ISSUER: "http://tenant.eu.auth0.com" }), /HTTPS URL/);
   assertThrows(() => validatePublicReleaseConfig({ ...good, AUTH0_MANAGEMENT_BASE_URL: "https://127.0.0.1" }), /public DNS hostname/);
   assertThrows(() => validatePublicReleaseConfig({ ...good, AUTH0_MANAGEMENT_API_TOKEN: "short" }), /at least 20/);
