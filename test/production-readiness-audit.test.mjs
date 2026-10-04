@@ -56,7 +56,7 @@ complete.ZSSH_CHATGPT_REVIEW_SHA256 = computeHostSurfaceReviewFingerprint({
 
 test("classifies an empty production environment into actionable M5 lanes", () => {
   const result = buildProductionReadinessAudit({});
-  assert.equal(result.schema_version, 2);
+  assert.equal(result.schema_version, 3);
   assert.equal(result.phase, "M5");
   assert.equal(result.ready.repository_governance, false);
   assert.equal(result.ready.dns_publication, false);
@@ -67,9 +67,12 @@ test("classifies an empty production environment into actionable M5 lanes", () =
     "CLOUDFLARE_API_TOKEN",
   ]);
   assert.deepEqual(result.lanes.dns_publication.invalid, []);
+  assert.equal(result.execution_state, "internal_action_available");
   assert.equal(result.next_actions[0].lane, "repository_governance");
   assert.equal(result.next_actions[0].gate_kind, "derived_evidence");
   assert.equal(result.next_actions[0].requires_external_input, false);
+  assert.deepEqual(result.next_internal_actions.map(item => item.lane), ["repository_governance"]);
+  assert.equal(result.next_external_action.lane, "dns_publication");
   assert.equal(result.next_actions[0].action.includes("set ZSSH_MAIN_PROTECTION_VERIFIED"), false);
   assert.equal(result.next_actions[1].lane, "dns_publication");
   assert.equal(result.next_actions[1].gate_kind, "provider_credentials");
@@ -77,6 +80,24 @@ test("classifies an empty production environment into actionable M5 lanes", () =
   assert.equal(result.next_actions[2].lane, "auth0_preflight");
   assert.equal(result.next_actions[2].gate_kind, "provider_configuration");
   assert.equal(result.next_actions[2].requires_external_input, true);
+  assert.deepEqual(result.external_input_gates, [
+    "dns_publication",
+    "auth0_preflight",
+    "reviewer_fixture",
+    "portal_and_host_attestations",
+  ]);
+});
+
+test("marks an external-only M5 state so autonomous workers do not churn", () => {
+  const result = buildProductionReadinessAudit({
+    ZSSH_MAIN_PROTECTION_VERIFIED: "1",
+    ZSSH_MAIN_BRANCH_PROTECTED: "1",
+  });
+
+  assert.equal(result.execution_state, "external_input_required");
+  assert.deepEqual(result.next_internal_actions, []);
+  assert.equal(result.next_external_action.lane, "dns_publication");
+  assert.equal(result.next_external_action.requires_external_input, true);
   assert.deepEqual(result.external_input_gates, [
     "dns_publication",
     "auth0_preflight",
@@ -191,6 +212,9 @@ test("never serializes protected values", () => {
     assert.equal(serialized.includes(protectedValue), false);
   }
   assert.equal(result.ready.final_release_config, true);
+  assert.equal(result.execution_state, "ready_for_protected_probe");
+  assert.deepEqual(result.next_internal_actions, []);
+  assert.equal(result.next_external_action, null);
   assert.deepEqual(result.final_release_config.invalid, []);
 });
 
@@ -299,6 +323,8 @@ test("operator docs do not require the retired mutable governance attestation", 
 
 
 test("readiness workflow summary exposes gate classification for autonomous consumers", () => {
+  assert.ok(readinessWorkflow.includes("Execution state: ${result.execution_state}"));
+  assert.ok(readinessWorkflow.includes("Next external gate: ${result.next_external_action?.lane || \"none\"}"));
   assert.ok(readinessWorkflow.includes("Gate kind: ${item.gate_kind}"));
   assert.ok(readinessWorkflow.includes('Requires external input: ${item.requires_external_input ? "yes" : "no"}'));
 });
