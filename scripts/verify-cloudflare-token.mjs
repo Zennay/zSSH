@@ -40,7 +40,10 @@ export async function verifyCloudflareApiToken({
   }
 
   if (!response.ok || body?.success !== true) {
-    fail(`Cloudflare token verification failed: HTTP ${response.status}`);
+    fail(
+      `Cloudflare user-owned API token verification failed: HTTP ${response.status}; ` +
+      "CLOUDFLARE_API_TOKEN must be a user-owned token from My Profile > API Tokens",
+    );
   }
 
   const status = String(body?.result?.status || "").toLowerCase();
