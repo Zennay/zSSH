@@ -15,7 +15,7 @@ const sha = "a".repeat(40);
 
 function receipt(overrides = {}) {
   return {
-    schema_version: 4,
+    schema_version: 5,
     phase: "M5",
     execution_state: "external_input_only",
     blocking_gate: "dns_publication",
@@ -23,7 +23,7 @@ function receipt(overrides = {}) {
       lane: "dns_publication",
       gate_kind: "provider_credentials",
       requires_external_input: true,
-      action: "Provision a protected Cloudflare API token scoped only to cheapgpt.shop with Zone Read + DNS Write. For durable CI/CD prefer an account-owned token and set CLOUDFLARE_ACCOUNT_ID; user-owned tokens from My Profile > API Tokens remain supported when CLOUDFLARE_ACCOUNT_ID is unset. The preflight uses /accounts/{account_id}/tokens/verify only for the explicit account path and /user/tokens/verify otherwise. Then trigger the guarded zSSH production DNS publisher through a reviewed change to .github/openai-production-dns-trigger: keep line 1 exactly PUBLISH_ZSSH_PRODUCTION_DNS and add or rotate line 2 as activation-id=<8-80 safe characters>, then merge to protected main. Never place a credential in the marker.",
+      action: "Provision a protected Cloudflare API token scoped only to cheapgpt.shop with Zone Read + DNS Write. For durable CI/CD prefer an account-owned token and set CLOUDFLARE_ACCOUNT_ID; user-owned tokens from My Profile > API Tokens remain supported when CLOUDFLARE_ACCOUNT_ID is unset. The preflight uses /accounts/{account_id}/tokens/verify only for the explicit account path and /user/tokens/verify otherwise. The hourly protected readiness audit will detect the new credential without a repository push; once the lane becomes provider_execution, dispatch the guarded \"zSSH production DNS publish\" workflow from exact canonical main with confirmation PUBLISH_ZSSH_PRODUCTION_DNS. CLOUDFLARE_ZONE_ID remains an optional legacy override for DNS-write-only tokens.",
       missing: ["CLOUDFLARE_API_TOKEN"],
       invalid: [],
     },
@@ -53,10 +53,10 @@ test("renders only secret-safe blocking metadata", () => {
   assert.match(result.body, /My Profile > API Tokens/);
   assert.match(result.body, /\/accounts\/\{account_id\}\/tokens\/verify/);
   assert.match(result.body, /\/user\/tokens\/verify/);
-  assert.match(result.body, /\.github\/openai-production-dns-trigger/);
+  assert.match(result.body, /hourly protected readiness audit/);
+  assert.match(result.body, /zSSH production DNS publish/);
+  assert.match(result.body, /exact canonical main/);
   assert.match(result.body, /PUBLISH_ZSSH_PRODUCTION_DNS/);
-  assert.match(result.body, /activation-id=<8-80 safe characters>/);
-  assert.match(result.body, /Never place a credential in the marker/);
   assert.match(result.body, /auth0_preflight/);
   assert.match(result.body, /final_production_probe/);
   assert.match(result.body, /Protected production submission probe/);

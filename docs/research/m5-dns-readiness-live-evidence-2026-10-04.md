@@ -22,8 +22,9 @@ Unknown, URL-contract, missing, or explicit `dns` stages fail closed.
 
 ## Handoff semantics
 
-- **No live DNS + no Cloudflare token:** external-input gate; provision the scoped token.
-- **No live DNS + token present:** internal-action gate; run the guarded production DNS publisher.
+- **No live DNS + no Cloudflare token:** external-input gate; provision the scoped token. The hourly protected readiness audit detects environment-only credential changes without requiring a repository push.
+- **No live DNS + token present:** internal-action gate; dispatch **zSSH production DNS publish** from exact canonical `main` and enter `PUBLISH_ZSSH_PRODUCTION_DNS`. This is the shortest guarded path because the workflow itself re-verifies merged-PR provenance, branch protection, exact-current main, provider validity, dry-run/apply binding, and external convergence.
+- **Reviewed push activation:** the `.github/openai-production-dns-trigger` marker remains available when a code-reviewed push activation is specifically preferred, but it is not required for the normal post-credential handoff.
 - **Live DNS observed:** DNS publication remains green even if the one-time provider credential is later removed.
 - **Invalid optional zone override:** fail closed until the override is repaired or removed.
 
@@ -31,4 +32,4 @@ This keeps credential presence separate from deployment evidence and prevents th
 
 ## Security impact
 
-No credential values are added to artifacts, issue bodies, or workflow outputs. Only the existing public-origin stage enum crosses job boundaries. The production publisher remains separately guarded by exact-current protected-main provenance and the protected `openai-production` environment.
+No credential values are added to artifacts, issue bodies, or workflow outputs. Only the existing public-origin stage enum crosses job boundaries. The production publisher remains separately guarded by exact-current protected-main provenance and the protected `openai-production` environment. Manual dispatch also requires the immutable confirmation phrase, so preferring it in the readiness handoff removes an unnecessary code-change cycle without weakening the mutation boundary.
