@@ -195,6 +195,31 @@ test("dry-run exposes an existing A record but requires an explicit update preco
   );
 });
 
+test("dry-run with reviewed human precondition emits an apply-ready state fingerprint", async () => {
+  const existing = {
+    id: recordId,
+    type: "A",
+    name: "zssh.cheapgpt.shop",
+    content: "203.0.113.10",
+    ttl: 300,
+    proxied: true,
+  };
+  let calls = 0;
+  const result = await reconcileCloudflareDns(baseArgs(async () => {
+    calls += 1;
+    return response([existing]);
+  }, {
+    expectedCurrentIpv4: "203.0.113.10",
+  }));
+
+  assert.equal(result.action, "would_update");
+  assert.equal(result.previous_ipv4, "203.0.113.10");
+  assert.equal(result.previous_ttl, 300);
+  assert.equal(result.previous_proxied, true);
+  assert.equal(result.previous_state_sha256, cloudflareDnsRecordStateSha256(existing));
+  assert.equal(calls, 1);
+});
+
 test("apply refuses an existing A record without exact reviewed human and plan preconditions", async () => {
   const records = [
     { id: recordId, type: "A", name: "zssh.cheapgpt.shop", content: "203.0.113.10", ttl: 300, proxied: true },
