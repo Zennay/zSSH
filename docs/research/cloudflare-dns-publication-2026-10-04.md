@@ -38,14 +38,14 @@ The reconciler:
 8. is idempotent and returns `noop` when the desired state already exists;
 9. never prints the API token or zone ID in its evidence output.
 
-The workflow runs in the protected `openai-production` environment. Manual dispatch requires the explicit phrase `PUBLISH_ZSSH_PRODUCTION_DNS`; a reviewed canonical-main activation may also run through the dedicated `.github/openai-production-dns-trigger` marker after main-provenance and branch-protection checks pass. Both paths perform a dry-run first, apply the change, re-read Cloudflare, require an idempotent `noop` result, and then prove external DNS convergence.
+The workflow runs in the protected `openai-production` environment. Its production destination is repository-locked to `https://zssh.cheapgpt.shop` / `198.244.191.182` / zone `cheapgpt.shop`; manual dispatch cannot substitute another hostname or address. Manual dispatch requires only the explicit phrase `PUBLISH_ZSSH_PRODUCTION_DNS`; a reviewed canonical-main activation may also run through the dedicated `.github/openai-production-dns-trigger` marker after main-provenance and branch-protection checks pass. Both paths perform a dry-run first, apply the change, re-read Cloudflare, require an idempotent `noop` result, and then prove external DNS convergence.
 
 ## Required protected configuration
 
 - environment secret: `CLOUDFLARE_API_TOKEN`
 - preferred token scope: only the `cheapgpt.shop` zone with `Zone Read` + DNS write permission
 - optional compatibility variable: `CLOUDFLARE_ZONE_ID` for a DNS-write-only token; when absent, zSSH discovers the zone ID without printing it
-- optional zone-name override: `CLOUDFLARE_ZONE_NAME` (defaults to `cheapgpt.shop`)
+- the production workflow pins `CLOUDFLARE_ZONE_NAME=cheapgpt.shop`; the generic repository CLI still accepts a zone-name override for non-production testing
 
 The token is an external credential and is intentionally not stored in the repository.
 
