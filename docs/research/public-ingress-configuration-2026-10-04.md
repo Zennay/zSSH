@@ -32,3 +32,10 @@ The renderer does not claim that DNS resolves, TLS has been issued, OAuth exists
 - Unit tests cover valid rendering, custom isolated port handling, unsafe origins, the 8788 isolation boundary and CLI fail-closed behavior.
 - The OpenAI public release contract workflow syntax-checks the renderer and runs its tests.
 - Pull-request and push path filters include both renderer and test, preserving release-gate trigger parity.
+
+
+## DNS trailing-dot normalization follow-up
+
+The canonical Caddy renderer now normalizes one terminal DNS root dot before classifying or rendering the public hostname. This keeps ingress behavior aligned with the shared M5 public-hostname contract: a legitimate absolute DNS spelling such as `mcp.zssh.dev.` is rendered as `mcp.zssh.dev`, while reserved hosts such as `example.com.` or `gateway.local.` cannot bypass the existing fail-closed checks.
+
+This is local configuration validation only. It does not perform DNS resolution, request certificates, mutate provider state, or mark the live ingress gate complete.
