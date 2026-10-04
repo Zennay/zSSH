@@ -40,3 +40,25 @@ The release gate therefore does not fabricate automatic proof from incomplete AP
 5. Record only the boolean attestation in release evidence; do not serialize credentials or administrative tokens.
 
 This deliberately makes final production submission fail closed until issue #100 is closed with preventive evidence rather than relying only on after-the-fact provenance quarantine.
+
+
+## Repository-owned verification command
+
+The repository now contains a fail-closed verifier for the administrative setting tracked in issue #100:
+
+```bash
+GITHUB_REPOSITORY=Zennay/zSSH \
+GITHUB_TOKEN="<admin token with branch-protection read access>" \
+npm run repo:main-protection:verify
+```
+
+The verifier reads the live `main` protection state and only returns green when all of these repository-policy conditions are true:
+
+- pull-request based changes are required;
+- the zSSH CI job context `test` is required;
+- protection applies to administrators;
+- no explicit pull-request bypass users, teams, or apps are configured.
+
+The command does not serialize the token into evidence. A 404, inaccessible protection endpoint, missing required rule, missing required check, disabled admin enforcement, or configured bypass actor fails closed.
+
+This verifier intentionally does **not** replace the acceptance criterion for a controlled rejected-direct-push test. After the setting is applied, capture both the green verifier output and the rejected write proof before setting `ZSSH_MAIN_PROTECTION_VERIFIED=1`.
