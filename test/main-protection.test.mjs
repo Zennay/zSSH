@@ -5,6 +5,7 @@ import {
   inspectBranchProtectionFlag,
   summarizeBranchMetadata,
   verifyMainProtection,
+  verifyMainProtectionNegativeProof,
 } from "../scripts/check-main-protection.mjs";
 
 const greenProtection = {
@@ -163,5 +164,53 @@ test("public branch status fails closed when metadata is unavailable", async () 
         fetchImpl: async () => response(403, {}),
       }),
     /HTTP 403/,
+  );
+});
+
+test("verifies immutable rejected-direct-write evidence against current main ancestry", async () => {
+  const canary = "284dadd80a7e46fc9203ed5e5caa9a5709e3f24b";
+  const parent = "fa6d8e2f684140043f4e2c41233cb87be804280d";
+  const current = "4b72ef9b938306e4c29bc27b47e9cef89ad2e8af";
+  const tree = "1".repeat(40);
+  const bodies = new Map([
+    ["/issues/100", { state: "closed", state_reason: "completed" }],
+    ["/issues/100/comments?per_page=100", [{ body: "canary " + canary + " rejected with HTTP 422: Changes must be made through a pull request" }]],
+    ["/git/commits/" + canary, { tree: { sha: tree }, parents: [{ sha: parent }] }],
+    ["/git/commits/" + parent, { tree: { sha: tree } }],
+    ["/branches/main", { protected: true, commit: { sha: current } }],
+    ["/compare/" + parent + "..." + current, { status: "ahead" }],
+  ]);
+  const result = await verifyMainProtectionNegativeProof({
+    repository: "Zennay/zSSH",
+    token: "actions-token",
+    canarySha: canary,
+    fetchImpl: async (url) => {
+      const parsed = new URL(url);
+      const path = parsed.pathname.replace("/repos/Zennay/zSSH", "") + parsed.search;
+      if (!bodies.has(path)) return response(404, {});
+      return response(200, bodies.get(path));
+    },
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.lineage_status, "ahead");
+  assert.equal(result.current_main_sha, current);
+  assert.equal(JSON.stringify(result).includes("actions-token"), false);
+});
+
+test("negative proof fails closed when rejection evidence is stale", async () => {
+  const canary = "284dadd80a7e46fc9203ed5e5caa9a5709e3f24b";
+  await assert.rejects(
+    () => verifyMainProtectionNegativeProof({
+      repository: "Zennay/zSSH",
+      canarySha: canary,
+      fetchImpl: async (url) => {
+        const parsed = new URL(url);
+        const path = parsed.pathname.replace("/repos/Zennay/zSSH", "") + parsed.search;
+        if (path === "/issues/100") return response(200, { state: "closed", state_reason: "completed" });
+        if (path === "/issues/100/comments?per_page=100") return response(200, [{ body: "missing rejection evidence" }]);
+        return response(404, {});
+      },
+    }),
+    /missing required marker/,
   );
 });
