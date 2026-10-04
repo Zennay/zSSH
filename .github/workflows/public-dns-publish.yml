@@ -1,0 +1,91 @@
+name: zSSH production DNS publish
+
+on:
+  workflow_dispatch:
+    inputs:
+      public_base_url:
+        description: Exact public zSSH HTTPS origin
+        required: true
+        default: https://zssh.cheapgpt.shop
+        type: string
+      ipv4:
+        description: Exact direct public IPv4 for the zSSH origin
+        required: true
+        default: 198.244.191.182
+        type: string
+      confirmation:
+        description: Type PUBLISH_ZSSH_PRODUCTION_DNS to permit the DNS write
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: zssh-production-dns-publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Publish DNS-only production A record
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: openai-production
+    env:
+      CLOUDFLARE_ZONE_ID: ${{ vars.CLOUDFLARE_ZONE_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      ZSSH_PUBLIC_BASE_URL: ${{ inputs.public_base_url }}
+      ZSSH_PUBLIC_IPV4: ${{ inputs.ipv4 }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Require explicit production DNS confirmation
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test "${{ inputs.confirmation }}" = "PUBLISH_ZSSH_PRODUCTION_DNS"
+      - name: Validate desired Cloudflare DNS change without mutation
+        env:
+          ZSSH_DNS_APPLY: "0"
+          EVIDENCE_PATH: ${{ runner.temp }}/zssh-cloudflare-dns-plan.json
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          node scripts/publish-cloudflare-dns.mjs | tee "$EVIDENCE_PATH"
+      - name: Publish exact DNS-only A record
+        env:
+          ZSSH_DNS_APPLY: "1"
+          EVIDENCE_PATH: ${{ runner.temp }}/zssh-cloudflare-dns-result.json
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          node scripts/publish-cloudflare-dns.mjs | tee "$EVIDENCE_PATH"
+      - name: Re-read Cloudflare API and prove idempotent desired state
+        env:
+          ZSSH_DNS_APPLY: "0"
+          EVIDENCE_PATH: ${{ runner.temp }}/zssh-cloudflare-dns-verify.json
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          node scripts/publish-cloudflare-dns.mjs | tee "$EVIDENCE_PATH"
+          node --input-type=module - "$EVIDENCE_PATH" <<'NODE'
+          import { readFileSync } from "node:fs";
+          const evidence = JSON.parse(readFileSync(process.argv[2], "utf8"));
+          if (evidence.ok !== true || evidence.action !== "noop" || evidence.proxied !== false) {
+            throw new Error("Cloudflare DNS did not converge to the exact DNS-only A-record state");
+          }
+          console.log("ZSSH_PRODUCTION_DNS_GREEN");
+          NODE
+      - name: Upload non-secret DNS evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zssh-cloudflare-dns-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/zssh-cloudflare-dns-plan.json
+            ${{ runner.temp }}/zssh-cloudflare-dns-result.json
+            ${{ runner.temp }}/zssh-cloudflare-dns-verify.json
+          if-no-files-found: warn
+          retention-days: 30
