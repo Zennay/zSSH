@@ -72,6 +72,17 @@ test("classifies an empty production environment into actionable M5 lanes", () =
   assert.equal(result.next_actions[2].lane, "auth0_preflight");
 });
 
+test("repository-governance guidance never revives the retired mutable attestation", () => {
+  const result = buildProductionReadinessAudit({});
+  const governance = result.next_actions.find(item => item.lane === "repository_governance");
+
+  assert.ok(governance);
+  assert.match(governance.action, /derived from live GitHub main protection/);
+  assert.match(governance.action, /immutable issue #100 rejected-direct-write proof/);
+  assert.doesNotMatch(governance.action, /set ZSSH_MAIN_PROTECTION_VERIFIED=1/);
+  assert.match(governance.action, /do not configure a persistent operator-set ZSSH_MAIN_PROTECTION_VERIFIED value/);
+});
+
 test("rejects malformed configured values instead of reporting a false-ready lane", () => {
   const result = buildProductionReadinessAudit({
     ...complete,
