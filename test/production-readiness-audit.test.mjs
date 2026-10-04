@@ -280,6 +280,6 @@ test("operator docs do not require the retired mutable governance attestation", 
     assert.equal(doc.includes("# ZSSH_MAIN_PROTECTION_VERIFIED=1"), false);
   }
   assert.ok(releaseChecklist.includes("issue #100"));
-  assert.ok(releaseChecklist.includes("derive \\`ZSSH_MAIN_PROTECTION_VERIFIED=1\\` in-process"));
+  assert.ok(releaseChecklist.includes("No persistent operator-set governance attestation is required."));
   assert.ok(reviewDoc.includes("Repository governance is derived live from protected main + immutable issue #100 negative-proof evidence."));
 });
