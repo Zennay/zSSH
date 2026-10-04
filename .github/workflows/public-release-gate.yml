@@ -284,6 +284,8 @@ jobs:
       ZSSH_CHATGPT_DESKTOP_REVIEWED: ${{ vars.ZSSH_CHATGPT_DESKTOP_REVIEWED }}
       ZSSH_CHATGPT_MOBILE_REVIEWED: ${{ vars.ZSSH_CHATGPT_MOBILE_REVIEWED }}
       ZSSH_CHATGPT_REVIEW_SHA256: ${{ vars.ZSSH_CHATGPT_REVIEW_SHA256 }}
+      ZSSH_CODEX_REVIEWED: ${{ vars.ZSSH_CODEX_REVIEWED }}
+      ZSSH_CODEX_REVIEW_SHA256: ${{ vars.ZSSH_CODEX_REVIEW_SHA256 }}
       ZSSH_OPENAI_DOMAIN_VERIFIED: ${{ vars.ZSSH_OPENAI_DOMAIN_VERIFIED }}
       ZSSH_OPENAI_VERIFIED_MCP_ORIGIN: ${{ vars.ZSSH_OPENAI_VERIFIED_MCP_ORIGIN }}
       ZSSH_OPENAI_TOOL_SCAN_VERIFIED: ${{ vars.ZSSH_OPENAI_TOOL_SCAN_VERIFIED }}
@@ -449,6 +451,12 @@ jobs:
           if (process.env.ZSSH_CHATGPT_MOBILE_REVIEWED !== "1") {
             throw new Error("production connection card has not been attested green in ChatGPT mobile");
           }
+          if (process.env.ZSSH_CODEX_REVIEWED !== "1") {
+            throw new Error("production plugin review cases have not been attested green in Codex");
+          }
+          if (process.env.ZSSH_CODEX_REVIEW_SHA256 !== hostSurface.chatgpt_review_sha256) {
+            throw new Error("Codex review attestation is stale for the current production endpoint/tool contract");
+          }
           if (process.env.ZSSH_OPENAI_DOMAIN_VERIFIED !== "1") {
             throw new Error("OpenAI portal domain verification is not attested green");
           }
@@ -488,6 +496,8 @@ jobs:
             chatgpt_desktop_reviewed: true,
             chatgpt_mobile_reviewed: true,
             chatgpt_review_sha256: hostSurface.chatgpt_review_sha256,
+            codex_reviewed: true,
+            codex_review_sha256: process.env.ZSSH_CODEX_REVIEW_SHA256,
             connection_card_sha256: hostSurface.connection_card_sha256,
             openai_domain_verified: true,
             verified_mcp_origin: process.env.ZSSH_OPENAI_VERIFIED_MCP_ORIGIN,
