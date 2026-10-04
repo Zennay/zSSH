@@ -13,7 +13,8 @@ jobs:
     name: Observe zSSH VPS runtime
     runs-on:
       - self-hosted
-      - haxlab
+      - zcloud
+      - vps
     timeout-minutes: 5
     steps:
       - name: Capture non-secret runtime evidence
@@ -32,4 +33,4 @@ jobs:
           echo "service_exec_start=$(systemctl show zssh.service -p ExecStart --value 2>/dev/null || echo unavailable)"
           echo "service_fragment=$(systemctl show zssh.service -p FragmentPath --value 2>/dev/null || echo unavailable)"
 
-# probe-trigger: second push after workflow registration
+# probe-trigger: permanent vps runner route
