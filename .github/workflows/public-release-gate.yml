@@ -150,8 +150,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 20
       - name: Self-test release configuration guard
@@ -190,8 +190,8 @@ jobs:
     outputs:
       governance_verified: ${{ steps.governance-evidence.outputs.verified }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 20
       - name: Require current main SHA to originate from a merged PR
@@ -243,8 +243,8 @@ jobs:
       OPENAI_APPS_CHALLENGE_TOKEN: ${{ secrets.OPENAI_APPS_CHALLENGE_TOKEN }}
       ZSSH_REQUIRE_OUTBOUND_AGENT: "1"
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 20
       - name: Install production probe dependencies
@@ -271,7 +271,7 @@ jobs:
           node scripts/check-public-ingress.mjs "$ZSSH_PLUGIN_MCP_URL" | tee "$INGRESS_REPORT_PATH"
       - name: Upload preflight evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: zssh-openai-preflight-${{ github.run_id }}
           path: |
@@ -447,7 +447,7 @@ jobs:
           console.log("OPENAI_PUBLIC_RELEASE_GATE_GREEN");
           NODE
       - name: Upload release bundle and evidence
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: zssh-openai-release-${{ github.run_id }}
           path: |

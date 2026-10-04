@@ -27,7 +27,7 @@ jobs:
     env:
       ZSSH_PLUGIN_MCP_URL: ${{ github.event_name == 'workflow_dispatch' && inputs.mcp_url || 'https://zssh.cheapgpt.shop/mcp' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
           persist-credentials: false
@@ -39,7 +39,7 @@ jobs:
           test "${{ github.event.workflow_run.conclusion }}" = "success"
           test "${{ github.event.workflow_run.head_branch }}" = "main"
           test "${{ github.event.workflow_run.head_repository.full_name }}" = "${{ github.repository }}"
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 20
       - name: Run external ingress preflight
@@ -50,7 +50,7 @@ jobs:
           set -Eeuo pipefail
           node scripts/check-public-ingress.mjs "$ZSSH_PLUGIN_MCP_URL" | tee "$EVIDENCE_PATH"
       - name: Upload non-secret ingress evidence
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: zssh-public-ingress-preflight-${{ github.run_id }}
           path: ${{ runner.temp }}/zssh-public-ingress-preflight.json
