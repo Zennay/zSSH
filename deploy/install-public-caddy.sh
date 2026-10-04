@@ -11,13 +11,23 @@ if [[ "$(id -u)" -eq 0 ]]; then
   echo "Refusing to install zSSH public Caddy ingress as root; use the bounded sudo path." >&2
   exit 2
 fi
-[[ -f "$SOURCE_ROOT/scripts/render-public-caddy.mjs" ]] || {
-  echo "Missing scripts/render-public-caddy.mjs" >&2
-  exit 2
-}
 
 NODE_BIN="$(command -v node || true)"
 [[ -n "$NODE_BIN" ]] || { echo "Node.js is required" >&2; exit 2; }
+GIT_BIN="$(command -v git || true)"
+[[ -n "$GIT_BIN" ]] || { echo "git is required" >&2; exit 2; }
+TAR_BIN="$(command -v tar || true)"
+[[ -n "$TAR_BIN" ]] || { echo "tar is required" >&2; exit 2; }
+
+REPO_SHA="${ZSSH_EXPECTED_SHA:-$("$GIT_BIN" -C "$SOURCE_ROOT" rev-parse HEAD)}"
+[[ "$REPO_SHA" =~ ^[0-9a-f]{40}$ ]] || {
+  echo "ZSSH_EXPECTED_SHA / repository HEAD must be a full 40-character Git commit SHA" >&2
+  exit 2
+}
+"$GIT_BIN" -C "$SOURCE_ROOT" cat-file -e "$REPO_SHA^{commit}" 2>/dev/null || {
+  echo "Requested zSSH release commit is not available in the source repository" >&2
+  exit 2
+}
 
 : "${ZSSH_PUBLIC_BASE_URL:?Set ZSSH_PUBLIC_BASE_URL to the canonical public HTTPS origin}"
 PORT_VALUE="${ZSSH_PUBLIC_GATEWAY_PORT:-8789}"
@@ -56,15 +66,26 @@ cleanup_local() {
 }
 trap cleanup_local EXIT
 
+validation_root="$tmp_dir/release-validation"
+mkdir -p "$validation_root"
+"$GIT_BIN" -C "$SOURCE_ROOT" archive --format=tar "$REPO_SHA" scripts/render-public-caddy.mjs | "$TAR_BIN" -x -C "$validation_root"
+renderer="$validation_root/scripts/render-public-caddy.mjs"
+[[ -f "$renderer" ]] || {
+  echo "Immutable release is missing scripts/render-public-caddy.mjs" >&2
+  exit 2
+}
+
 rendered="$tmp_dir/zssh-public.caddy"
-ZSSH_PUBLIC_GATEWAY_PORT="$PORT_VALUE" ZSSH_PUBLIC_BASE_URL="$ZSSH_PUBLIC_BASE_URL"   "$NODE_BIN" "$SOURCE_ROOT/scripts/render-public-caddy.mjs" > "$rendered"
+ZSSH_PUBLIC_GATEWAY_PORT="$PORT_VALUE" ZSSH_PUBLIC_BASE_URL="$ZSSH_PUBLIC_BASE_URL" \
+  "$NODE_BIN" "$renderer" > "$rendered"
 
 host="$("$NODE_BIN" -e 'process.stdout.write(new URL(process.argv[1]).hostname)' "$ZSSH_PUBLIC_BASE_URL")"
 grep -Fx "$host {" "$rendered" >/dev/null
 grep -Fx "    reverse_proxy 127.0.0.1:$PORT_VALUE" "$rendered" >/dev/null
 
 if [[ "$VALIDATE_ONLY" == "1" ]]; then
-  printf 'ZSSH_PUBLIC_CADDY_CONFIG_GREEN host=%s port=%s snippet_sha256=%s\n'     "$host" "$PORT_VALUE" "$(sha256sum "$rendered" | awk '{print $1}')"
+  printf 'ZSSH_PUBLIC_CADDY_CONFIG_GREEN host=%s port=%s release_sha=%s snippet_sha256=%s\n' \
+    "$host" "$PORT_VALUE" "$REPO_SHA" "$(sha256sum "$rendered" | awk '{print $1}')"
   exit 0
 fi
 
@@ -127,7 +148,8 @@ if [[ "$begin_count" == "0" && "$end_count" == "0" ]]; then
     printf '%s\n' "$end_marker"
   } >> "$candidate_root"
 elif [[ "$begin_count" == "1" && "$end_count" == "1" ]]; then
-  CANDIDATE_ROOT="$candidate_root" SNIPPET_FILE="$SNIPPET_FILE"     "$NODE_BIN" --input-type=module <<'NODE'
+  CANDIDATE_ROOT="$candidate_root" SNIPPET_FILE="$SNIPPET_FILE" \
+    "$NODE_BIN" --input-type=module <<'NODE'
 import fs from "node:fs";
 const file = process.env.CANDIDATE_ROOT;
 const begin = "# BEGIN zSSH managed public ingress";
@@ -196,4 +218,9 @@ sudo -n systemctl is-active --quiet caddy || {
   exit 2
 }
 
-printf 'ZSSH_PUBLIC_CADDY_INSTALL_GREEN host=%s port=%s root_sha256=%s snippet_sha256=%s\n'   "$host"   "$PORT_VALUE"   "$(sudo -n sha256sum "$ROOT_FILE" | awk '{print $1}')"   "$(sudo -n sha256sum "$SNIPPET_FILE" | awk '{print $1}')"
+printf 'ZSSH_PUBLIC_CADDY_INSTALL_GREEN host=%s port=%s release_sha=%s root_sha256=%s snippet_sha256=%s\n' \
+  "$host" \
+  "$PORT_VALUE" \
+  "$REPO_SHA" \
+  "$(sudo -n sha256sum "$ROOT_FILE" | awk '{print $1}')" \
+  "$(sudo -n sha256sum "$SNIPPET_FILE" | awk '{print $1}')"
