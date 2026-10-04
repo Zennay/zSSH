@@ -97,7 +97,7 @@ Before pressing Submit:
 - deploy the current public profile to a stable HTTPS endpoint;
 - complete developer/business identity verification in the OpenAI Platform Dashboard;
 - use a project with global data residency for the MCP submission;
-- complete the live domain-verification challenge and set `ZSSH_OPENAI_DOMAIN_VERIFIED=1` only after the portal reports Verify Domain successful;
+- complete the live domain-verification challenge, set `ZSSH_OPENAI_DOMAIN_VERIFIED=1` only after the portal reports Verify Domain successful, and set `ZSSH_OPENAI_DOMAIN_VERIFIED_HOST` to the exact challenge-base hostname that OpenAI verified;
 - run Scan Tools against the current production MCP server, resolve required findings, and set `ZSSH_OPENAI_TOOL_SCAN_VERIFIED=1` only after the portal scan is green;
 - connect the production OAuth reviewer account and pair it to the dedicated sample target;
 - run `npm run submission:probe` against that production endpoint;
@@ -122,6 +122,7 @@ npm run submission:probe
 # ZSSH_CHATGPT_DESKTOP_REVIEWED=1
 # ZSSH_CHATGPT_MOBILE_REVIEWED=1
 # ZSSH_OPENAI_DOMAIN_VERIFIED=1
+# ZSSH_OPENAI_DOMAIN_VERIFIED_HOST=mcp.example.com
 # ZSSH_OPENAI_TOOL_SCAN_VERIFIED=1
 ```
 
@@ -129,4 +130,4 @@ The probe checks the health endpoint, OAuth protected-resource metadata, unauthe
 
 ## Release rule
 
-A green local or CI canary is not enough to call the plugin submitted or accepted. Submission readiness requires the production endpoint, production OAuth flow, current portal scan, reviewer credentials, domain verification, reviewer-facing test cases, and a successful live production connection-card check in both ChatGPT desktop and mobile to be green together. Keep `ZSSH_CHATGPT_DESKTOP_REVIEWED` and `ZSSH_CHATGPT_MOBILE_REVIEWED` unset until those real host-surface checks have passed.
+A green local or CI canary is not enough to call the plugin submitted or accepted. Submission readiness requires the production endpoint, production OAuth flow, current portal scan, reviewer credentials, domain verification bound to the exact verified challenge-base host, reviewer-facing test cases, and a successful live production connection-card check in both ChatGPT desktop and mobile to be green together. Keep `ZSSH_CHATGPT_DESKTOP_REVIEWED` and `ZSSH_CHATGPT_MOBILE_REVIEWED` unset until those real host-surface checks have passed.
