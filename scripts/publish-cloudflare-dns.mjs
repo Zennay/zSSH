@@ -4,6 +4,7 @@ import { isPublicRoutableAddress } from "./check-public-ingress.mjs";
 import { validatePublicBaseUrl } from "./render-public-caddy.mjs";
 
 const CLOUDFLARE_API_ORIGIN = "https://api.cloudflare.com";
+export const CLOUDFLARE_REQUEST_TIMEOUT_MS = 10_000;
 
 function fail(message) {
   throw new Error(message);
@@ -59,7 +60,19 @@ function cloudflareErrorSummary(body, sensitiveValues = []) {
 }
 
 async function cloudflareJson(fetchImpl, url, init, label) {
-  const response = await fetchImpl(url, init);
+  let response;
+  try {
+    response = await fetchImpl(url, {
+      ...init,
+      signal: init?.signal ?? AbortSignal.timeout(CLOUDFLARE_REQUEST_TIMEOUT_MS),
+    });
+  } catch (error) {
+    const name = String(error?.name || "");
+    if (name === "TimeoutError" || name === "AbortError") {
+      fail(`${label} failed: Cloudflare request timed out`);
+    }
+    fail(`${label} failed: Cloudflare network request failed`);
+  }
   let body;
   try {
     body = await response.json();
