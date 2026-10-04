@@ -342,6 +342,10 @@ export async function reconcileCloudflareDns({
     };
   }
 
+  if (!expectedPlan) {
+    fail("DNS mutation requires ZSSH_DNS_EXPECTED_PLAN_ACTION from the reviewed dry-run plan");
+  }
+
   const targetUrl = existing
     ? new URL(`/client/v4/zones/${zone.zoneId}/dns_records/${encodeURIComponent(String(existing.id || ""))}`, CLOUDFLARE_API_ORIGIN)
     : collectionUrl;

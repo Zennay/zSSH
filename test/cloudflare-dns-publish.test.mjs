@@ -176,6 +176,7 @@ test("apply updates one existing A record but preserves unrelated coexisting rec
     apply: true,
     expectedCurrentIpv4: "203.0.113.10",
     expectedCurrentStateSha256: cloudflareDnsRecordStateSha256(listed[0]),
+    expectedPlanAction: "would_update",
   }));
   assert.equal(result.action, "updated");
   assert.equal(result.ttl, 1);
@@ -307,6 +308,7 @@ test("TTL drift is not accepted as exact convergence", async () => {
     apply: true,
     expectedCurrentIpv4: "198.244.191.182",
     expectedCurrentStateSha256: cloudflareDnsRecordStateSha256(stale[0]),
+    expectedPlanAction: "would_update",
   }));
 
   assert.equal(applied.action, "updated");
@@ -389,6 +391,15 @@ test("apply binds update plans before accepting a newly converged noop", async (
   );
 });
 
+test("apply refuses a mutation when the reviewed plan action is missing", async () => {
+  await assert.rejects(
+    reconcileCloudflareDns(baseArgs(async () => response([]), {
+      apply: true,
+    })),
+    /DNS mutation requires ZSSH_DNS_EXPECTED_PLAN_ACTION/,
+  );
+});
+
 test("apply rejects unknown reviewed plan actions", async () => {
   await assert.rejects(
     reconcileCloudflareDns(baseArgs(async () => response([]), {
@@ -468,6 +479,7 @@ test("autodiscovered zone ID is reused for update writes", async () => {
     apply: true,
     expectedCurrentIpv4: "203.0.113.10",
     expectedCurrentStateSha256: cloudflareDnsRecordStateSha256(listed[0]),
+    expectedPlanAction: "would_update",
   }));
   assert.equal(result.action, "updated");
   assert.equal(result.zone_source, "discovered");
