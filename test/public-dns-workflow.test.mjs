@@ -150,6 +150,10 @@ test("production DNS apply is bound to the exact dry-run record-state fingerprin
     apply,
     /ZSSH_DNS_EXPECTED_CURRENT_STATE_SHA256: \$\{\{ steps\.dns_plan\.outputs\.current_state_sha256 \}\}/,
   );
+  assert.match(
+    apply,
+    /ZSSH_DNS_EXPECTED_PLAN_ACTION: \$\{\{ steps\.dns_plan\.outputs\.plan_action \}\}/,
+  );
   assert.doesNotMatch(
     apply,
     /ZSSH_DNS_EXPECTED_CURRENT_STATE_SHA256: \$\{\{ vars\./,
@@ -157,6 +161,18 @@ test("production DNS apply is bound to the exact dry-run record-state fingerprin
 
   assert.match(runbook, /plan-to-apply/);
   assert.match(runbook, /state fingerprint/i);
+});
+
+test("production DNS apply carries the exact reviewed plan action into the reconciler", () => {
+  const applyTail = workflow.split("      - name: Publish exact DNS-only A record")[1];
+  assert.ok(applyTail, "missing DNS apply step");
+  const apply = applyTail.split("\n      - name:")[0];
+
+  assert.match(
+    apply,
+    /ZSSH_DNS_EXPECTED_PLAN_ACTION: \$\{\{ steps\.dns_plan\.outputs\.plan_action \}\}/,
+  );
+  assert.match(runbook, /binds the apply step to that exact plan action/i);
 });
 
 test("production DNS skips the mutation-capable apply step for an already-converged noop plan", () => {
