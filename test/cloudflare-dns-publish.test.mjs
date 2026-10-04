@@ -89,6 +89,23 @@ test("zone autodiscovery fails closed on missing, duplicate, or unrelated zones"
   );
 });
 
+test("provider error summaries redact the API token", async () => {
+  const apiToken = "cf-secret-reflected-token";
+  await assert.rejects(
+    reconcileCloudflareDns(baseArgs(async () => response(null, {
+      status: 403,
+      success: false,
+      errors: [{ code: 9109, message: `Invalid bearer credential ${apiToken}` }],
+    }), { apiToken })),
+    error => {
+      assert.match(error.message, /9109:/);
+      assert.match(error.message, /\[REDACTED\]/);
+      assert.equal(error.message.includes(apiToken), false);
+      return true;
+    },
+  );
+});
+
 test("dry-run reports a create without mutating Cloudflare", async () => {
   const calls = [];
   const result = await reconcileCloudflareDns(baseArgs(async (url, init) => {
