@@ -126,3 +126,17 @@ The `repository-governance` workflows consume higher-privilege credentials than 
 - Regression tests lock both workflow contracts.
 
 This does not weaken self-healing: the application lane still permits `protected=false` so it can repair missing protection, but only when the workflow SHA is the exact current `main` revision.
+
+
+## Transient GitHub API resilience — 2026-10-04
+
+The canonical branch-protection and governance evidence checks now use the same bounded transient-failure policy as the merged-PR provenance verifier.
+
+GitHub HTTP statuses `429`, `500`, `502`, `503`, and `504` are retried up to three attempts with short exponential delays. Non-transient failures such as `403` or `404` are not retried, and a transient error that remains after the final attempt is returned to the existing caller so the production/governance gate still fails closed.
+
+This applies to:
+- public current-branch metadata used by exact-current-main and protection checks;
+- the authenticated branch-protection policy endpoint;
+- immutable negative-proof evidence reads for issue #100, canary ancestry, and current-main comparison.
+
+The retry changes availability only. They do not weaken protection requirements, accept stale SHAs, bypass branch protection, or convert a persistent GitHub API failure into a green result.
