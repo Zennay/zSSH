@@ -25,6 +25,14 @@ test("ingress preflight automatically follows successful canonical production DN
     /ref: \$\{\{ github\.event_name == 'workflow_run' && github\.event\.workflow_run\.head_sha \|\| github\.sha \}\}/,
   );
   assert.match(workflow, /persist-credentials: false/);
+  const sourceGateIndex = workflow.indexOf("      - name: Require successful canonical production DNS source");
+  const checkoutIndex = workflow.indexOf("      - uses: actions/checkout@");
+  assert.ok(sourceGateIndex >= 0, "missing canonical production DNS source step");
+  assert.ok(checkoutIndex >= 0, "missing checkout step");
+  assert.ok(
+    sourceGateIndex < checkoutIndex,
+    "workflow_run source identity must be validated before checking out its head SHA",
+  );
 
   const sourceTail = workflow.split("      - name: Require successful canonical production DNS source")[1];
   assert.ok(sourceTail, "missing canonical production DNS source step");
