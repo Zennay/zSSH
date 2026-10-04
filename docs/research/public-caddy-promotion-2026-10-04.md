@@ -34,4 +34,18 @@ The helper deliberately requires non-interactive sudo and an already-active Cadd
 
 ## Release boundary
 
-A green local/unit test proves transaction and rollback semantics only. Live promotion requires the canonical zCloud self-hosted runner to prove the current Caddy topology, production DNS readiness, exact canonical zSSH SHA and the real public origin before invoking the mutating helper.
+A green local/unit test proves transaction and rollback semantics only. Live promotion is executed by the guarded **zSSH public gateway and Caddy rollout** workflow on the canonical self-hosted VPS runner.
+
+The workflow is manual and fail-closed:
+
+1. it requires exact confirmation `PROMOTE_ZSSH_PUBLIC_INGRESS`;
+2. GitHub-hosted provenance verifies merged-PR ancestry, protected `main`, the immutable negative-proof evidence and exact current SHA before the protected environment is entered;
+3. the self-hosted runner repeats the exact-current-main check immediately before mutation;
+4. `zssh.cheapgpt.shop` must resolve only to the reviewed production IPv4 `198.244.191.182`;
+5. the production OAuth issuer must already be configured; the JWKS URL is derived from that issuer for the Auth0-backed public gateway;
+6. the reviewer target is derived from the local one-target trust file and public access remains rooted at `/srv/zssh-review`;
+7. both gateway and Caddy helpers run their validate-only paths before mutation;
+8. the isolated `zssh-public.service` is promoted first and remains loopback-only; only then is the transactional Caddy import promoted;
+9. local systemd/Caddy/health checks must pass before the workflow reports green.
+
+A successful VPS rollout is still not external-review evidence. The separate GitHub-hosted **zSSH public ingress external preflight** must run afterward to prove public TLS, health, MCP authentication and OAuth metadata from outside the VPS.
