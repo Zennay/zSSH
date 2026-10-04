@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import net from "node:net";
 import { pathToFileURL } from "node:url";
 import { isPublicRoutableAddress } from "./check-public-ingress.mjs";
@@ -26,6 +27,38 @@ export function validatePublicIpv4(value) {
 
 function normalizeDnsName(value) {
   return String(value || "").trim().replace(/\.$/, "").toLowerCase();
+}
+
+function validateExpectedStateSha256(value) {
+  const fingerprint = String(value || "").trim().toLowerCase();
+  if (fingerprint && !/^[a-f0-9]{64}$/.test(fingerprint)) {
+    fail("ZSSH_DNS_EXPECTED_CURRENT_STATE_SHA256 must be a 64-character hexadecimal SHA-256");
+  }
+  return fingerprint;
+}
+
+export function cloudflareDnsRecordStateSha256(record) {
+  const recordId = String(record?.id || "").trim().toLowerCase();
+  const content = String(record?.content || "").trim();
+  const ttl = Number(record?.ttl);
+  if (!/^[a-f0-9]{32}$/.test(recordId)) {
+    fail("existing Cloudflare A record has an invalid record ID");
+  }
+  if (net.isIP(content) !== 4) {
+    fail("existing Cloudflare A record has an invalid IPv4 content value");
+  }
+  if (!Number.isInteger(ttl) || ttl < 1) {
+    fail("existing Cloudflare A record has an invalid TTL value");
+  }
+
+  return createHash("sha256").update(JSON.stringify({
+    id: recordId,
+    type: "A",
+    name: normalizeDnsName(record?.name),
+    content,
+    ttl,
+    proxied: record?.proxied === true,
+  })).digest("hex");
 }
 
 export function validateCloudflareZoneName(value) {
@@ -146,6 +179,7 @@ export async function reconcileCloudflareDns({
   publicBaseUrl,
   ipv4,
   expectedCurrentIpv4 = "",
+  expectedCurrentStateSha256 = "",
   apply = false,
   fetchImpl = fetch,
 } = {}) {
@@ -191,6 +225,10 @@ export async function reconcileCloudflareDns({
   }
 
   const existing = aRecords[0] || null;
+  const expectedStateSha256 = validateExpectedStateSha256(expectedCurrentStateSha256);
+  if (!existing && expectedStateSha256) {
+    fail("existing A record disappeared since the reviewed DNS plan; refusing mutation");
+  }
   const desired = { type: "A", name: hostname, content: checkedIpv4, ttl: 1, proxied: false };
   const existingTtl = existing ? Number(existing.ttl) : null;
   if (
@@ -218,12 +256,14 @@ export async function reconcileCloudflareDns({
     previousIpv4 = String(existing.content || "").trim();
     previousTtl = Number(existing.ttl);
     previousProxied = existing.proxied === true;
-    if (net.isIP(previousIpv4) !== 4) {
-      fail("existing Cloudflare A record has an invalid IPv4 content value");
-    }
-    if (!Number.isInteger(previousTtl) || previousTtl < 1) {
-      fail("existing Cloudflare A record has an invalid TTL value");
-    }
+    const previousStateSha256 = cloudflareDnsRecordStateSha256(existing);
+
+    const preconditionEvidence = {
+      previous_ipv4: previousIpv4,
+      previous_ttl: previousTtl,
+      previous_proxied: previousProxied,
+      previous_state_sha256: previousStateSha256,
+    };
 
     const expected = String(expectedCurrentIpv4 || "").trim();
     if (!expected) {
@@ -235,9 +275,7 @@ export async function reconcileCloudflareDns({
           ipv4: checkedIpv4,
           ttl: desired.ttl,
           proxied: false,
-          previous_ipv4: previousIpv4,
-          previous_ttl: previousTtl,
-          previous_proxied: previousProxied,
+          ...preconditionEvidence,
           zone_source: zone.source,
         };
       }
@@ -248,6 +286,25 @@ export async function reconcileCloudflareDns({
     }
     if (previousIpv4 !== expected) {
       fail("existing A record changed since the reviewed DNS precondition; refusing mutation");
+    }
+
+    if (!expectedStateSha256) {
+      if (!apply) {
+        return {
+          ok: true,
+          action: "would_update_requires_precondition",
+          hostname,
+          ipv4: checkedIpv4,
+          ttl: desired.ttl,
+          proxied: false,
+          ...preconditionEvidence,
+          zone_source: zone.source,
+        };
+      }
+      fail("existing A record update requires ZSSH_DNS_EXPECTED_CURRENT_STATE_SHA256 from the reviewed dry-run plan");
+    }
+    if (previousStateSha256 !== expectedStateSha256) {
+      fail("existing A record state changed since the reviewed DNS plan; refusing mutation");
     }
   }
 
@@ -271,10 +328,6 @@ export async function reconcileCloudflareDns({
   const targetUrl = existing
     ? new URL(`/client/v4/zones/${zone.zoneId}/dns_records/${encodeURIComponent(String(existing.id || ""))}`, CLOUDFLARE_API_ORIGIN)
     : collectionUrl;
-  if (existing && !/^[a-f0-9]{32}$/i.test(String(existing.id || ""))) {
-    fail("existing Cloudflare A record has an invalid record ID");
-  }
-
   const body = await cloudflareJson(fetchImpl, targetUrl, {
     method: existing ? "PATCH" : "POST",
     headers,
@@ -315,6 +368,7 @@ export async function main({ env = process.env, stdout = process.stdout } = {}) 
     publicBaseUrl: env.ZSSH_PUBLIC_BASE_URL,
     ipv4: env.ZSSH_PUBLIC_IPV4,
     expectedCurrentIpv4: env.ZSSH_DNS_EXPECTED_CURRENT_IPV4,
+    expectedCurrentStateSha256: env.ZSSH_DNS_EXPECTED_CURRENT_STATE_SHA256,
     apply: env.ZSSH_DNS_APPLY === "1",
   });
   stdout.write(JSON.stringify(result, null, 2) + "\n");
