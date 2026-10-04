@@ -12,23 +12,23 @@ const workflow = readFileSync(
 );
 
 test("ingress preflight waits for explicit post-rollout dispatch", () => {
-  assert.match(workflow, /workflow_dispatch:\\s*\\n/);
+  assert.match(workflow, /workflow_dispatch:\s*\n/);
   assert.doesNotMatch(workflow, /workflow_run:/);
   assert.doesNotMatch(workflow, /zSSH production DNS publish/);
   assert.match(workflow, /persist-credentials: false/);
   assert.match(
     workflow,
-    /ZSSH_PLUGIN_MCP_URL: https:\\/\\/zssh\\.cheapgpt\\.shop\\/mcp/,
+    /ZSSH_PLUGIN_MCP_URL: https:\/\/zssh\.cheapgpt\.shop\/mcp/,
   );
   assert.match(
     workflow,
-    /ZSSH_EXPECTED_PUBLIC_ADDRESSES: 198\\.244\\.191\\.182/,
+    /ZSSH_EXPECTED_PUBLIC_ADDRESSES: 198\.244\.191\.182/,
   );
   assert.match(
     workflow,
-    /node scripts\\/check-public-ingress\\.mjs "\\$ZSSH_PLUGIN_MCP_URL" "\\$ZSSH_EXPECTED_PUBLIC_ADDRESSES"/,
+    /node scripts\/check-public-ingress\.mjs "\$ZSSH_PLUGIN_MCP_URL" "\$ZSSH_EXPECTED_PUBLIC_ADDRESSES"/,
   );
-  assert.doesNotMatch(workflow, /inputs\\.mcp_url/);
+  assert.doesNotMatch(workflow, /inputs\.mcp_url/);
 });
 
 test("manual production ingress evidence is bound to exact current protected main", () => {
