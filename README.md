@@ -162,7 +162,7 @@ export ZSSH_PUBLIC_ALLOWED_ROOTS="$HOME/zssh-review"
 npm run gateway:public:install
 ```
 
-The installer validates a real DNS-based HTTPS resource origin, production OAuth/JWKS URLs, the opaque reviewer target, and the gateway trust file before writing runtime state. It installs `zssh-public.service` on loopback port 8789 by default with its own `public-gateway.env`, pairing registry, audit log, immutable Git-SHA release tree, systemd sandbox, and rollback path. A reverse proxy/TLS endpoint must route the public hostname to that loopback service; the installer deliberately does not invent DNS, an OAuth provider, reviewer credentials, or the OpenAI domain-verification token. Use `ZSSH_PUBLIC_GATEWAY_VALIDATE_ONLY=1` for a no-mutation configuration preflight. See `docs/research/public-gateway-deployment-2026-10-04.md`.
+The installer validates a real DNS-based HTTPS resource origin, production OAuth/JWKS URLs, the opaque reviewer target, and the gateway trust file before writing runtime state. It installs `zssh-public.service` on loopback port 8789 by default with its own `public-gateway.env`, pairing registry, audit log, immutable Git-SHA release tree, systemd sandbox, and rollback path. A reverse proxy/TLS endpoint must route the public hostname to that loopback service. `deploy/Caddyfile.public.example` is the minimal Caddy configuration for the **public** gateway and intentionally targets port **8789**; do not reuse the private `deploy/Caddyfile.example`, which targets `zssh.service` on port 8788. The installer deliberately does not invent DNS, an OAuth provider, reviewer credentials, or the OpenAI domain-verification token. Use `ZSSH_PUBLIC_GATEWAY_VALIDATE_ONLY=1` for a no-mutation configuration preflight. See `docs/research/public-gateway-deployment-2026-10-04.md`.
 
 
 
@@ -283,8 +283,9 @@ npm run mcp:claude-canary
 
 The endpoint must be reachable over public HTTPS for Claude's hosted MCP
 connector; local stdio servers cannot be used by that connector. For a VPS,
-put Caddy or another TLS reverse proxy in front of the loopback-only zSSH
-service. `deploy/Caddyfile.example` contains the minimal reverse-proxy config.
+put Caddy or another TLS reverse proxy in front of the loopback-only **private** zSSH
+service. `deploy/Caddyfile.example` contains that port-8788 private reverse-proxy config; the
+isolated public OpenAI gateway instead uses `deploy/Caddyfile.public.example` on port 8789.
 Do not expose port 8788 directly and do not commit the bearer token.
 
 For Claude's hosted connector, the most compatible private single-owner path

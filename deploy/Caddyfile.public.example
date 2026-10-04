@@ -1,0 +1,9 @@
+# Public OpenAI zSSH gateway example.
+# Replace the hostname with the exact production DNS name used by
+# ZSSH_PUBLIC_BASE_URL. Caddy provisions and renews HTTPS automatically.
+#
+# zssh-public.service binds to loopback port 8789 by default. Keep that port
+# private; only the TLS reverse proxy should be internet-facing.
+mcp.example.com {
+    reverse_proxy 127.0.0.1:8789
+}

@@ -1,5 +1,9 @@
+# Private/single-owner zSSH gateway example.
 # Replace the hostname with a real DNS name pointing to the VPS.
 # Caddy automatically provisions and renews the HTTPS certificate.
+#
+# IMPORTANT: port 8788 is the private zssh.service default. The isolated public
+# OpenAI gateway uses port 8789; use deploy/Caddyfile.public.example for it.
 zssh.example.com {
     reverse_proxy 127.0.0.1:8788
 }
