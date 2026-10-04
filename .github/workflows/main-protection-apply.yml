@@ -1,0 +1,76 @@
+name: zSSH main protection apply
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type PROTECT_ZSSH_MAIN to apply the canonical main policy
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: zssh-main-protection-apply
+  cancel-in-progress: false
+
+jobs:
+  provenance:
+    name: Require canonical merged-PR provenance
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require canonical main ref
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test "$GITHUB_REF" = "refs/heads/main"
+          test "$GITHUB_REF_NAME" = "main"
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Verify canonical merged-PR provenance
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ZSSH_PROVENANCE_BASE_SHA: 121411d24e288c2512d4851e973a0af80aa99733
+        run: node scripts/check-main-provenance.mjs
+
+  protect:
+    name: Apply and independently verify main protection
+    needs: provenance
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: repository-governance
+    env:
+      ZSSH_REPO_ADMIN_TOKEN: ${{ secrets.ZSSH_REPO_ADMIN_TOKEN }}
+      ZSSH_MAIN_PROTECTION_CONFIRM: ${{ inputs.confirmation }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Apply canonical main protection
+        shell: bash
+        env:
+          RECEIPT_PATH: ${{ runner.temp }}/zssh-main-protection-apply.json
+        run: |
+          set -Eeuo pipefail
+          node scripts/apply-main-protection.mjs --apply | tee "$RECEIPT_PATH"
+      - name: Independently verify effective protection
+        env:
+          GITHUB_TOKEN: ${{ secrets.ZSSH_REPO_ADMIN_TOKEN }}
+        run: node scripts/check-main-protection.mjs
+      - name: Confirm public branch metadata now reports protected
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node scripts/check-main-protection.mjs --public-status --require-protected
+      - name: Upload non-secret policy receipt
+        uses: actions/upload-artifact@v4
+        with:
+          name: zssh-main-protection-apply-${{ github.run_id }}
+          path: ${{ runner.temp }}/zssh-main-protection-apply.json
+          if-no-files-found: error
+          retention-days: 30
