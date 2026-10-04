@@ -6,6 +6,10 @@ const readinessWorkflow = readFileSync(
   new URL("../.github/workflows/openai-production-readiness.yml", import.meta.url),
   "utf8",
 );
+const publicReleaseWorkflow = readFileSync(
+  new URL("../.github/workflows/public-release-gate.yml", import.meta.url),
+  "utf8",
+);
 import { buildProductionReadinessAudit } from "../scripts/check-production-readiness-audit.mjs";
 
 const complete = {
@@ -17,6 +21,7 @@ const complete = {
   ZSSH_REVIEW_LOGIN_URL: "https://tenant.eu.auth0.com/u/login",
   ZSSH_REVIEW_LOGIN_VERIFIED_URL: "https://tenant.eu.auth0.com/u/login",
   ZSSH_REVIEW_CREDENTIALS_VERIFIED: "1",
+  ZSSH_MAIN_PROTECTION_VERIFIED: "1",
   ZSSH_CHATGPT_DESKTOP_REVIEWED: "1",
   ZSSH_CHATGPT_MOBILE_REVIEWED: "1",
   ZSSH_CHATGPT_REVIEW_SHA256: "a".repeat(64),
@@ -35,6 +40,7 @@ const complete = {
 test("classifies an empty production environment into actionable M5 lanes", () => {
   const result = buildProductionReadinessAudit({});
   assert.equal(result.phase, "M5");
+  assert.equal(result.ready.repository_governance, false);
   assert.equal(result.ready.dns_publication, false);
   assert.equal(result.ready.auth0_preflight, false);
   assert.equal(result.ready.final_release_config, false);
@@ -42,8 +48,9 @@ test("classifies an empty production environment into actionable M5 lanes", () =
     "CLOUDFLARE_ZONE_ID",
     "CLOUDFLARE_API_TOKEN",
   ]);
-  assert.equal(result.next_actions[0].lane, "dns_publication");
-  assert.equal(result.next_actions[1].lane, "auth0_preflight");
+  assert.equal(result.next_actions[0].lane, "repository_governance");
+  assert.equal(result.next_actions[1].lane, "dns_publication");
+  assert.equal(result.next_actions[2].lane, "auth0_preflight");
 });
 
 test("reports provider lanes independently from later portal attestations", () => {
@@ -64,6 +71,20 @@ test("reports provider lanes independently from later portal attestations", () =
     result.next_actions.map(item => item.lane),
     ["portal_and_host_attestations"],
   );
+});
+
+test("keeps repository governance independent from provider and portal lanes", () => {
+  const result = buildProductionReadinessAudit({
+    ...complete,
+    ZSSH_MAIN_PROTECTION_VERIFIED: "",
+  });
+  assert.equal(result.ready.repository_governance, false);
+  assert.equal(result.ready.dns_publication, true);
+  assert.equal(result.ready.auth0_preflight, true);
+  assert.equal(result.ready.reviewer_fixture, true);
+  assert.equal(result.ready.portal_and_host_attestations, true);
+  assert.equal(result.ready.final_release_config, false);
+  assert.deepEqual(result.next_actions.map(item => item.lane), ["repository_governance"]);
 });
 
 test("never serializes protected values", () => {
@@ -90,6 +111,14 @@ test("protected readiness workflow proves merged-PR provenance before entering o
     readinessWorkflow,
     /audit:\n    name: Classify protected M5 inputs\n    needs: provenance\n    runs-on: ubuntu-latest\n    timeout-minutes: 5\n    environment: openai-production/,
   );
+
+  for (const workflow of [readinessWorkflow, publicReleaseWorkflow]) {
+    assert.match(
+      workflow,
+      /ZSSH_MAIN_PROTECTION_VERIFIED:\s*\$\{\{ vars\.ZSSH_MAIN_PROTECTION_VERIFIED \}\}/,
+      "protected release workflows must consume the main-protection attestation",
+    );
+  }
 
   const provenanceBlock = readinessWorkflow.match(/  provenance:[\s\S]*?\n  audit:/)?.[0] || "";
   assert.doesNotMatch(
