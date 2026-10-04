@@ -1,0 +1,123 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import {
+  renderM5BlockingIssue,
+  syncM5BlockingIssue,
+} from "../scripts/sync-m5-blocking-issue.mjs";
+
+const workflow = readFileSync(
+  new URL("../.github/workflows/openai-production-readiness.yml", import.meta.url),
+  "utf8",
+);
+
+const sha = "a".repeat(40);
+
+function receipt(overrides = {}) {
+  return {
+    schema_version: 4,
+    phase: "M5",
+    execution_state: "external_input_only",
+    blocking_gate: "dns_publication",
+    blocking_action: {
+      lane: "dns_publication",
+      gate_kind: "provider_credentials",
+      requires_external_input: true,
+      action: "Provision the scoped provider credential, then run the guarded DNS publisher.",
+      missing: ["CLOUDFLARE_API_TOKEN"],
+      invalid: [],
+    },
+    next_actions: [
+      { lane: "dns_publication" },
+      { lane: "auth0_preflight" },
+      { lane: "reviewer_fixture" },
+    ],
+    ...overrides,
+  };
+}
+
+test("renders only secret-safe blocking metadata", () => {
+  const readiness = receipt({
+    configured: {
+      CLOUDFLARE_API_TOKEN: "super-secret-value-that-must-never-render",
+    },
+  });
+  const result = renderM5BlockingIssue({ readiness, canonicalSha: sha });
+
+  assert.equal(result.title, "M5 active gate: dns_publication");
+  assert.match(result.body, /CLOUDFLARE_API_TOKEN/);
+  assert.match(result.body, /auth0_preflight/);
+  assert.doesNotMatch(result.body, /super-secret-value-that-must-never-render/);
+  assert.match(result.body, new RegExp(sha));
+});
+
+test("renders the no-blocker state without inventing a gate", () => {
+  const result = renderM5BlockingIssue({
+    readiness: receipt({
+      execution_state: "ready",
+      blocking_gate: null,
+      blocking_action: null,
+      next_actions: [],
+    }),
+    canonicalSha: sha,
+  });
+  assert.equal(result.title, "M5 release handoff: readiness gates green");
+  assert.match(result.body, /Blocking gate: none/);
+});
+
+test("rejects mismatched blocking action metadata", () => {
+  assert.throws(
+    () => renderM5BlockingIssue({
+      readiness: receipt({
+        blocking_action: {
+          lane: "auth0_preflight",
+          gate_kind: "provider_configuration",
+          requires_external_input: true,
+          action: "wrong",
+          missing: [],
+          invalid: [],
+        },
+      }),
+      canonicalSha: sha,
+    }),
+    /must match blocking_gate/,
+  );
+});
+
+test("sync uses the token only as an Authorization header", async () => {
+  const token = "github-token-secret-value";
+  let request;
+  const result = await syncM5BlockingIssue({
+    repository: "Zennay/zSSH",
+    issueNumber: 159,
+    token,
+    readiness: receipt(),
+    canonicalSha: sha,
+    fetchImpl: async (url, init) => {
+      request = { url: String(url), init };
+      return {
+        ok: true,
+        status: 200,
+        async json() { return {}; },
+      };
+    },
+  });
+
+  assert.equal(result.ok, true);
+  assert.match(request.url, /\/repos\/Zennay\/zSSH\/issues\/159$/);
+  assert.equal(request.init.method, "PATCH");
+  assert.equal(request.init.headers.authorization, `Bearer ${token}`);
+  assert.doesNotMatch(request.init.body, new RegExp(token));
+  assert.match(request.init.body, /M5 active gate: dns_publication/);
+});
+
+test("protected readiness audit grants issue write only to the audit job and syncs issue 159", () => {
+  assert.match(
+    workflow,
+    /audit:\n    name: Classify protected M5 inputs[\s\S]*permissions:\n      contents: read\n      issues: write/,
+  );
+  assert.match(
+    workflow,
+    /Sync active M5 blocking issue[\s\S]*ZSSH_M5_BLOCKING_ISSUE: "159"[\s\S]*node scripts\/sync-m5-blocking-issue\.mjs "\$READINESS_PATH"/,
+  );
+});
