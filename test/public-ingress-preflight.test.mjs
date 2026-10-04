@@ -38,6 +38,21 @@ test("ingress preflight automatically follows successful canonical production DN
   assert.match(sourceScript, /test "\$ZSSH_SOURCE_HEAD_BRANCH" = "main"/);
   assert.match(sourceScript, /test "\$ZSSH_SOURCE_REPOSITORY" = "\$ZSSH_EXPECTED_REPOSITORY"/);
   assert.doesNotMatch(sourceScript, /\$\{\{\s*github\./);
+
+  const freshnessTail = workflow.split("      - name: Bind automatic preflight to exact current protected main")[1];
+  assert.ok(freshnessTail, "missing automatic current-main freshness step");
+  const freshnessStep = freshnessTail.split("\n      - ")[0];
+  assert.match(freshnessStep, /if: github\.event_name == 'workflow_run'/);
+  assert.match(freshnessStep, /GITHUB_TOKEN: \$\{\{ secrets\.GITHUB_TOKEN \}\}/);
+  assert.match(
+    freshnessStep,
+    /ZSSH_EXPECTED_CURRENT_SHA: \$\{\{ github\.event\.workflow_run\.head_sha \}\}/,
+  );
+  assert.match(
+    freshnessStep,
+    /node scripts\/check-main-protection\.mjs --public-status --require-protected --require-current-sha/,
+  );
+  assert.doesNotMatch(freshnessStep.split("run: |")[1] || "", /\$\{\{\s*github\./);
   assert.match(
     workflow,
     /ZSSH_PLUGIN_MCP_URL: https:\/\/zssh\.cheapgpt\.shop\/mcp/,
