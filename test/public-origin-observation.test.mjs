@@ -69,3 +69,20 @@ test("production readiness runs the public-origin observer without entering the 
   assert.match(observerBlock, /zssh-public-origin-observation-\$\{\{ github\.run_id \}\}/);
   assert.doesNotMatch(observerBlock, /environment:\s*openai-production/);
 });
+
+
+test("scheduled public-origin watch is secretless, read-only, and bounded", () => {
+  const workflow = readFileSync(
+    new URL("../.github/workflows/public-origin-watch.yml", import.meta.url),
+    "utf8",
+  );
+  assert.match(workflow, /workflow_dispatch:/);
+  assert.match(workflow, /cron: "17 \*\/2 \* \* \*"/);
+  assert.match(workflow, /permissions:\n  contents: read/);
+  assert.match(workflow, /node scripts\/observe-public-origin-readiness\.mjs https:\/\/zssh\.cheapgpt\.shop\/mcp/);
+  assert.match(workflow, /retention-days: 7/);
+  assert.doesNotMatch(workflow, /environment:\s*openai-production/);
+  assert.doesNotMatch(workflow, /secrets\./);
+  assert.doesNotMatch(workflow, /contents:\s*write/);
+  assert.doesNotMatch(workflow, /self-hosted/);
+});
