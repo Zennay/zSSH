@@ -32,7 +32,7 @@ test("public MCP URL contract rejects non-public and unstable endpoints", () => 
 });
 
 test("private-host detection covers loopback, RFC1918, link-local, and reserved suffixes", () => {
-  for (const host of ["localhost", "127.0.0.1", "10.0.0.5", "172.16.0.1", "192.168.1.4", "169.254.1.2", "demo.local", "demo.test", "example.com", "mcp.example.net", "mcp.example.org"]) {
+  for (const host of ["localhost", "127.0.0.1", "8.8.8.8", "2606:4700:4700::1111", "10.0.0.5", "172.16.0.1", "192.168.1.4", "169.254.1.2", "demo.local", "demo.test", "example.com", "mcp.example.net", "mcp.example.org"]) {
     assert.equal(isNonPublicHostname(host), true, host);
   }
   assert.equal(isNonPublicHostname("mcp.zssh.dev"), false);
