@@ -82,6 +82,35 @@ test("fails closed on provider rejection without reflecting response details", a
   );
 });
 
+test("reports user-token guidance before parsing a rejected provider body", async () => {
+  const reflected = "provider-body-must-not-be-parsed";
+  let parsed = false;
+
+  await assert.rejects(
+    verifyCloudflareApiToken({
+      apiToken: "test-token",
+      fetchImpl: async () => ({
+        ok: false,
+        status: 401,
+        async json() {
+          parsed = true;
+          throw new Error(reflected);
+        },
+      }),
+    }),
+    error => {
+      assert.match(error.message, /HTTP 401/);
+      assert.match(error.message, /user-owned API token/);
+      assert.match(error.message, /My Profile > API Tokens/);
+      assert.doesNotMatch(error.message, /invalid JSON/);
+      assert.doesNotMatch(error.message, new RegExp(reflected));
+      return true;
+    },
+  );
+
+  assert.equal(parsed, false);
+});
+
 test("uses stable timeout-safe errors", async () => {
   await assert.rejects(
     verifyCloudflareApiToken({
