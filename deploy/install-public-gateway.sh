@@ -75,15 +75,19 @@ fi
   exit 2
 }
 
-"$NODE_BIN" --input-type=module -   "$SOURCE_ROOT"   "$ZSSH_PUBLIC_BASE_URL"   "$ZSSH_OAUTH_ISSUER"   "$ZSSH_OAUTH_JWKS_URI"   "$ZSSH_TARGET_ID"   "$ZSSH_AGENT_PUBLIC_KEYS_FILE"   "$ZSSH_PUBLIC_ALLOWED_ROOTS" <<'NODE'
+VALIDATION_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/zssh-public-validate.XXXXXX")"
+trap 'rm -rf "$VALIDATION_ROOT"' EXIT
+git -C "$SOURCE_ROOT" archive --format=tar "$REPO_SHA" pairing.mjs agent-transport.mjs target-routing.mjs | tar -x -C "$VALIDATION_ROOT"
+
+"$NODE_BIN" --input-type=module -   "$VALIDATION_ROOT"   "$ZSSH_PUBLIC_BASE_URL"   "$ZSSH_OAUTH_ISSUER"   "$ZSSH_OAUTH_JWKS_URI"   "$ZSSH_TARGET_ID"   "$ZSSH_AGENT_PUBLIC_KEYS_FILE"   "$ZSSH_PUBLIC_ALLOWED_ROOTS" <<'NODE'
 import fs from "node:fs";
 import path from "node:path";
 import net from "node:net";
 import { pathToFileURL } from "node:url";
 
-const [sourceRoot, publicBase, issuer, jwks, targetId, trustFile, publicRoots] = process.argv.slice(2);
-const { normalizeTargetId } = await import(pathToFileURL(sourceRoot + "/pairing.mjs"));
-const { agentPublicKeysFromEnv } = await import(pathToFileURL(sourceRoot + "/agent-transport.mjs"));
+const [validationRoot, publicBase, issuer, jwks, targetId, trustFile, publicRoots] = process.argv.slice(2);
+const { normalizeTargetId } = await import(pathToFileURL(validationRoot + "/pairing.mjs"));
+const { agentPublicKeysFromEnv } = await import(pathToFileURL(validationRoot + "/agent-transport.mjs"));
 
 function httpsUrl(value, name, { originOnly = false } = {}) {
   const url = new URL(value);
@@ -140,6 +144,9 @@ console.log(JSON.stringify({
   trusted_target_count: trusted.size,
 }, null, 2));
 NODE
+
+rm -rf "$VALIDATION_ROOT"
+trap - EXIT
 
 if [[ "${ZSSH_PUBLIC_GATEWAY_VALIDATE_ONLY:-0}" == "1" ]]; then
   echo "ZSSH_PUBLIC_GATEWAY_CONFIG_GREEN sha=$REPO_SHA"
