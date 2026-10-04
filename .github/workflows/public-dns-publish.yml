@@ -71,6 +71,7 @@ jobs:
           ZSSH_DNS_APPLY: "0"
           EVIDENCE_PATH: ${{ runner.temp }}/zssh-cloudflare-dns-plan.json
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          ZSSH_DNS_EXPECTED_CURRENT_IPV4: ${{ vars.ZSSH_DNS_EXPECTED_CURRENT_IPV4 }}
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -80,6 +81,7 @@ jobs:
           ZSSH_DNS_APPLY: "1"
           EVIDENCE_PATH: ${{ runner.temp }}/zssh-cloudflare-dns-result.json
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          ZSSH_DNS_EXPECTED_CURRENT_IPV4: ${{ vars.ZSSH_DNS_EXPECTED_CURRENT_IPV4 }}
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -89,6 +91,7 @@ jobs:
           ZSSH_DNS_APPLY: "0"
           EVIDENCE_PATH: ${{ runner.temp }}/zssh-cloudflare-dns-verify.json
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          ZSSH_DNS_EXPECTED_CURRENT_IPV4: ${{ vars.ZSSH_DNS_EXPECTED_CURRENT_IPV4 }}
         shell: bash
         run: |
           set -Eeuo pipefail
