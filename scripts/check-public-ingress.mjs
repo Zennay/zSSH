@@ -60,6 +60,7 @@ export async function checkPublicIngress(rawMcpUrl, {
   lookupImpl = dnsLookup,
   fetchImpl = fetch,
   timeoutMs = 10000,
+  expectedAddresses = [],
 } = {}) {
   const mcpUrl = validatePublicMcpUrl(rawMcpUrl, { name: "ZSSH_PLUGIN_MCP_URL" });
   if (!mcpUrl.hostname.includes(".")) {
@@ -86,6 +87,29 @@ export async function checkPublicIngress(rawMcpUrl, {
   const nonPublic = normalizedRecords.filter(record => !isPublicRoutableAddress(record.address));
   if (nonPublic.length > 0) {
     fail("public DNS must resolve only to publicly routable addresses");
+  }
+
+  const expected = [...new Set(
+    (Array.isArray(expectedAddresses) ? expectedAddresses : [expectedAddresses])
+      .flatMap(item => String(item || "").split(","))
+      .map(item => item.trim())
+      .filter(Boolean),
+  )].sort();
+  for (const address of expected) {
+    if (!isPublicRoutableAddress(address)) {
+      fail("expected public DNS address must be publicly routable: " + address);
+    }
+  }
+  if (expected.length > 0) {
+    const actual = [...new Set(normalizedRecords.map(record => record.address))].sort();
+    if (JSON.stringify(actual) !== JSON.stringify(expected)) {
+      fail(
+        "public DNS addresses must exactly match expected production origin: expected " +
+        expected.join(", ") +
+        "; got " +
+        actual.join(", "),
+      );
+    }
   }
 
   const requestSignal = () => AbortSignal.timeout(timeoutMs);
@@ -170,7 +194,13 @@ export async function main({
   stdout = process.stdout,
 } = {}) {
   const rawMcpUrl = String(argv[0] || env.ZSSH_PLUGIN_MCP_URL || "").trim();
-  const result = await checkPublicIngress(rawMcpUrl);
+  const expectedAddresses = String(
+    argv[1] || env.ZSSH_EXPECTED_PUBLIC_ADDRESSES || "",
+  )
+    .split(",")
+    .map(item => item.trim())
+    .filter(Boolean);
+  const result = await checkPublicIngress(rawMcpUrl, { expectedAddresses });
   stdout.write(JSON.stringify(result, null, 2) + "\n");
 }
 
