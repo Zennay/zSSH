@@ -388,9 +388,10 @@ export function buildProductionReadinessAudit(env = process.env) {
     : internalActionGates.length > 0
       ? "internal_action_available"
       : "external_input_only";
+  const blockingAction = nextActions[0] || null;
 
   return {
-    schema_version: 3,
+    schema_version: 4,
     phase: "M5",
     goal: "public-plugin production submission",
     ready: {
@@ -406,6 +407,8 @@ export function buildProductionReadinessAudit(env = process.env) {
     execution_state: executionState,
     internal_action_gates: internalActionGates,
     external_input_gates: externalInputGates,
+    blocking_gate: blockingAction?.lane || null,
+    blocking_action: blockingAction,
     next_actions: nextActions,
   };
 }
