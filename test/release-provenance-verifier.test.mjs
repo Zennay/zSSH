@@ -89,3 +89,14 @@ test("verifier rejects executable-bit drift", t => {
     /tracked executable mode drifted: deploy\/install-live\.sh/,
   );
 });
+
+test("verifier rejects untracked files in an existing release directory", t => {
+  const { root, release } = materializeRelease();
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+
+  appendFileSync(path.join(release, "runtime-injected.mjs"), "export {};\n");
+  assert.throws(
+    () => verify(release),
+    /unexpected untracked path runtime-injected\.mjs/,
+  );
+});
