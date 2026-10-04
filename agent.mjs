@@ -2,6 +2,7 @@
 import crypto from "node:crypto";
 import { lstat, readFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
+import path from "node:path";
 import { signAgentRequest } from "./agent-transport.mjs";
 import { executeAgentCommand } from "./agent-runtime.mjs";
 import { normalizeTargetId } from "./pairing.mjs";
@@ -30,12 +31,18 @@ function gatewayBase(env = process.env) {
 
 async function loadPrivateKey(env = process.env) {
   const file = required("ZSSH_AGENT_PRIVATE_KEY_FILE", env);
+  if (!path.isAbsolute(file)) {
+    throw new Error("agent private key path must be absolute");
+  }
   const stat = await lstat(file);
   if (!stat.isFile() || stat.isSymbolicLink()) {
     throw new Error("agent private key must be a regular non-symlink file");
   }
   if ((stat.mode & 0o077) !== 0) {
     throw new Error("agent private key must not be group/world accessible");
+  }
+  if (typeof process.getuid === "function" && stat.uid !== process.getuid()) {
+    throw new Error("agent private key must be owned by the agent user");
   }
   const key = crypto.createPrivateKey(await readFile(file, "utf8"));
   if (key.asymmetricKeyType !== "ed25519") throw new Error("agent private key must be Ed25519");
