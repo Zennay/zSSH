@@ -60,3 +60,29 @@ test("all active checkout steps disable persisted Git credentials", () => {
     }
   }
 });
+
+
+test("all active external actions use reviewed Node 24-compatible action pins", () => {
+  const allowed = new Set([
+    "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+    "actions/setup-node@820762786026740c76f36085b0efc47a31fe5020",
+    "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a",
+  ]);
+
+  const workflowFiles = readdirSync(workflowsDir)
+    .filter((name) => name.endsWith(".yml") || name.endsWith(".yaml"))
+    .sort();
+
+  for (const name of workflowFiles) {
+    const workflow = readFileSync(join(workflowsDir.pathname, name), "utf8");
+    const refs = [...workflow.matchAll(/uses:\s*([^\s#]+)/g)].map((match) => match[1]);
+
+    for (const ref of refs) {
+      if (ref.startsWith("./")) continue;
+      assert.ok(
+        allowed.has(ref),
+        `${name}: external action is not one of the reviewed Node 24-compatible pins: ${ref}`,
+      );
+    }
+  }
+});
