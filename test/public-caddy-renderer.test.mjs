@@ -27,6 +27,20 @@ test("renders the exact public hostname to the isolated public gateway port", ()
   assert.doesNotMatch(rendered, /8788/);
 });
 
+test("normalizes an absolute DNS hostname before rendering Caddy ingress", () => {
+  assert.equal(
+    validatePublicBaseUrl("https://mcp.zssh.dev.").href,
+    "https://mcp.zssh.dev/",
+  );
+  assert.match(
+    renderPublicCaddyConfig({
+      publicBaseUrl: "https://mcp.zssh.dev.",
+      gatewayPort: 8789,
+    }),
+    /^mcp\.zssh\.dev \{$/m,
+  );
+});
+
 test("accepts an operator-selected non-private high port", () => {
   assert.equal(validateGatewayPort("9443"), 9443);
   assert.match(
@@ -47,8 +61,10 @@ test("fails closed on unsafe or placeholder public origins", () => {
     "https://mcp.zssh.dev/?q=1",
     "https://localhost",
     "https://gateway.local",
+    "https://gateway.local.",
     "https://127.0.0.1",
     "https://example.com",
+    "https://example.com.",
     "https://mcp.example.com",
     "https://mcp.example.net",
     "https://mcp.example.org",
