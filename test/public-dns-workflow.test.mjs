@@ -26,6 +26,13 @@ test("production DNS publish proves external convergence before reporting succes
   );
 });
 
+test("post-write verification requires exact automatic TTL and DNS-only mode", () => {
+  assert.match(
+    workflow,
+    /evidence\.action !== "noop"[\s\S]*evidence\.ttl !== 1[\s\S]*evidence\.proxied !== false/,
+  );
+});
+
 test("post-publication origin evidence is retained with Cloudflare DNS evidence", () => {
   assert.match(
     workflow,
