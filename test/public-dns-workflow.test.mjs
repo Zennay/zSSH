@@ -70,8 +70,15 @@ test("manual production DNS dispatch is bound to the current protected main revi
   );
 });
 
-test("manual DNS publication still requires explicit confirmation", () => {
-  assert.match(workflow, /if: github\.event_name == 'workflow_dispatch'[\s\S]*PUBLISH_ZSSH_PRODUCTION_DNS/);
+test("manual DNS publication keeps confirmation input out of generated shell source", () => {
+  const tail = workflow.split("      - name: Require explicit production DNS confirmation")[1];
+  assert.ok(tail, "missing manual confirmation step");
+  const step = tail.split("\n      - name:")[0];
+
+  assert.match(step, /if: github\.event_name == 'workflow_dispatch'/);
+  assert.match(step, /ZSSH_DNS_CONFIRMATION: \$\{\{ inputs\.confirmation \}\}/);
+  assert.match(step, /test "\$ZSSH_DNS_CONFIRMATION" = "PUBLISH_ZSSH_PRODUCTION_DNS"/);
+  assert.doesNotMatch(step.split("run: |")[1] || "", /\$\{\{ inputs\.confirmation \}\}/);
 });
 
 test("production DNS workflow pins all reusable actions to immutable commit SHAs", () => {
