@@ -4,6 +4,9 @@ import { pathToFileURL } from "node:url";
 import { publicReleaseConfigPresence } from "./check-public-release-config.mjs";
 
 const PROVIDER_LANES = {
+  repository_governance: [
+    "ZSSH_MAIN_PROTECTION_VERIFIED",
+  ],
   dns_publication: [
     "CLOUDFLARE_ZONE_ID",
     "CLOUDFLARE_API_TOKEN",
@@ -56,6 +59,13 @@ export function buildProductionReadinessAudit(env = process.env) {
   const releaseConfig = publicReleaseConfigPresence(env);
 
   const nextActions = [];
+  if (!lanes.repository_governance.ready) {
+    nextActions.push({
+      lane: "repository_governance",
+      action: "Protect main against direct writes, require PR-based changes plus the zSSH CI/repository-hygiene check, run a controlled rejected-direct-push proof, then set ZSSH_MAIN_PROTECTION_VERIFIED=1.",
+      missing: lanes.repository_governance.missing,
+    });
+  }
   if (!lanes.dns_publication.ready) {
     nextActions.push({
       lane: "dns_publication",
@@ -90,6 +100,7 @@ export function buildProductionReadinessAudit(env = process.env) {
     phase: "M5",
     goal: "public-plugin production submission",
     ready: {
+      repository_governance: lanes.repository_governance.ready,
       dns_publication: lanes.dns_publication.ready,
       auth0_preflight: lanes.auth0_preflight.ready,
       reviewer_fixture: lanes.reviewer_fixture.ready,
