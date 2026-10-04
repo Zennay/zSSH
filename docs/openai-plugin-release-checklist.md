@@ -27,7 +27,7 @@ This checklist tracks the production path from the current review-ready MCP prof
 
 ## Protected-environment readiness audit
 
-Before attempting provider writes or the final production probe, run the manual `OpenAI production readiness audit` workflow (or `npm run release:readiness` with the equivalent environment locally). It emits only booleans, missing variable names, and ordered next actions; protected values are never serialized. The audit separates Cloudflare DNS inputs, Auth0 qualification inputs, reviewer-fixture inputs, and later OpenAI portal/live-host attestations so an incomplete stage does not masquerade as a transport or implementation failure.
+Before attempting provider writes or the final production probe, run the manual `OpenAI production readiness audit` workflow (or `npm run release:readiness` with the equivalent environment locally). It emits only booleans, missing variable names, and ordered next actions; protected values are never serialized. The audit separates Cloudflare DNS inputs, Auth0 qualification inputs, reviewer-fixture inputs, and later OpenAI portal/live-host attestations so an incomplete stage does not masquerade as a transport or implementation failure. Autonomous consumers should use the machine-readable `execution_state`: `internal_action_available` means at least one repository-owned gate can still advance, `external_input_only` means all remaining actions require provider/reviewer/portal input, and `ready` means the readiness receipt has no remaining action.
 
 ## Canonical release provenance
 
