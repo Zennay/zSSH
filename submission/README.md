@@ -41,8 +41,9 @@ OpenAI review requires a dedicated demo account that works immediately for the r
 
 The username/password or other reviewer credentials must **not** be committed, placed in the plugin ZIP, printed by CI, or stored in release artifacts. Enter those credentials only in the secure Review details form. The GitHub release environment stores only:
 
-- `ZSSH_REVIEW_LOGIN_URL` as a non-secret variable;
-- `ZSSH_REVIEW_CREDENTIALS_VERIFIED=1` as a non-secret operator attestation after the login has actually been tested;
+- `ZSSH_REVIEW_LOGIN_URL` as the current public login URL;
+- `ZSSH_REVIEW_LOGIN_VERIFIED_URL` set to that exact URL only after the dedicated reviewer credentials have been successfully tested there;
+- `ZSSH_REVIEW_CREDENTIALS_VERIFIED=1` as a non-secret operator attestation after that exact login URL has actually been tested;
 - `ZSSH_CHATGPT_DESKTOP_REVIEWED=1` only after the production connection card has been exercised successfully in ChatGPT desktop;
 - `ZSSH_CHATGPT_MOBILE_REVIEWED=1` only after the production connection card has been exercised successfully in ChatGPT mobile;
 - `ZSSH_CHATGPT_REVIEW_SHA256` set to the fingerprint printed by `node scripts/check-host-surface-review-binding.mjs --compute` for the exact reviewed MCP endpoint, tool contract, and connection-card HTML; any change to those inputs invalidates the desktop/mobile review attestations;
@@ -60,6 +61,7 @@ After the public OAuth endpoint, reviewer account, pairing, review fixture, and 
 ZSSH_PLUGIN_MCP_URL=https://mcp.example.com/mcp \
 ZSSH_REVIEW_ACCESS_TOKEN='<short-lived reviewer access token>' \
 ZSSH_REVIEW_LOGIN_URL=https://auth.example.com/login \
+ZSSH_REVIEW_LOGIN_VERIFIED_URL=https://auth.example.com/login \
 ZSSH_REVIEW_CREDENTIALS_VERIFIED=1 \
 ZSSH_CHATGPT_DESKTOP_REVIEWED=1 \
 ZSSH_CHATGPT_MOBILE_REVIEWED=1 \

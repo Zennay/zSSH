@@ -99,6 +99,7 @@ Before pressing Submit:
 - use a project with global data residency for the MCP submission;
 - complete the live domain-verification challenge and set `ZSSH_OPENAI_DOMAIN_VERIFIED=1` only after the portal reports Verify Domain successful;
 - run Scan Tools against the current production MCP server, resolve required findings, and set `ZSSH_OPENAI_TOOL_SCAN_VERIFIED=1` only after the portal scan is green;
+- test the dedicated reviewer credentials at the exact public login URL, then set `ZSSH_REVIEW_LOGIN_VERIFIED_URL` to that exact tested URL and `ZSSH_REVIEW_CREDENTIALS_VERIFIED=1`;
 - connect the production OAuth reviewer account and pair it to the dedicated sample target;
 - run `npm run submission:probe` against that production endpoint;
 - record the required reviewer walkthrough;
@@ -121,6 +122,8 @@ OPENAI_APPS_CHALLENGE_TOKEN='<current dashboard challenge token>' \
 npm run submission:probe
 
 # The protected GitHub openai-production release environment additionally requires:
+# ZSSH_REVIEW_LOGIN_VERIFIED_URL=<exact tested reviewer login URL>
+# ZSSH_REVIEW_CREDENTIALS_VERIFIED=1
 # ZSSH_CHATGPT_DESKTOP_REVIEWED=1
 # ZSSH_CHATGPT_MOBILE_REVIEWED=1
 # ZSSH_CHATGPT_REVIEW_SHA256=<exact reviewed host-surface fingerprint>

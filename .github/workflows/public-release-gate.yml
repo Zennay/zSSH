@@ -114,6 +114,7 @@ jobs:
       ZSSH_REVIEW_WRITE_FILE: ${{ vars.ZSSH_REVIEW_WRITE_FILE }}
       ZSSH_REVIEW_ACCESS_TOKEN: ${{ secrets.ZSSH_REVIEW_ACCESS_TOKEN }}
       ZSSH_REVIEW_LOGIN_URL: ${{ vars.ZSSH_REVIEW_LOGIN_URL }}
+      ZSSH_REVIEW_LOGIN_VERIFIED_URL: ${{ vars.ZSSH_REVIEW_LOGIN_VERIFIED_URL }}
       ZSSH_REVIEW_CREDENTIALS_VERIFIED: ${{ vars.ZSSH_REVIEW_CREDENTIALS_VERIFIED }}
       ZSSH_CHATGPT_DESKTOP_REVIEWED: ${{ vars.ZSSH_CHATGPT_DESKTOP_REVIEWED }}
       ZSSH_CHATGPT_MOBILE_REVIEWED: ${{ vars.ZSSH_CHATGPT_MOBILE_REVIEWED }}
@@ -182,6 +183,9 @@ jobs:
           import { assertHostSurfaceReviewBinding } from "./scripts/check-host-surface-review-binding.mjs";
           const endpoint = new URL(process.env.ZSSH_PLUGIN_MCP_URL);
           const reviewLogin = new URL(process.env.ZSSH_REVIEW_LOGIN_URL);
+          if (new URL(process.env.ZSSH_REVIEW_LOGIN_VERIFIED_URL).href !== reviewLogin.href) {
+            throw new Error("reviewer login verification is stale: verified login URL does not match the exact current review login URL");
+          }
           const probe = JSON.parse(readFileSync(process.env.PROBE_REPORT_PATH, "utf8"));
           const bundle = JSON.parse(readFileSync(process.env.BUNDLE_REPORT_PATH, "utf8"));
           if (!/^[a-f0-9]{64}$/.test(String(probe.tool_scan_sha256 || ""))) {
@@ -235,6 +239,7 @@ jobs:
             endpoint_path: endpoint.pathname,
             review_login_origin: reviewLogin.origin,
             review_login_path: reviewLogin.pathname,
+            review_login_verified_url: process.env.ZSSH_REVIEW_LOGIN_VERIFIED_URL,
             reviewer_credentials_verified: process.env.ZSSH_REVIEW_CREDENTIALS_VERIFIED === "1",
             chatgpt_desktop_reviewed: true,
             chatgpt_mobile_reviewed: true,
