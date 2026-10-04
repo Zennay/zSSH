@@ -65,4 +65,4 @@ Record:
 - live ChatGPT mobile connection-card result;
 - portal scan findings and resolutions.
 
-A green local canary alone does not indicate production submission readiness. The zSSH repository intentionally does not own the VPS runner; live rollout evidence is produced through the dedicated zCloud VPS release lane so repository-scoped runner queues cannot masquerade as deployment proof.
+A green local canary alone does not indicate production submission readiness. The zSSH repository intentionally does not own the VPS runner; live rollout and validate-only VPS evidence is produced through zCloud-owned workflows (including `zssh-public-gateway-vps-preflight.yml`) so repository-scoped runner queues cannot masquerade as deployment proof. zSSH CI/release workflows must remain GitHub-hosted and must not schedule `self-hosted` jobs.
