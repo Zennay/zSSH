@@ -35,7 +35,7 @@ The reconciler:
 8. is idempotent and returns `noop` when the desired state already exists;
 9. never prints the API token or zone ID in its evidence output.
 
-The workflow is manual-only, runs in the protected `openai-production` environment, requires the explicit phrase `PUBLISH_ZSSH_PRODUCTION_DNS`, performs a dry-run first, applies the change, then re-reads Cloudflare and requires an idempotent `noop` result.
+The workflow runs in the protected `openai-production` environment. Manual dispatch requires the explicit phrase `PUBLISH_ZSSH_PRODUCTION_DNS`; a reviewed canonical-main activation may also run through the dedicated `.github/openai-production-dns-trigger` marker after main-provenance and branch-protection checks pass. Both paths perform a dry-run first, apply the change, re-read Cloudflare, require an idempotent `noop` result, and then prove external DNS convergence.
 
 ## Required protected configuration
 
@@ -52,3 +52,11 @@ The token is an external credential and is intentionally not stored in the repos
 3. promote the zSSH Caddy site;
 4. run the GitHub-hosted external ingress preflight against `https://zssh.cheapgpt.shop/mcp`;
 5. continue with production OAuth/reviewer and OpenAI portal gates.
+
+
+## Live execution evidence — 2026-10-04 06:34 UTC
+
+- Canonical production DNS run `37181262867` reached the reviewed protected-main gate successfully, then failed closed in the pre-mutation validation step because both protected Cloudflare inputs were absent. The recorded validator error was `CLOUDFLARE_ZONE_ID must be a 32-character hexadecimal zone ID`; the publish step was skipped, so no DNS mutation occurred.
+- The deterministic non-secret zSSH release variables are independent of this provider gate. zCloud run `37182568488` successfully seeded and read back `ZSSH_PLUGIN_MCP_URL`, `ZSSH_REVIEW_FILE`, and `ZSSH_REVIEW_WRITE_FILE` in the zSSH `openai-production` environment.
+- A separate zCloud self-hosted capability probe now checks whether `vps-bb300bba` already has a reusable Cloudflare API or Wrangler session. That probe is read-only: it performs token verification / zone lookup GETs and `wrangler whoami`, emits only boolean capability evidence, and never publishes DNS or copies a provider credential into zSSH.
+- Until either the protected Cloudflare inputs are supplied or that existing-session probe proves a safe reusable provider session, DNS publication remains an external credential gate rather than a missing zSSH implementation step.
