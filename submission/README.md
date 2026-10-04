@@ -33,7 +33,7 @@ The annotation explanations to paste into review are maintained in `docs/openai-
 
 The review cases assume the dedicated review target has `/srv/zssh-review` configured as `ZSSH_PUBLIC_ALLOWED_ROOTS`, with a UTF-8 file at `/srv/zssh-review/sample.txt`. Keep this public root free of credentials and authentication secrets. The public file tools reject common credential-file paths and secret-like content rather than returning it. The reviewer OAuth account must be explicitly paired to that target before target operations are expected to succeed.
 
-The final directory submission also needs a verified developer identity, successful domain verification, a current production tool scan, and reviewer-accessible OAuth credentials. The protected `openai-production` release environment must keep `ZSSH_OPENAI_DOMAIN_VERIFIED=1` and `ZSSH_OPENAI_TOOL_SCAN_VERIFIED=1` unset until those two portal checks are actually green.
+The final directory submission also needs a verified developer identity, successful domain verification, a current production tool scan, and reviewer-accessible OAuth credentials. The protected `openai-production` release environment must keep `ZSSH_OPENAI_DOMAIN_VERIFIED=1`, `ZSSH_OPENAI_DOMAIN_VERIFIED_HOST`, and `ZSSH_OPENAI_TOOL_SCAN_VERIFIED=1` unset until those portal checks are actually green. The verified host must be the exact challenge-base hostname shown by OpenAI: either the production MCP hostname or an eligible parent domain accepted by the portal.
 
 ## Reviewer account release gate
 
@@ -47,6 +47,7 @@ The username/password or other reviewer credentials must **not** be committed, p
 - `ZSSH_CHATGPT_MOBILE_REVIEWED=1` only after the production connection card has been exercised successfully in ChatGPT mobile;
 - `ZSSH_REVIEW_ACCESS_TOKEN` separately as a secret used only by the automated end-to-end MCP probe;
 - `ZSSH_OPENAI_DOMAIN_VERIFIED=1` only after OpenAI Verify Domain succeeds;
+- `ZSSH_OPENAI_DOMAIN_VERIFIED_HOST` set to the exact hostname used by that successful OpenAI domain challenge; the release gate rejects an unrelated host;
 - `ZSSH_OPENAI_TOOL_SCAN_VERIFIED=1` only after the current production Scan Tools run succeeds and required findings are resolved.
 - `ZSSH_OPENAI_TOOL_SCAN_SHA256` set to the exact lowercase SHA-256 emitted by the production probe for the tool contract that was scanned; any later tool-contract change requires a fresh portal scan and a refreshed fingerprint.
 
