@@ -12,6 +12,8 @@ const REQUIRED_RELEASE_CONFIG = [
   "ZSSH_REVIEW_ACCESS_TOKEN",
   "ZSSH_REVIEW_LOGIN_URL",
   "ZSSH_REVIEW_CREDENTIALS_VERIFIED",
+  "ZSSH_CHATGPT_DESKTOP_REVIEWED",
+  "ZSSH_CHATGPT_MOBILE_REVIEWED",
   "ZSSH_OPENAI_DOMAIN_VERIFIED",
   "ZSSH_OPENAI_TOOL_SCAN_VERIFIED",
   "OPENAI_APPS_CHALLENGE_TOKEN",
@@ -80,6 +82,14 @@ export function validatePublicReleaseConfig(env = process.env) {
   if (reviewCredentialsVerified !== "1") {
     fail("ZSSH_REVIEW_CREDENTIALS_VERIFIED must be exactly 1 after the dedicated reviewer login has been tested without MFA, email/SMS confirmation, magic links, or private-network access");
   }
+  const chatgptDesktopReviewed = requireValue(env, "ZSSH_CHATGPT_DESKTOP_REVIEWED");
+  if (chatgptDesktopReviewed !== "1") {
+    fail("ZSSH_CHATGPT_DESKTOP_REVIEWED must be exactly 1 only after the production connection card has been exercised successfully in ChatGPT desktop");
+  }
+  const chatgptMobileReviewed = requireValue(env, "ZSSH_CHATGPT_MOBILE_REVIEWED");
+  if (chatgptMobileReviewed !== "1") {
+    fail("ZSSH_CHATGPT_MOBILE_REVIEWED must be exactly 1 only after the production connection card has been exercised successfully in ChatGPT mobile");
+  }
   const openaiDomainVerified = requireValue(env, "ZSSH_OPENAI_DOMAIN_VERIFIED");
   if (openaiDomainVerified !== "1") {
     fail("ZSSH_OPENAI_DOMAIN_VERIFIED must be exactly 1 only after Verify Domain has passed in the OpenAI plugin submission portal");
@@ -107,6 +117,8 @@ export function validatePublicReleaseConfig(env = process.env) {
     review_login_origin: reviewLoginUrl.origin,
     review_login_path: reviewLoginUrl.pathname,
     review_credentials_verified: true,
+    chatgpt_desktop_reviewed: true,
+    chatgpt_mobile_reviewed: true,
     openai_domain_verified: true,
     openai_tool_scan_verified: true,
     review_file_name: path.basename(reviewFile),
@@ -136,6 +148,8 @@ export function runSelfTest() {
     ZSSH_REVIEW_ACCESS_TOKEN: "review-token-0123456789abcdef",
     ZSSH_REVIEW_LOGIN_URL: "https://auth.zssh.dev/login",
     ZSSH_REVIEW_CREDENTIALS_VERIFIED: "1",
+    ZSSH_CHATGPT_DESKTOP_REVIEWED: "1",
+    ZSSH_CHATGPT_MOBILE_REVIEWED: "1",
     ZSSH_OPENAI_DOMAIN_VERIFIED: "1",
     ZSSH_OPENAI_TOOL_SCAN_VERIFIED: "1",
     OPENAI_APPS_CHALLENGE_TOKEN: "challenge-0123456789abcdef",
@@ -161,6 +175,8 @@ export function runSelfTest() {
   assertThrows(() => validatePublicReleaseConfig({ ...good, ZSSH_REVIEW_ACCESS_TOKEN: "short" }), /at least 20/);
   assertThrows(() => validatePublicReleaseConfig({ ...good, ZSSH_REVIEW_LOGIN_URL: "https://127.0.0.1/login" }), /public DNS hostname/);
   assertThrows(() => validatePublicReleaseConfig({ ...good, ZSSH_REVIEW_CREDENTIALS_VERIFIED: "0" }), /must be exactly 1/);
+  assertThrows(() => validatePublicReleaseConfig({ ...good, ZSSH_CHATGPT_DESKTOP_REVIEWED: "0" }), /ChatGPT desktop/);
+  assertThrows(() => validatePublicReleaseConfig({ ...good, ZSSH_CHATGPT_MOBILE_REVIEWED: "0" }), /ChatGPT mobile/);
   assertThrows(() => validatePublicReleaseConfig({ ...good, ZSSH_OPENAI_DOMAIN_VERIFIED: "0" }), /Verify Domain has passed/);
   assertThrows(() => validatePublicReleaseConfig({ ...good, ZSSH_OPENAI_TOOL_SCAN_VERIFIED: "0" }), /Scan Tools has completed successfully/);
 
