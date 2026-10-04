@@ -10,12 +10,14 @@ on:
       - "public-site.mjs"
       - "test/public-site.test.mjs"
       - "scripts/check-public-release-config.mjs"
+      - "scripts/check-tool-scan-binding.mjs"
       - "scripts/check-main-provenance.mjs"
       - "scripts/build-openai-plugin.py"
       - "package.json"
       - "production-submission-probe.mjs"
       - "production-submission-probe-canary.mjs"
       - "test/release-contract.test.mjs"
+      - "test/tool-scan-binding.test.mjs"
       - "test/main-provenance.test.mjs"
       - "submission/**"
       - "docs/openai-plugin-*.md"
@@ -28,11 +30,13 @@ on:
       - "public-site.mjs"
       - "test/public-site.test.mjs"
       - "scripts/check-public-release-config.mjs"
+      - "scripts/check-tool-scan-binding.mjs"
       - "scripts/build-openai-plugin.py"
       - "package.json"
       - "production-submission-probe.mjs"
       - "production-submission-probe-canary.mjs"
       - "test/release-contract.test.mjs"
+      - "test/tool-scan-binding.test.mjs"
       - "submission/**"
       - "docs/openai-plugin-*.md"
   workflow_dispatch:
@@ -63,6 +67,7 @@ jobs:
         run: |
           node --check release-contract.mjs
           node --check scripts/check-public-release-config.mjs
+          node --check scripts/check-tool-scan-binding.mjs
           node --check scripts/check-main-provenance.mjs
           node --check production-submission-probe.mjs
           node --check production-submission-probe-canary.mjs
@@ -146,6 +151,10 @@ jobs:
         run: |
           set -Eeuo pipefail
           node production-submission-probe.mjs | tee "$PROBE_REPORT_PATH"
+      - name: Bind portal Scan Tools evidence to exact live contract
+        env:
+          PROBE_REPORT_PATH: ${{ runner.temp }}/zssh-openai-production-probe.json
+        run: node scripts/check-tool-scan-binding.mjs
       - name: Record non-secret release evidence
         shell: bash
         env:
