@@ -159,3 +159,24 @@ test("refuses CNAME/NS conflicts and multi-A RRsets", async () => {
     );
   }
 });
+
+
+test("autodiscovered zone ID is reused for update writes", async () => {
+  const calls = [];
+  const listed = [
+    { id: recordId, type: "A", name: "zssh.cheapgpt.shop", content: "203.0.113.10", proxied: true },
+  ];
+  const result = await reconcileCloudflareDns(baseArgs(async (url, init) => {
+    calls.push({ url: String(url), init });
+    if (calls.length === 1) {
+      return response([{ id: zoneId, name: "cheapgpt.shop", status: "active" }]);
+    }
+    if (calls.length === 2) return response(listed);
+    return response({ id: recordId, type: "A", name: "zssh.cheapgpt.shop", content: "198.244.191.182", proxied: false });
+  }, { zoneId: "", zoneName: "cheapgpt.shop", apply: true }));
+  assert.equal(result.action, "updated");
+  assert.equal(result.zone_source, "discovered");
+  assert.equal(calls.length, 3);
+  assert.equal(calls[2].init.method, "PATCH");
+  assert.match(calls[2].url, new RegExp(`/zones/${zoneId}/dns_records/${recordId}$`));
+});
