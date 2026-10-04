@@ -262,3 +262,18 @@ test("Auth0 management credential is unavailable before canonical provenance", (
   const reviewedStep = reviewedTail.split("\n      - name:")[0];
   assert.doesNotMatch(reviewedStep, /AUTH0_MANAGEMENT_API_TOKEN/);
 });
+
+
+test("every release-critical test trigger is executed by the release contract job", () => {
+  const pullRequestPaths = eventPaths("pull_request").filter(path => path.startsWith("test/") && path.endsWith(".test.mjs"));
+  const contractStep = workflow
+    .split("      - name: Exercise release and portal binding contracts")[1]
+    ?.split("\n      - name:")[0] || "";
+
+  for (const testPath of pullRequestPaths) {
+    assert.ok(
+      contractStep.includes(testPath),
+      `release-critical test trigger must be executed by release contract job: ${testPath}`,
+    );
+  }
+});
