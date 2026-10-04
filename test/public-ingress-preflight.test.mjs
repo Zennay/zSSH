@@ -24,6 +24,7 @@ test("ingress preflight automatically follows successful canonical production DN
     workflow,
     /ref: \$\{\{ github\.event_name == 'workflow_run' && github\.event\.workflow_run\.head_sha \|\| github\.sha \}\}/,
   );
+  assert.match(workflow, /persist-credentials: false/);
   assert.match(workflow, /test "\$\{\{ github\.event\.workflow_run\.head_branch \}\}" = "main"/);
   assert.match(
     workflow,
