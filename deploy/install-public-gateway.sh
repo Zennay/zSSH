@@ -163,6 +163,12 @@ mkdir -p "$CONFIG" "$STATE" "$RELEASES" "$UNIT_DIR"
 chmod 700 "$CONFIG" "$STATE"
 trap 'rm -rf "$STAGE"' EXIT
 
+
+verify_release_provenance() {
+  git -C "$SOURCE_ROOT" show "${REPO_SHA}:scripts/verify-release-provenance.mjs" |
+    "$NODE_BIN" --input-type=module - "$SOURCE_ROOT" "$REPO_SHA" "$RELEASE"
+}
+
 if [[ ! -d "$RELEASE" ]]; then
   mkdir -p "$STAGE"
   git -C "$SOURCE_ROOT" archive --format=tar "$REPO_SHA" | tar -x -C "$STAGE"
@@ -170,6 +176,8 @@ if [[ ! -d "$RELEASE" ]]; then
   "$NPM_BIN" test --prefix "$STAGE"
   mv "$STAGE" "$RELEASE"
 fi
+
+verify_release_provenance
 
 ENV_BACKUP=""
 if [[ -f "$ENV_FILE" ]]; then
