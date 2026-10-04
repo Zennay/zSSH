@@ -108,7 +108,6 @@ test("production DNS verifies the provider token read-only before planning any m
 
 test("production DNS replacement is bound to an explicit reviewed existing-record precondition", () => {
   for (const stepName of [
-    "Verify Cloudflare API token is active",
     "Validate desired Cloudflare DNS change without mutation",
     "Publish exact DNS-only A record",
     "Re-read Cloudflare API and prove idempotent desired state",
@@ -197,6 +196,7 @@ test("Cloudflare provider credential is unavailable before canonical provenance"
   assert.doesNotMatch(jobHeader, /CLOUDFLARE_API_TOKEN/);
 
   for (const stepName of [
+    "Verify Cloudflare API token is active",
     "Validate desired Cloudflare DNS change without mutation",
     "Publish exact DNS-only A record",
     "Re-read Cloudflare API and prove idempotent desired state",
