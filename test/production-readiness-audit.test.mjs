@@ -320,8 +320,13 @@ test("protected readiness workflow proves merged-PR provenance before entering o
 
   assert.match(
     publicReleaseWorkflow,
-    /Require GitHub to report main protected[\s\S]*check-main-protection\.mjs --public-status --require-protected/,
-    "final production provenance must fail closed unless GitHub reports main protected",
+    /Require canonical main ref[\s\S]*test "\$GITHUB_REF" = "refs\/heads\/main"/,
+    "final production dispatch must originate from canonical main",
+  );
+  assert.match(
+    publicReleaseWorkflow,
+    /Require exact current protected main[\s\S]*check-main-protection\.mjs --public-status --require-protected --require-current-sha/,
+    "final production provenance must fail closed unless the executing SHA is exact current protected main",
   );
 
   for (const workflow of [readinessWorkflow, publicReleaseWorkflow]) {
