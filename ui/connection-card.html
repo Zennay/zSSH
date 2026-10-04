@@ -10,36 +10,44 @@
       font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     }
     * { box-sizing: border-box; }
-    body { margin: 0; background: transparent; color: var(--color-text-primary, inherit); }
-    .card { padding: 12px; display: grid; gap: 10px; }
-    .top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-    .brand { display: grid; gap: 2px; min-width: 0; }
+    body { margin: 0; min-width: 0; background: transparent; color: var(--color-text-primary, inherit); }
+    .card { width: 100%; min-width: 0; padding: 12px; display: grid; gap: 10px; }
+    .top { min-width: 0; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .brand { min-width: 0; flex: 1 1 auto; display: grid; gap: 2px; }
     .brand strong { font-size: 14px; line-height: 1.2; }
-    .target { font-size: 12px; opacity: .72; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .target { min-width: 0; font-size: 12px; opacity: .72; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .badge {
-      flex: 0 0 auto; border: 1px solid currentColor; border-radius: 999px;
-      padding: 3px 8px; font-size: 11px; font-weight: 600;
+      flex: 0 1 auto; max-width: 48%; border: 1px solid currentColor; border-radius: 999px;
+      padding: 3px 8px; font-size: 11px; font-weight: 600; text-align: center; overflow-wrap: anywhere;
     }
-    .details { display: grid; gap: 6px; font-size: 12px; }
-    .row { display: flex; justify-content: space-between; gap: 16px; }
-    .key { opacity: .68; }
-    .value { text-align: right; overflow-wrap: anywhere; }
-    .note { margin: 0; font-size: 11px; line-height: 1.35; opacity: .68; }
+    .details { min-width: 0; display: grid; gap: 6px; font-size: 12px; }
+    .row { min-width: 0; display: flex; justify-content: space-between; gap: 16px; }
+    .key { flex: 0 0 auto; opacity: .68; }
+    .value { min-width: 0; flex: 1 1 auto; text-align: right; overflow-wrap: anywhere; }
+    .note { margin: 0; font-size: 11px; line-height: 1.35; opacity: .68; overflow-wrap: anywhere; }
     button {
-      width: fit-content; border: 1px solid currentColor; border-radius: 8px;
-      background: transparent; color: inherit; padding: 6px 9px; font: inherit; cursor: pointer;
+      width: fit-content; min-height: 44px; border: 1px solid currentColor; border-radius: 8px;
+      background: transparent; color: inherit; padding: 8px 12px; font: inherit; cursor: pointer;
     }
     button:disabled { cursor: default; opacity: .55; }
+
+    @media (max-width: 360px) {
+      .top { align-items: flex-start; flex-direction: column; gap: 8px; }
+      .badge { max-width: 100%; }
+      .row { align-items: flex-start; flex-direction: column; gap: 2px; }
+      .value { width: 100%; text-align: left; }
+      button { width: 100%; }
+    }
   </style>
 </head>
 <body>
-  <main class="card" aria-live="polite">
+  <main class="card">
     <div class="top">
       <div class="brand">
-        <strong>zSSH</strong>
+        <strong>Connection status</strong>
         <span id="target" class="target">Linux target</span>
       </div>
-      <span id="status" class="badge">Checking…</span>
+      <span id="status" class="badge" role="status" aria-live="polite" aria-atomic="true">Checking…</span>
     </div>
 
     <div class="details">
@@ -47,8 +55,8 @@
       <div id="requestRow" class="row" hidden><span class="key">Pairing request</span><span id="request" class="value">—</span></div>
     </div>
 
-    <p id="note" class="note">Approval stays local to the Linux target.</p>
-    <button id="refresh" type="button">Refresh status</button>
+    <p id="note" class="note" aria-live="polite" aria-atomic="true">Approval stays local to the Linux target.</p>
+    <button id="refresh" type="button" aria-describedby="note">Refresh status</button>
   </main>
 
   <script>
@@ -111,6 +119,7 @@
 
     refreshEl.addEventListener("click", async () => {
       refreshEl.disabled = true;
+      refreshEl.setAttribute("aria-busy", "true");
       try {
         const result = await request("tools/call", { name: "get_pairing_status", arguments: {} });
         render(result?.structuredContent);
@@ -118,6 +127,7 @@
         noteEl.textContent = "Could not refresh the pairing status.";
       } finally {
         refreshEl.disabled = false;
+        refreshEl.removeAttribute("aria-busy");
       }
     });
   </script>
