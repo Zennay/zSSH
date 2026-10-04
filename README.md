@@ -150,6 +150,21 @@ The server publishes `/.well-known/oauth-protected-resource`, returns a standard
 
 The private/default profile keeps the existing capability URL, API-key, bearer-token, and trusted-loopback workflows unchanged.
 
+Deploy the production public gateway as a **separate** loopback service so the existing private zSSH gateway is not rewritten:
+
+```bash
+export ZSSH_PUBLIC_BASE_URL=https://mcp.example.com
+export ZSSH_OAUTH_ISSUER=https://auth.example.com
+export ZSSH_OAUTH_JWKS_URI=https://auth.example.com/.well-known/jwks.json
+export ZSSH_TARGET_ID=zt_example1234
+export ZSSH_AGENT_PUBLIC_KEYS_FILE="$HOME/.config/zssh/reviewer-agent-public.json"
+export ZSSH_PUBLIC_ALLOWED_ROOTS="$HOME/zssh-review"
+npm run gateway:public:install
+```
+
+The installer validates a real DNS-based HTTPS resource origin, production OAuth/JWKS URLs, the opaque reviewer target, and the gateway trust file before writing runtime state. It installs `zssh-public.service` on loopback port 8789 by default with its own `public-gateway.env`, pairing registry, audit log, immutable Git-SHA release tree, systemd sandbox, and rollback path. A reverse proxy/TLS endpoint must route the public hostname to that loopback service; the installer deliberately does not invent DNS, an OAuth provider, reviewer credentials, or the OpenAI domain-verification token. Use `ZSSH_PUBLIC_GATEWAY_VALIDATE_ONLY=1` for a no-mutation configuration preflight. See `docs/research/public-gateway-deployment-2026-10-04.md`.
+
+
 
 ### Target pairing and revocation
 
