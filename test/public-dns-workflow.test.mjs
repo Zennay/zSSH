@@ -163,7 +163,7 @@ test("production DNS never enters the apply step when human replacement review i
     .slice(planIndex, applyIndex);
   assert.match(plan, /action === "would_update_requires_precondition"/);
   assert.match(plan, /throw new Error\([\s\S]*reviewed ZSSH_DNS_EXPECTED_CURRENT_IPV4/);
-  assert.match(runbook, /stops before the mutation-capable apply step/i);
+  assert.match(runbook, /stops the protected workflow \*\*before the mutation-capable apply step\*\*/i);
 });
 
 test("operator DNS cutover runbook stays aligned with the guarded workflow contract", () => {
