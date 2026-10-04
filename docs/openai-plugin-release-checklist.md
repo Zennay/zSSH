@@ -23,6 +23,10 @@ This checklist tracks the production path from the current review-ready MCP prof
 - [ ] Production connection card exercised successfully in ChatGPT desktop against that exact fingerprint; only then set `ZSSH_CHATGPT_DESKTOP_REVIEWED=1`
 - [ ] Production connection card exercised successfully in ChatGPT mobile against that same exact fingerprint; only then set `ZSSH_CHATGPT_MOBILE_REVIEWED=1` and `ZSSH_CHATGPT_REVIEW_SHA256=<computed fingerprint>`
 
+## Protected-environment readiness audit
+
+Before attempting provider writes or the final production probe, run the manual `OpenAI production readiness audit` workflow (or `npm run release:readiness` with the equivalent environment locally). It emits only booleans, missing variable names, and ordered next actions; protected values are never serialized. The audit separates Cloudflare DNS inputs, Auth0 qualification inputs, reviewer-fixture inputs, and later OpenAI portal/live-host attestations so an incomplete stage does not masquerade as a transport or implementation failure.
+
 ## Canonical release provenance
 
 Production submission is dispatched only from canonical `main`. Before the production environment is entered, the release gate verifies through GitHub's commit→pull-request association that the exact `GITHUB_SHA` is the merge commit of a closed, merged PR. Direct commits to `main` therefore cannot become production submission candidates. The separate `Canonical main provenance` workflow also checks every push to `main`.

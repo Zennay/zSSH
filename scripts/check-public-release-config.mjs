@@ -2,6 +2,7 @@
 import net from "node:net";
 import path from "node:path";
 import process from "node:process";
+import { pathToFileURL } from "node:url";
 import { validatePublicMcpUrl } from "../release-contract.mjs";
 import { assertDomainVerificationBinding } from "./check-domain-verification-binding.mjs";
 import {
@@ -242,15 +243,17 @@ export function runSelfTest() {
   console.log("PUBLIC_RELEASE_PREFLIGHT_SELF_TEST_GREEN");
 }
 
-if (argv.has("--self-test")) {
-  runSelfTest();
-} else if (argv.has("--presence-json")) {
-  console.log(JSON.stringify(publicReleaseConfigPresence(process.env), null, 2));
-} else {
-  const result = validatePublicReleaseConfig(process.env);
-  if (argv.has("--json")) console.log(JSON.stringify(result));
-  else {
-    console.log("PUBLIC_RELEASE_PREFLIGHT_GREEN");
-    console.log(JSON.stringify(result));
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  if (argv.has("--self-test")) {
+    runSelfTest();
+  } else if (argv.has("--presence-json")) {
+    console.log(JSON.stringify(publicReleaseConfigPresence(process.env), null, 2));
+  } else {
+    const result = validatePublicReleaseConfig(process.env);
+    if (argv.has("--json")) console.log(JSON.stringify(result));
+    else {
+      console.log("PUBLIC_RELEASE_PREFLIGHT_GREEN");
+      console.log(JSON.stringify(result));
+    }
   }
 }

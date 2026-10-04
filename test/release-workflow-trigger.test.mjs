@@ -50,6 +50,15 @@ test("release-critical pull_request and push path filters stay in parity", () =>
     assert.ok(pushPaths.includes(provenancePath), `push trigger must include ${provenancePath}`);
   }
 
+  for (const readinessPath of [
+    ".github/workflows/openai-production-readiness.yml",
+    "scripts/check-production-readiness-audit.mjs",
+    "test/production-readiness-audit.test.mjs",
+  ]) {
+    assert.ok(pullRequestPaths.includes(readinessPath), `pull_request trigger must include production-readiness path ${readinessPath}`);
+    assert.ok(pushPaths.includes(readinessPath), `push trigger must include production-readiness path ${readinessPath}`);
+  }
+
   for (const authProviderPath of [
     ".github/workflows/auth0-production-preflight.yml",
     "scripts/check-auth0-production.mjs",
