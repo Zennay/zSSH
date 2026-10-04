@@ -131,7 +131,7 @@ test("admin credential is exposed only after canonical provenance and never with
   assert.match(workflow, /node scripts\/check-main-provenance\.mjs/);
   assert.match(
     workflow,
-    /protect:\n    name: Apply and verify main protection\n    needs: provenance[\s\S]*environment: repository-governance/,
+    /protect:\n    name: Apply and verify main protection when needed[\s\S]*environment: repository-governance/,
   );
   assert.match(
     workflow,
@@ -141,7 +141,7 @@ test("admin credential is exposed only after canonical provenance and never with
   assert.doesNotMatch(workflow, /self-hosted/);
 });
 
-test("merged PRs autonomously attempt canonical protection only after provenance", () => {
+test("merged PRs verify live protection and only self-heal when it is absent", () => {
   assert.match(
     workflow,
     /pull_request:\n    types:\n      - closed\n    branches:\n      - main/,
@@ -153,6 +153,14 @@ test("merged PRs autonomously attempt canonical protection only after provenance
   assert.match(
     workflow,
     /Bind merged PR event to canonical main SHA[\s\S]*MERGED_PR_SHA: \$\{\{ github\.event\.pull_request\.merge_commit_sha \}\}[\s\S]*test "\$GITHUB_SHA" = "\$MERGED_PR_SHA"/,
+  );
+  assert.match(
+    workflow,
+    /status:\n    name: Check current main protection[\s\S]*node scripts\/check-main-protection\.mjs --public-status/,
+  );
+  assert.match(
+    workflow,
+    /protect:\n    name: Apply and verify main protection when needed[\s\S]*if: github\.event_name == 'workflow_dispatch' \|\| needs\.status\.outputs\.protected != 'true'/,
   );
   assert.match(
     workflow,
