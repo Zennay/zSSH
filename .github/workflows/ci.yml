@@ -32,6 +32,7 @@ jobs:
           bash -n deploy/install-scoped-sudo.sh
           bash -n deploy/install-target-agent.sh
           bash -n deploy/install-public-gateway.sh
+          bash -n deploy/install-public-caddy.sh
           bash -n deploy/prepare-reviewer-target.sh
           bash -n deploy/configure-tunnel.sh
           bash -n ops/diagnose-vps.sh
