@@ -5,6 +5,7 @@ import {
   assertCurrentBranchSha,
   fetchGitHubResponseWithRetry,
   inspectBranchProtectionFlag,
+  resolveExpectedCurrentSha,
   summarizeBranchMetadata,
   verifyMainProtection,
   verifyMainProtectionNegativeProof,
@@ -209,6 +210,19 @@ test("reads the ordinary branch endpoint with the Actions token", async () => {
     calls[0].url,
     "https://api.github.com/repos/Zennay/zSSH/branches/main",
   );
+});
+
+test("prefers explicit chained-workflow SHA when checking current main freshness", () => {
+  const sourceSha = "a".repeat(40);
+  const eventSha = "b".repeat(40);
+  assert.equal(
+    resolveExpectedCurrentSha({
+      ZSSH_EXPECTED_CURRENT_SHA: sourceSha,
+      GITHUB_SHA: eventSha,
+    }),
+    sourceSha,
+  );
+  assert.equal(resolveExpectedCurrentSha({ GITHUB_SHA: eventSha }), eventSha);
 });
 
 test("requires workflow SHA to equal the current protected branch head", () => {
