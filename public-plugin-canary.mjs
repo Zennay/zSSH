@@ -1,6 +1,7 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { assertPublicToolScopeContract } from "./release-contract.mjs";
+import { assertAnnotationJustificationsMatchTools, loadAnnotationJustifications } from "./annotation-justifications.mjs";
 
 const port = Number(process.env.PORT || 8788);
 const token = process.env.ZSSH_DEV_BEARER_TOKEN || "";
@@ -55,6 +56,11 @@ try {
       }
     }
   }
+
+  const annotationJustifications = assertAnnotationJustificationsMatchTools(
+    tools,
+    await loadAnnotationJustifications(),
+  );
 
   const profileTool = tools.find(tool => tool.name === "get_profile");
   if (profileTool?._meta?.["openai/profile"] !== true) {
@@ -139,6 +145,8 @@ try {
     profile: info.plugin_profile,
     raw_shell_exposed: false,
     annotations_validated: true,
+    annotation_justifications_validated: true,
+    annotation_justifications_sha256: annotationJustifications.sha256,
     oauth_security_schemes_validated: true,
     oauth_tool_scope_contract_validated: true,
     connection_ui_validated: true,
