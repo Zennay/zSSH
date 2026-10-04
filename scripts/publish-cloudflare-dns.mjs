@@ -37,6 +37,14 @@ function validateExpectedStateSha256(value) {
   return fingerprint;
 }
 
+function validateExpectedPlanAction(value) {
+  const action = String(value || "").trim();
+  if (action && !new Set(["would_create", "would_update"]).has(action)) {
+    fail("ZSSH_DNS_EXPECTED_PLAN_ACTION must be would_create or would_update");
+  }
+  return action;
+}
+
 export function cloudflareDnsRecordStateSha256(record) {
   const recordId = String(record?.id || "").trim().toLowerCase();
   const content = String(record?.content || "").trim();
@@ -180,6 +188,7 @@ export async function reconcileCloudflareDns({
   ipv4,
   expectedCurrentIpv4 = "",
   expectedCurrentStateSha256 = "",
+  expectedPlanAction = "",
   apply = false,
   fetchImpl = fetch,
 } = {}) {
@@ -226,8 +235,24 @@ export async function reconcileCloudflareDns({
 
   const existing = aRecords[0] || null;
   const expectedStateSha256 = validateExpectedStateSha256(expectedCurrentStateSha256);
+  const expectedPlan = validateExpectedPlanAction(expectedPlanAction);
   if (!existing && expectedStateSha256) {
     fail("existing A record disappeared since the reviewed DNS plan; refusing mutation");
+  }
+  if (apply && expectedPlan === "would_create" && existing) {
+    fail("DNS state changed since the reviewed create plan; refusing mutation");
+  }
+  if (apply && expectedPlan === "would_update") {
+    if (!existing) {
+      fail("existing A record disappeared since the reviewed update plan; refusing mutation");
+    }
+    if (!expectedStateSha256) {
+      fail("reviewed update plan requires ZSSH_DNS_EXPECTED_CURRENT_STATE_SHA256");
+    }
+    const currentStateSha256 = cloudflareDnsRecordStateSha256(existing);
+    if (currentStateSha256 !== expectedStateSha256) {
+      fail("existing A record state changed since the reviewed DNS plan; refusing mutation");
+    }
   }
   const desired = { type: "A", name: hostname, content: checkedIpv4, ttl: 1, proxied: false };
   const existingTtl = existing ? Number(existing.ttl) : null;
@@ -361,6 +386,7 @@ export async function main({ env = process.env, stdout = process.stdout } = {}) 
     ipv4: env.ZSSH_PUBLIC_IPV4,
     expectedCurrentIpv4: env.ZSSH_DNS_EXPECTED_CURRENT_IPV4,
     expectedCurrentStateSha256: env.ZSSH_DNS_EXPECTED_CURRENT_STATE_SHA256,
+    expectedPlanAction: env.ZSSH_DNS_EXPECTED_PLAN_ACTION,
     apply: env.ZSSH_DNS_APPLY === "1",
   });
   stdout.write(JSON.stringify(result, null, 2) + "\n");
