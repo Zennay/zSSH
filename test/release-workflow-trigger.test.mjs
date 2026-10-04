@@ -101,6 +101,7 @@ test("release-critical pull_request and push path filters stay in parity", () =>
     "deploy/install-public-caddy.sh",
     "test/public-caddy-installer.test.mjs",
     ".github/workflows/public-dns-publish.yml",
+    ".github/openai-production-dns-trigger",
     "scripts/publish-cloudflare-dns.mjs",
     "test/cloudflare-dns-publish.test.mjs",
     "test/public-dns-workflow.test.mjs",
