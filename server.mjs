@@ -16,6 +16,7 @@ import { AGENT_PAIRING_ENDPOINTS, executeAgentPairingControl } from "./agent-pai
 import { publicSiteResponse } from "./public-site.mjs";
 import { verifyClientToken } from "./auth-store.mjs";
 import { VERSION } from "./version.mjs";
+import { createFixedWindowRateLimiter, publicRateLimitFromEnv } from "./rate-limit.mjs";
 const PORT = Number(process.env.PORT || 8788);
 const EXEC_MODE = process.env.ZSSH_EXEC_MODE === "full" ? "full" : "disabled";
 const COMMAND_TIMEOUT_SECONDS = clampInt(process.env.ZSSH_COMMAND_TIMEOUT_SECONDS, 1, 300, 30);
@@ -32,6 +33,8 @@ const OPENAI_APPS_CHALLENGE_TOKEN = process.env.OPENAI_APPS_CHALLENGE_TOKEN || "
 const PUBLIC_AUTH_MODE = process.env.ZSSH_PUBLIC_AUTH_MODE === "legacy" ? "legacy" : "oauth";
 const OAUTH_CONFIG = oauthConfigFromEnv();
 const PAIRING_REQUIRED = PLUGIN_PROFILE === "public" && process.env.ZSSH_PAIRING_REQUIRED !== "0";
+const PUBLIC_RATE_LIMIT_CONFIG = publicRateLimitFromEnv(process.env);
+const PUBLIC_RATE_LIMITER = createFixedWindowRateLimiter(PUBLIC_RATE_LIMIT_CONFIG);
 const TARGET_LABEL = String(process.env.ZSSH_TARGET_LABEL || "Linux target").trim().slice(0, 80) || "Linux target";
 const CONNECTION_UI_URI = "ui://zssh/connection-card-v1.html";
 const CONNECTION_UI_HTML = readFileSync(new URL("./ui/connection-card.html", import.meta.url), "utf8");
@@ -1151,11 +1154,34 @@ function unauthorizedResponse(res, error) {
   return res.writeHead(401, headers).end(JSON.stringify({ error: "unauthorized" }));
 }
 
+function applyPublicRateLimit(res, authInfo) {
+  if (PLUGIN_PROFILE !== "public" || PUBLIC_AUTH_MODE !== "oauth") return true;
+  let profileId;
+  try {
+    profileId = profileIdFromAuth(authInfo, OAUTH_CONFIG?.resource || "");
+  } catch {
+    return false;
+  }
+
+  const decision = PUBLIC_RATE_LIMITER.consume(profileId);
+  res.setHeader("X-RateLimit-Limit", String(decision.limit));
+  res.setHeader("X-RateLimit-Remaining", String(decision.remaining));
+  res.setHeader("X-RateLimit-Reset", String(Math.ceil(decision.resetAt / 1000)));
+  if (decision.allowed) return true;
+
+  res.setHeader("Retry-After", String(decision.retryAfterSeconds));
+  res.writeHead(429, {
+    "content-type": "application/json",
+    "cache-control": "no-store",
+  }).end(JSON.stringify({ error: "rate_limited" }));
+  return false;
+}
+
 function cors(res) {
   res.setHeader("Access-Control-Allow-Origin", process.env.ZSSH_ALLOWED_ORIGIN || "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, GET, DELETE, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "content-type, authorization, x-zssh-key, mcp-session-id");
-  res.setHeader("Access-Control-Expose-Headers", "Mcp-Session-Id");
+  res.setHeader("Access-Control-Expose-Headers", "Mcp-Session-Id, X-RateLimit-Limit, X-RateLimit-Remaining, X-RateLimit-Reset, Retry-After");
 }
 
 export function start() {
@@ -1278,12 +1304,21 @@ export function start() {
     cors(res);
 
     if (req.method === "OPTIONS") return res.writeHead(204).end();
+    let requestAuth = null;
     if (!capabilityAuth) {
       try {
-        await authorizeRequest(req, url.pathname);
+        requestAuth = await authorizeRequest(req, url.pathname);
       } catch (err) {
         return unauthorizedResponse(res, err);
       }
+    }
+
+    // Public OAuth remains exclusive even if a stale private capability token is
+    // accidentally present in the environment. Rate limiting is keyed only by
+    // the authenticated opaque zSSH profile, never by the raw bearer token.
+    if (PLUGIN_PROFILE === "public" && PUBLIC_AUTH_MODE === "oauth") {
+      if (!requestAuth) return unauthorizedResponse(res, new Error("OAuth authentication required"));
+      if (!applyPublicRateLimit(res, requestAuth)) return;
     }
 
     if (!["POST", "GET", "DELETE"].includes(req.method || "")) return res.writeHead(405).end("Method Not Allowed");
