@@ -16,20 +16,51 @@ function assertSha(value, name) {
   }
 }
 
-async function fetchJson(url, token, fetchImpl) {
-  const response = await fetchImpl(url, {
-    headers: {
-      Accept: "application/vnd.github+json",
-      Authorization: `Bearer ${token}`,
-      "X-GitHub-Api-Version": API_VERSION,
-      "User-Agent": "zssh-release-provenance",
-    },
-  });
+const RETRIABLE_HTTP_STATUSES = new Set([429, 500, 502, 503, 504]);
 
-  if (!response.ok) {
-    throw new Error(`GitHub commit provenance lookup failed with HTTP ${response.status}`);
+function defaultSleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+export async function fetchGitHubJsonWithRetry({
+  url,
+  token,
+  fetchImpl = fetch,
+  maxAttempts = 3,
+  sleepImpl = defaultSleep,
+}) {
+  if (!Number.isInteger(maxAttempts) || maxAttempts < 1 || maxAttempts > 5) {
+    throw new Error("maxAttempts must be an integer between 1 and 5");
   }
-  return response.json();
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const response = await fetchImpl(url, {
+      headers: {
+        Accept: "application/vnd.github+json",
+        Authorization: `Bearer ${token}`,
+        "X-GitHub-Api-Version": API_VERSION,
+        "User-Agent": "zssh-release-provenance",
+      },
+    });
+
+    if (response.ok) return response.json();
+
+    const retriable = RETRIABLE_HTTP_STATUSES.has(response.status);
+    if (!retriable || attempt === maxAttempts) {
+      const suffix = retriable ? ` after ${attempt} attempts` : "";
+      throw new Error(
+        `GitHub commit provenance lookup failed with HTTP ${response.status}${suffix}`
+      );
+    }
+
+    await sleepImpl(250 * (2 ** (attempt - 1)));
+  }
+
+  throw new Error("GitHub commit provenance lookup exhausted unexpectedly");
+}
+
+async function fetchJson(url, token, fetchImpl) {
+  return fetchGitHubJsonWithRetry({ url, token, fetchImpl });
 }
 
 async function mergedPullForCommit({ repository, sha, token, apiUrl, fetchImpl }) {

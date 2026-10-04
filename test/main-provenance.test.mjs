@@ -1,6 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { findMergedPullForSha, verifyMainProvenance } from "../scripts/check-main-provenance.mjs";
+import {
+  fetchGitHubJsonWithRetry,
+  findMergedPullForSha,
+  verifyMainProvenance,
+} from "../scripts/check-main-provenance.mjs";
 
 const sha = "67892cfea4b45a9534f49795f6cd3bc06b769f8c";
 
@@ -136,4 +140,61 @@ test("fails closed if the configured provenance baseline is not reached", async 
     }),
     /was not reached within 2 first-parent commits/
   );
+});
+
+
+test("retries bounded transient GitHub API failures before succeeding", async () => {
+  let calls = 0;
+  const delays = [];
+  const result = await fetchGitHubJsonWithRetry({
+    url: `https://api.github.com/repos/Zennay/zSSH/commits/${sha}/pulls`,
+    token: "test-token",
+    fetchImpl: async () => {
+      calls += 1;
+      if (calls < 3) return response({}, 500);
+      return response({ ok: true });
+    },
+    sleepImpl: async (ms) => delays.push(ms),
+  });
+
+  assert.deepEqual(result, { ok: true });
+  assert.equal(calls, 3);
+  assert.deepEqual(delays, [250, 500]);
+});
+
+test("does not retry non-transient GitHub provenance failures", async () => {
+  let calls = 0;
+  await assert.rejects(
+    () => fetchGitHubJsonWithRetry({
+      url: `https://api.github.com/repos/Zennay/zSSH/commits/${sha}/pulls`,
+      token: "test-token",
+      fetchImpl: async () => {
+        calls += 1;
+        return response({}, 404);
+      },
+      sleepImpl: async () => {
+        throw new Error("sleep should not run");
+      },
+    }),
+    /HTTP 404/
+  );
+  assert.equal(calls, 1);
+});
+
+test("fails closed after exhausting transient GitHub provenance retries", async () => {
+  let calls = 0;
+  await assert.rejects(
+    () => fetchGitHubJsonWithRetry({
+      url: `https://api.github.com/repos/Zennay/zSSH/commits/${sha}/pulls`,
+      token: "test-token",
+      maxAttempts: 3,
+      fetchImpl: async () => {
+        calls += 1;
+        return response({}, 503);
+      },
+      sleepImpl: async () => {},
+    }),
+    /HTTP 503 after 3 attempts/
+  );
+  assert.equal(calls, 3);
 });
