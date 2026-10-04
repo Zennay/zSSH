@@ -5,10 +5,29 @@ import { dirname, join } from "node:path";
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const workflowDir = join(root, ".github", "workflows");
 
-const forbidden = [
+const forbiddenNames = [
   {
     pattern: /^(?:ftmo|zcloud|haxlab|raiseai)[-_].*\.ya?ml$/i,
     reason: "cross-project portfolio workflows must not live in the zSSH release repository",
+  },
+];
+
+const forbiddenContent = [
+  {
+    pattern: /\b(?:Zennay\/)?(?:Ftmo|zCloud|HaxLab|RaiseAI)\b/i,
+    reason: "workflow content must remain scoped to zSSH rather than operating another portfolio project",
+  },
+  {
+    pattern: /\bcontents\s*:\s*write\b/i,
+    reason: "zSSH release workflows must not receive repository contents write permission",
+  },
+  {
+    pattern: /\bgit\s+push\b/i,
+    reason: "zSSH release workflows must not mutate canonical repository history",
+  },
+  {
+    pattern: /\bself-hosted\b/i,
+    reason: "VPS/self-hosted execution belongs to the zCloud control-plane repository, not the zSSH release repository",
   },
 ];
 
@@ -16,7 +35,7 @@ const names = readdirSync(workflowDir).filter((name) => /\.ya?ml$/i.test(name));
 const violations = [];
 
 for (const name of names) {
-  for (const rule of forbidden) {
+  for (const rule of forbiddenNames) {
     if (rule.pattern.test(name)) {
       violations.push({ name, reason: rule.reason });
       break;
@@ -24,11 +43,10 @@ for (const name of names) {
   }
 
   const workflow = readFileSync(join(workflowDir, name), "utf8");
-  if (/\bself-hosted\b/i.test(workflow)) {
-    violations.push({
-      name,
-      reason: "VPS/self-hosted execution belongs to the zCloud control-plane repository, not the zSSH release repository",
-    });
+  for (const rule of forbiddenContent) {
+    if (rule.pattern.test(workflow)) {
+      violations.push({ name, reason: rule.reason });
+    }
   }
 }
 
