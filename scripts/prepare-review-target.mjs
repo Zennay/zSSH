@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { mkdir, writeFile, stat } from "node:fs/promises";
 import path from "node:path";
+import { reviewerFixtureReleaseMetadata } from "./reviewer-fixture-contract.mjs";
 
 const args = process.argv.slice(2);
 const rootIndex = args.indexOf("--root");
@@ -23,11 +24,17 @@ const sampleContent = [
 await writeFile(sample, sampleContent, { encoding: "utf8", mode: 0o600 });
 
 const info = await stat(sample);
+const writeTestFile = path.join(root, "output.txt");
+const release = reviewerFixtureReleaseMetadata({
+  reviewFile: sample,
+  reviewWriteFile: writeTestFile,
+});
 console.log(JSON.stringify({
   ok: true,
   review_root: root,
   sample_file: sample,
   sample_bytes: info.size,
   allowed_roots_value: root,
-  write_test_file: path.join(root, "output.txt"),
+  write_test_file: writeTestFile,
+  ...release,
 }, null, 2));
