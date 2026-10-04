@@ -158,7 +158,8 @@ jobs:
       - name: Require current main SHA to originate from a merged PR
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          ZSSH_PROVENANCE_BASE_SHA: 15990579bd3bcc2ecf3b41849892247039585db6
+          # PR #97 is the trusted quarantine-recovery boundary after accidental direct commit 25f1d284.
+          ZSSH_PROVENANCE_BASE_SHA: 121411d24e288c2512d4851e973a0af80aa99733
         run: node scripts/check-main-provenance.mjs
 
   production:
