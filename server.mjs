@@ -660,6 +660,29 @@ async function publicToolAuthorizationError(extra, scope, { requirePairing = tru
   };
 }
 
+export function publicOutboundServerInfo(targetInfo, {
+  version = VERSION,
+  targetLabel = TARGET_LABEL,
+  pluginProfile = PLUGIN_PROFILE,
+  authMode = PUBLIC_AUTH_MODE,
+  pairingRequired = PAIRING_REQUIRED,
+} = {}) {
+  const source = targetInfo && typeof targetInfo === "object" && !Array.isArray(targetInfo) ? targetInfo : {};
+  const safe = {};
+  for (const key of ["ok", "version", "target_label", "platform", "arch", "exec_mode"]) {
+    if (Object.hasOwn(source, key)) safe[key] = source[key];
+  }
+  if (!Object.hasOwn(safe, "version")) safe.version = version;
+  if (!Object.hasOwn(safe, "target_label")) safe.target_label = targetLabel;
+  return {
+    ...safe,
+    plugin_profile: pluginProfile,
+    auth_mode: authMode,
+    pairing_required: pairingRequired,
+    transport: "outbound-agent",
+  };
+}
+
 function createMcpServer() {
   const server = new McpServer(
     { name: "zssh", version: VERSION },
@@ -687,13 +710,7 @@ function createMcpServer() {
         if (OUTBOUND_AGENT_MODE) {
           try {
             const targetInfo = await forwardPublicAgentTool(extra, "zssh_server_info", {});
-            return agentToolResult({
-              ...targetInfo,
-              plugin_profile: PLUGIN_PROFILE,
-              auth_mode: PUBLIC_AUTH_MODE,
-              pairing_required: PAIRING_REQUIRED,
-              transport: "outbound-agent",
-            });
+            return agentToolResult(publicOutboundServerInfo(targetInfo));
           } catch (err) {
             return result({ ok: false, error: String(err?.message || err), code: err?.code || "target_unavailable" }, true);
           }
