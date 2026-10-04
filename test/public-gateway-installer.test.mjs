@@ -85,7 +85,13 @@ exit 0
     );
     const { stdout: repoShaRaw } = await execFileAsync("git", ["-C", ROOT, "rev-parse", "HEAD"]);
     const repoSha = repoShaRaw.trim();
-    await mkdir(path.join(releaseRoot, repoSha), { recursive: true });
+    const releaseDir = path.join(releaseRoot, repoSha);
+    await mkdir(path.join(releaseDir, "deploy"), { recursive: true });
+    await writeFile(
+      path.join(releaseDir, "deploy", "zssh-public.service.in"),
+      await readFile(path.join(ROOT, "deploy", "zssh-public.service.in"), "utf8"),
+      { mode: 0o600 },
+    );
 
     await assert.rejects(
       () => execFileAsync("bash", ["deploy/install-public-gateway.sh", ROOT], {

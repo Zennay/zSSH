@@ -142,7 +142,7 @@ TMP_LINK="$BASE/.current.$$"
 ln -s "$RELEASE" "$TMP_LINK"
 mv -Tf "$TMP_LINK" "$CURRENT"
 
-sed "s|@NODE_BIN@|$NODE_BIN|g" "$SOURCE_ROOT/deploy/zssh-agent.service.in" > "$UNIT"
+sed "s|@NODE_BIN@|$NODE_BIN|g" "$RELEASE/deploy/zssh-agent.service.in" > "$UNIT"
 chmod 600 "$UNIT"
 
 export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
