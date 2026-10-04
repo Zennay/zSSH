@@ -258,6 +258,26 @@ function assertExactOAuthScheme(tool, location, schemes, expectedScope) {
   }
 }
 
+export function validateProductionServerInfo(info, { requireOutboundAgent = false } = {}) {
+  if (!info || typeof info !== "object" || Array.isArray(info)) {
+    fail("production server info must be an object");
+  }
+  if (info.plugin_profile !== "public" || info.auth_mode !== "oauth" || info.pairing_required !== true) {
+    fail("production server policy is not public+oauth+pairing");
+  }
+  for (const field of ["hostname", "uid", "allowed_roots", "safe_programs"]) {
+    if (Object.hasOwn(info, field)) fail("public server_info exposes private field: " + field);
+  }
+  const outboundAgent = info.transport === "outbound-agent";
+  if (requireOutboundAgent && !outboundAgent) {
+    fail("production server is not using the required outbound-agent transport");
+  }
+  return {
+    public_policy_validated: true,
+    outbound_agent_transport_validated: outboundAgent,
+  };
+}
+
 export function assertPublicToolScopeContract(tools, expected = PUBLIC_TOOL_SCOPE_CONTRACT) {
   if (!Array.isArray(tools)) fail("public tool scope contract requires a tool array");
   const byName = new Map();

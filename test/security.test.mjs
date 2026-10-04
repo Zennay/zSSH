@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, writeFile, rm, symlink } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { classifyCommand, containsCredentialLikeSecret, gitCommandFor, getSystemdCapabilities, publicPathLooksSensitive, redactSecrets, resolveAllowedPath, runSafeProgram, systemdCommandFor, isMainEntry } from "../server.mjs";
+import { classifyCommand, containsCredentialLikeSecret, gitCommandFor, getSystemdCapabilities, publicOutboundServerInfo, publicPathLooksSensitive, redactSecrets, resolveAllowedPath, runSafeProgram, systemdCommandFor, isMainEntry } from "../server.mjs";
 
 test("classifies read-only commands", () => {
   assert.equal(classifyCommand("systemctl status nginx"), "read_only");
@@ -191,5 +191,40 @@ test("systemd capabilities are exact, restart-implies-inspect, and shell-free", 
     else process.env.ZSSH_SYSTEMD_INSPECT_SERVICES = previousInspect;
     if (previousRestart === undefined) delete process.env.ZSSH_SYSTEMD_RESTART_SERVICES;
     else process.env.ZSSH_SYSTEMD_RESTART_SERVICES = previousRestart;
+  }
+});
+
+
+test("outbound public server info keeps gateway policy authoritative and strips private target fields", () => {
+  const info = publicOutboundServerInfo({
+    ok: true,
+    version: "target-version",
+    target_label: "Reviewer target",
+    platform: "linux",
+    arch: "x64",
+    exec_mode: "disabled",
+    plugin_profile: "private",
+    auth_mode: "private",
+    pairing_required: false,
+    hostname: "private-host",
+    uid: 1000,
+    allowed_roots: ["/secret"],
+    safe_programs: ["sh"],
+  }, {
+    version: "gateway-version",
+    targetLabel: "Gateway label",
+    pluginProfile: "public",
+    authMode: "oauth",
+    pairingRequired: true,
+  });
+
+  assert.equal(info.ok, true);
+  assert.equal(info.target_label, "Reviewer target");
+  assert.equal(info.plugin_profile, "public");
+  assert.equal(info.auth_mode, "oauth");
+  assert.equal(info.pairing_required, true);
+  assert.equal(info.transport, "outbound-agent");
+  for (const field of ["hostname", "uid", "allowed_roots", "safe_programs"]) {
+    assert.equal(Object.hasOwn(info, field), false, field);
   }
 });

@@ -11,6 +11,7 @@ import {
   protectedResourceMetadataUrl,
   publicToolContractFingerprint,
   validateAuthorizationServerMetadata,
+  validateProductionServerInfo,
   validatePublicMcpUrl,
 } from "../release-contract.mjs";
 
@@ -213,5 +214,39 @@ test("public tool contract fingerprint is stable across ordering but changes wit
   assert.notEqual(
     fingerprint,
     publicToolContractFingerprint([{ ...first[0], description: "changed review metadata" }, first[1]])
+  );
+});
+
+
+test("production server info requires public OAuth pairing and can require outbound agent", () => {
+  const outbound = {
+    plugin_profile: "public",
+    auth_mode: "oauth",
+    pairing_required: true,
+    transport: "outbound-agent",
+    target_label: "Review target",
+  };
+  assert.deepEqual(
+    validateProductionServerInfo(outbound, { requireOutboundAgent: true }),
+    { public_policy_validated: true, outbound_agent_transport_validated: true },
+  );
+
+  const local = { ...outbound };
+  delete local.transport;
+  assert.deepEqual(
+    validateProductionServerInfo(local),
+    { public_policy_validated: true, outbound_agent_transport_validated: false },
+  );
+  assert.throws(
+    () => validateProductionServerInfo(local, { requireOutboundAgent: true }),
+    /required outbound-agent transport/,
+  );
+  assert.throws(
+    () => validateProductionServerInfo({ ...outbound, auth_mode: "legacy" }, { requireOutboundAgent: true }),
+    /public\+oauth\+pairing/,
+  );
+  assert.throws(
+    () => validateProductionServerInfo({ ...outbound, hostname: "secret-host" }, { requireOutboundAgent: true }),
+    /private field: hostname/,
   );
 });

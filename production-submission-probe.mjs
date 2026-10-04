@@ -8,6 +8,7 @@ import {
   fetchNoRedirect,
   protectedResourceMetadataUrl,
   publicToolContractFingerprint,
+  validateProductionServerInfo,
   validatePublicMcpUrl,
 } from "./release-contract.mjs";
 
@@ -206,12 +207,9 @@ try {
   const infoCall = await client.callTool({ name: "zssh_server_info", arguments: {} });
   if (infoCall.isError) throw new Error("zssh_server_info failed: " + textPart(infoCall));
   const info = jsonResult(infoCall);
-  if (info.plugin_profile !== "public" || info.auth_mode !== "oauth" || info.pairing_required !== true) {
-    throw new Error("production server policy is not public+oauth+pairing");
-  }
-  for (const field of ["hostname", "uid", "allowed_roots", "safe_programs"]) {
-    if (Object.hasOwn(info, field)) throw new Error("public server_info exposes private field: " + field);
-  }
+  const serverPolicy = validateProductionServerInfo(info, {
+    requireOutboundAgent: String(process.env.ZSSH_REQUIRE_OUTBOUND_AGENT || "").trim() === "1",
+  });
 
   for (const name of ["get_system_uptime", "get_system_identity", "get_kernel_info", "get_disk_usage", "get_memory_usage"]) {
     const response = await client.callTool({ name, arguments: {} });
@@ -262,6 +260,7 @@ try {
     profile_id_shape_validated: true,
     paired_review_identity: true,
     public_metadata_minimized: true,
+    outbound_agent_transport_validated: serverPolicy.outbound_agent_transport_validated,
     read_only_system_tools_green: true,
     review_file_read_green: true,
     review_file_write_roundtrip_green: true,

@@ -79,6 +79,7 @@ jobs:
       ZSSH_REVIEW_WRITE_FILE: ${{ vars.ZSSH_REVIEW_WRITE_FILE }}
       ZSSH_REVIEW_ACCESS_TOKEN: ${{ secrets.ZSSH_REVIEW_ACCESS_TOKEN }}
       OPENAI_APPS_CHALLENGE_TOKEN: ${{ secrets.OPENAI_APPS_CHALLENGE_TOKEN }}
+      ZSSH_REQUIRE_OUTBOUND_AGENT: "1"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -137,6 +138,9 @@ jobs:
           if (probe.oauth_authorization_server_metadata_validated !== true || probe.oauth_pkce_s256_validated !== true) {
             throw new Error("production probe did not prove OAuth authorization-server metadata + PKCE S256");
           }
+          if (probe.outbound_agent_transport_validated !== true) {
+            throw new Error("production probe did not prove outbound-agent transport");
+          }
           if (probe.listing_urls_validated !== true) {
             throw new Error("production probe did not prove same-origin public listing pages");
           }
@@ -163,6 +167,7 @@ jobs:
             resource_metadata_challenge: "exact-same-origin",
             oauth_authorization_server_metadata_validated: true,
             oauth_pkce_s256_validated: true,
+            outbound_agent_transport_validated: true,
             oauth_authorization_servers: probe.oauth_authorization_servers,
             verified_at: new Date().toISOString()
           };
