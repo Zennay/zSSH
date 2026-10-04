@@ -6,6 +6,7 @@ on:
     paths:
       - ".github/workflows/public-release-gate.yml"
       - ".github/workflows/public-ingress-preflight.yml"
+      - ".github/workflows/auth0-production-preflight.yml"
       - ".github/openai-production-probe-trigger"
       - "release-contract.mjs"
       - "server.mjs"
@@ -21,6 +22,7 @@ on:
       - "public-site.mjs"
       - "test/public-site.test.mjs"
       - "scripts/check-public-release-config.mjs"
+      - "scripts/check-auth0-production.mjs"
       - "scripts/check-domain-verification-binding.mjs"
       - "scripts/check-host-surface-review-binding.mjs"
       - "scripts/check-tool-scan-binding.mjs"
@@ -32,6 +34,7 @@ on:
       - "production-submission-probe.mjs"
       - "production-submission-probe-canary.mjs"
       - "test/release-contract.test.mjs"
+      - "test/auth0-production-readiness.test.mjs"
       - "test/domain-verification-binding.test.mjs"
       - "test/host-surface-review-binding.test.mjs"
       - "test/tool-scan-binding.test.mjs"
@@ -46,6 +49,7 @@ on:
     paths:
       - ".github/workflows/public-release-gate.yml"
       - ".github/workflows/public-ingress-preflight.yml"
+      - ".github/workflows/auth0-production-preflight.yml"
       - ".github/openai-production-probe-trigger"
       - "release-contract.mjs"
       - "server.mjs"
@@ -61,6 +65,7 @@ on:
       - "public-site.mjs"
       - "test/public-site.test.mjs"
       - "scripts/check-public-release-config.mjs"
+      - "scripts/check-auth0-production.mjs"
       - "scripts/check-domain-verification-binding.mjs"
       - "scripts/check-host-surface-review-binding.mjs"
       - "scripts/check-tool-scan-binding.mjs"
@@ -72,6 +77,7 @@ on:
       - "production-submission-probe.mjs"
       - "production-submission-probe-canary.mjs"
       - "test/release-contract.test.mjs"
+      - "test/auth0-production-readiness.test.mjs"
       - "test/domain-verification-binding.test.mjs"
       - "test/host-surface-review-binding.test.mjs"
       - "test/tool-scan-binding.test.mjs"
@@ -104,12 +110,13 @@ jobs:
       - name: Self-test release configuration guard
         run: node scripts/check-public-release-config.mjs --self-test
       - name: Exercise release and portal binding contracts
-        run: node --test test/release-contract.test.mjs test/domain-verification-binding.test.mjs test/host-surface-review-binding.test.mjs test/tool-scan-binding.test.mjs test/annotation-justifications.test.mjs test/public-caddy-renderer.test.mjs test/public-caddy-installer.test.mjs test/public-ingress-preflight.test.mjs test/release-workflow-trigger.test.mjs
+        run: node --test test/release-contract.test.mjs test/auth0-production-readiness.test.mjs test/domain-verification-binding.test.mjs test/host-surface-review-binding.test.mjs test/tool-scan-binding.test.mjs test/annotation-justifications.test.mjs test/public-caddy-renderer.test.mjs test/public-caddy-installer.test.mjs test/public-ingress-preflight.test.mjs test/release-workflow-trigger.test.mjs
       - name: Validate release scripts
         run: |
           node --check release-contract.mjs
           node --check annotation-justifications.mjs
           node --check scripts/check-public-release-config.mjs
+          node --check scripts/check-auth0-production.mjs
           node --check scripts/check-domain-verification-binding.mjs
           node --check scripts/check-host-surface-review-binding.mjs
           node --check scripts/check-tool-scan-binding.mjs
@@ -161,6 +168,9 @@ jobs:
       ZSSH_OPENAI_VERIFIED_MCP_ORIGIN: ${{ vars.ZSSH_OPENAI_VERIFIED_MCP_ORIGIN }}
       ZSSH_OPENAI_TOOL_SCAN_VERIFIED: ${{ vars.ZSSH_OPENAI_TOOL_SCAN_VERIFIED }}
       ZSSH_OPENAI_TOOL_SCAN_SHA256: ${{ vars.ZSSH_OPENAI_TOOL_SCAN_SHA256 }}
+      ZSSH_OAUTH_ISSUER: ${{ vars.ZSSH_OAUTH_ISSUER }}
+      AUTH0_MANAGEMENT_BASE_URL: ${{ vars.AUTH0_MANAGEMENT_BASE_URL }}
+      AUTH0_MANAGEMENT_API_TOKEN: ${{ secrets.AUTH0_MANAGEMENT_API_TOKEN }}
       OPENAI_APPS_CHALLENGE_TOKEN: ${{ secrets.OPENAI_APPS_CHALLENGE_TOKEN }}
       ZSSH_REQUIRE_OUTBOUND_AGENT: "1"
     steps:
@@ -176,12 +186,21 @@ jobs:
         run: node scripts/check-public-release-config.mjs --presence-json > "$PREFLIGHT_EVIDENCE_PATH"
       - name: Fail closed on incomplete or non-public release configuration
         run: node scripts/check-public-release-config.mjs
+      - name: Prove Auth0 production tenant, API and DCR grant
+        shell: bash
+        env:
+          AUTH0_REPORT_PATH: ${{ runner.temp }}/zssh-auth0-production-readiness.json
+        run: |
+          set -Eeuo pipefail
+          node scripts/check-auth0-production.mjs | tee "$AUTH0_REPORT_PATH"
       - name: Upload preflight evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: zssh-openai-preflight-${{ github.run_id }}
-          path: ${{ runner.temp }}/zssh-openai-preflight.json
+          path: |
+            ${{ runner.temp }}/zssh-openai-preflight.json
+            ${{ runner.temp }}/zssh-auth0-production-readiness.json
           if-no-files-found: error
           retention-days: 30
       - name: Bind Verify Domain evidence to exact production origin
@@ -190,6 +209,7 @@ jobs:
         shell: bash
         env:
           BUNDLE_REPORT_PATH: ${{ runner.temp }}/zssh-openai-bundle.json
+          AUTH0_REPORT_PATH: ${{ runner.temp }}/zssh-auth0-production-readiness.json
         run: |
           set -Eeuo pipefail
           python3 scripts/build-openai-plugin.py \
@@ -226,6 +246,16 @@ jobs:
           }
           const probe = JSON.parse(readFileSync(process.env.PROBE_REPORT_PATH, "utf8"));
           const bundle = JSON.parse(readFileSync(process.env.BUNDLE_REPORT_PATH, "utf8"));
+          const auth0 = JSON.parse(readFileSync(process.env.AUTH0_REPORT_PATH, "utf8"));
+          if (auth0.ok !== true || auth0.provider !== "auth0") {
+            throw new Error("Auth0 production readiness evidence is not green");
+          }
+          if (auth0.tenant?.dcr_enabled !== true || auth0.tenant?.dcr_security_mode !== "strict" || auth0.tenant?.resource_parameter_profile !== "compatibility") {
+            throw new Error("Auth0 production tenant settings are not release-safe");
+          }
+          if (auth0.default_user_grant?.subject_type !== "user" || JSON.stringify(auth0.default_user_grant?.scopes) !== JSON.stringify(["zssh:read", "zssh:write"])) {
+            throw new Error("Auth0 default third-party user grant is not least-privilege zSSH read/write");
+          }
           if (!/^[a-f0-9]{64}$/.test(String(probe.tool_scan_sha256 || ""))) {
             throw new Error("production probe did not emit a valid tool scan fingerprint");
           }
@@ -240,8 +270,8 @@ jobs:
           if (probe.annotation_justifications_validated !== true || !/^[a-f0-9]{64}$/.test(String(probe.annotation_justifications_sha256 || ""))) {
             throw new Error("production probe did not bind reviewer annotation justifications to the exact live tool scan");
           }
-          if (probe.oauth_authorization_server_metadata_validated !== true || probe.oauth_pkce_s256_validated !== true) {
-            throw new Error("production probe did not prove OAuth authorization-server metadata + PKCE S256");
+          if (probe.oauth_authorization_server_metadata_validated !== true || probe.oauth_pkce_s256_validated !== true || probe.oauth_client_registration_validated !== true) {
+            throw new Error("production probe did not prove OAuth authorization-server metadata + PKCE S256 + client registration");
           }
           if (probe.outbound_agent_transport_validated !== true) {
             throw new Error("production probe did not prove outbound-agent transport");
@@ -301,6 +331,14 @@ jobs:
             resource_metadata_challenge: "exact-same-origin",
             oauth_authorization_server_metadata_validated: true,
             oauth_pkce_s256_validated: true,
+            oauth_client_registration_validated: true,
+            oauth_provider: "auth0",
+            auth0_dcr_enabled: true,
+            auth0_dcr_security_mode: auth0.tenant.dcr_security_mode,
+            auth0_resource_parameter_profile: auth0.tenant.resource_parameter_profile,
+            auth0_authorization_response_iss_parameter_supported: auth0.tenant.authorization_response_iss_parameter_supported,
+            auth0_resource_signing_alg: auth0.resource_server.signing_alg,
+            auth0_default_user_grant_scopes: auth0.default_user_grant.scopes,
             outbound_agent_transport_validated: true,
             demo_recording_accessible: true,
             demo_recording_origin: probe.demo_recording_origin,
@@ -319,6 +357,7 @@ jobs:
           path: |
             ${{ runner.temp }}/zssh-openai-release-evidence.json
             ${{ runner.temp }}/zssh-openai-preflight.json
+            ${{ runner.temp }}/zssh-auth0-production-readiness.json
             dist/zssh-openai-plugin.zip
           if-no-files-found: error
           retention-days: 30
