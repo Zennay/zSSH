@@ -100,6 +100,8 @@ jobs:
       ZSSH_REVIEW_ACCESS_TOKEN: ${{ secrets.ZSSH_REVIEW_ACCESS_TOKEN }}
       ZSSH_REVIEW_LOGIN_URL: ${{ vars.ZSSH_REVIEW_LOGIN_URL }}
       ZSSH_REVIEW_CREDENTIALS_VERIFIED: ${{ vars.ZSSH_REVIEW_CREDENTIALS_VERIFIED }}
+      ZSSH_OPENAI_DOMAIN_VERIFIED: ${{ vars.ZSSH_OPENAI_DOMAIN_VERIFIED }}
+      ZSSH_OPENAI_TOOL_SCAN_VERIFIED: ${{ vars.ZSSH_OPENAI_TOOL_SCAN_VERIFIED }}
       OPENAI_APPS_CHALLENGE_TOKEN: ${{ secrets.OPENAI_APPS_CHALLENGE_TOKEN }}
       ZSSH_REQUIRE_OUTBOUND_AGENT: "1"
     steps:
@@ -170,6 +172,12 @@ jobs:
           if (probe.listing_urls_validated !== true) {
             throw new Error("production probe did not prove same-origin public listing pages");
           }
+          if (process.env.ZSSH_OPENAI_DOMAIN_VERIFIED !== "1") {
+            throw new Error("OpenAI portal domain verification is not attested green");
+          }
+          if (process.env.ZSSH_OPENAI_TOOL_SCAN_VERIFIED !== "1") {
+            throw new Error("OpenAI portal tool scan is not attested current and green");
+          }
           if (!/^[a-f0-9]{64}$/.test(String(bundle.zip_sha256 || ""))) {
             throw new Error("submission bundle did not emit a valid SHA-256");
           }
@@ -187,6 +195,8 @@ jobs:
             review_login_origin: reviewLogin.origin,
             review_login_path: reviewLogin.pathname,
             reviewer_credentials_verified: process.env.ZSSH_REVIEW_CREDENTIALS_VERIFIED === "1",
+            openai_domain_verified: true,
+            openai_tool_scan_verified: true,
             tool_scan_sha256: probe.tool_scan_sha256,
             plugin_version: bundle.version,
             submission_bundle_sha256: bundle.zip_sha256,
