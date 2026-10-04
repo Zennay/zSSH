@@ -1,0 +1,119 @@
+name: zSSH temporary HaxLab Cloudflare capability probe
+
+on:
+  push:
+    branches:
+      - "probe/cloudflare-haxlab-20261004"
+    paths:
+      - ".github/workflows/zssh-cloudflare-haxlab-probe.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: zssh-cloudflare-haxlab-probe
+  cancel-in-progress: true
+
+jobs:
+  probe:
+    name: Probe Cloudflare capability on alternate VPS runner
+    runs-on:
+      - self-hosted
+      - haxlab
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Require expected VPS identity
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test "$(hostname)" = "vps-bb300bba"
+          test "$(id -un)" = "ubuntu"
+
+      - name: Probe persistent Cloudflare capability without mutation
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          token_present=false
+          token_verified=false
+          zone_readable=false
+          wrangler_present=false
+          wrangler_authenticated=false
+          cloudflared_present=false
+
+          if bash -lc 'test -n "${CLOUDFLARE_API_TOKEN:-${CF_API_TOKEN:-}}"' >/dev/null 2>&1; then
+            token_present=true
+          fi
+
+          if [ "$token_present" = "true" ]; then
+            if timeout 20s bash -lc '
+              set -Eeuo pipefail
+              token="${CLOUDFLARE_API_TOKEN:-${CF_API_TOKEN:-}}"
+              auth_cfg="$(mktemp)"
+              verify_json="$(mktemp)"
+              cleanup() { rm -f "$auth_cfg" "$verify_json"; }
+              trap cleanup EXIT
+              chmod 600 "$auth_cfg"
+              printf "header = \"Authorization: Bearer %s\"\n" "$token" > "$auth_cfg"
+              curl --fail --silent --show-error --config "$auth_cfg"                 https://api.cloudflare.com/client/v4/user/tokens/verify > "$verify_json"
+              python3 -c '"'"'import json,sys; p=json.load(open(sys.argv[1],encoding="utf-8")); r=p.get("result") or {}; raise SystemExit(0 if p.get("success") is True and r.get("status") == "active" else 1)'"'"' "$verify_json"
+            ' >/dev/null 2>&1; then
+              token_verified=true
+            fi
+          fi
+
+          if [ "$token_verified" = "true" ]; then
+            if timeout 20s bash -lc '
+              set -Eeuo pipefail
+              token="${CLOUDFLARE_API_TOKEN:-${CF_API_TOKEN:-}}"
+              auth_cfg="$(mktemp)"
+              zone_json="$(mktemp)"
+              cleanup() { rm -f "$auth_cfg" "$zone_json"; }
+              trap cleanup EXIT
+              chmod 600 "$auth_cfg"
+              printf "header = \"Authorization: Bearer %s\"\n" "$token" > "$auth_cfg"
+              curl --fail --silent --show-error --config "$auth_cfg"                 "https://api.cloudflare.com/client/v4/zones?name=cheapgpt.shop&status=active" > "$zone_json"
+              python3 -c '"'"'import json,sys; p=json.load(open(sys.argv[1],encoding="utf-8")); r=p.get("result") or []; raise SystemExit(0 if p.get("success") is True and len(r) == 1 and r[0].get("name") == "cheapgpt.shop" else 1)'"'"' "$zone_json"
+            ' >/dev/null 2>&1; then
+              zone_readable=true
+            fi
+          fi
+
+          if bash -lc 'command -v wrangler >/dev/null 2>&1'; then
+            wrangler_present=true
+            if timeout 20s bash -lc 'wrangler whoami >/dev/null 2>&1'; then
+              wrangler_authenticated=true
+            fi
+          fi
+
+          if bash -lc 'command -v cloudflared >/dev/null 2>&1'; then
+            cloudflared_present=true
+          fi
+
+          provider_session=false
+          if [ "$token_verified" = "true" ] && [ "$zone_readable" = "true" ]; then
+            provider_session=true
+          elif [ "$wrangler_authenticated" = "true" ]; then
+            provider_session=true
+          fi
+
+          printf '{"schema_version":1,"project":"zssh","zone":"cheapgpt.shop","runner":"haxlab","persistent_token_present":%s,"token_verified":%s,"zone_readable":%s,"wrangler_present":%s,"wrangler_authenticated":%s,"cloudflared_present":%s,"persistent_provider_session_present":%s,"mutation_attempted":false}\n'             "$token_present" "$token_verified" "$zone_readable"             "$wrangler_present" "$wrangler_authenticated" "$cloudflared_present" "$provider_session"             | tee "$RUNNER_TEMP/zssh-cloudflare-haxlab-capability.json"
+
+          if [ "$provider_session" = "true" ]; then
+            echo "ZSSH_HAXLAB_CLOUDFLARE_CAPABILITY_PRESENT"
+          else
+            echo "ZSSH_HAXLAB_CLOUDFLARE_CAPABILITY_ABSENT"
+          fi
+
+      - name: Upload non-secret capability evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zssh-cloudflare-haxlab-capability-${{ github.run_id }}
+          path: ${{ runner.temp }}/zssh-cloudflare-haxlab-capability.json
+          if-no-files-found: warn
+          retention-days: 7
