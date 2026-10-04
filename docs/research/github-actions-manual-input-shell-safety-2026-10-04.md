@@ -72,3 +72,16 @@ Decision:
 - add a regression assertion that the source-validation step occurs before checkout.
 
 This is defense in depth: it does not claim that `actions/checkout` alone executes attacker-controlled code. It ensures zSSH rejects a non-canonical `workflow_run` source before materializing that source into the job workspace.
+
+
+## Repository-wide shell-source invariant — 2026-10-04
+
+The DNS and public-ingress fixes exposed a broader maintenance risk: a future workflow could reintroduce direct `${{ github.* }}` or `${{ inputs.* }}` interpolation in an inline `run:` command even if the currently hardened production steps stay unchanged.
+
+Decision:
+- treat `github.*` and `inputs.*` values as data for shell steps across every active workflow;
+- pass those values through `env:` and consume quoted environment variables from shell source;
+- enforce the invariant repository-wide for both inline and block-scalar `run:` forms;
+- execute the guard in normal CI and in the OpenAI public release contract so workflow-security regressions cannot bypass the M5 release lane.
+
+The guard intentionally does not prohibit Actions expressions in declarative YAML fields such as `if:`, `env:`, artifact names, paths, or concurrency groups. Its scope is generated shell source, where direct substitution creates the script-injection boundary documented by GitHub.
