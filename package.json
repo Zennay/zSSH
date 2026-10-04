@@ -31,9 +31,9 @@
     "repo:main-protection:apply": "node scripts/apply-main-protection.mjs"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.20.2",
-    "zod": "^3.25.76",
-    "jose": "^6.2.12"
+    "@modelcontextprotocol/sdk": "1.20.2",
+    "zod": "3.25.76",
+    "jose": "6.2.12"
   },
   "bin": {
     "zssh": "bin/zssh.mjs"
