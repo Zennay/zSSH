@@ -31,6 +31,35 @@ function requirePublicHttpsUrl(raw, name) {
   return url;
 }
 
+function isCanonicalAuth0TenantHostname(hostname) {
+  const normalized = String(hostname || "").toLowerCase().replace(/\.$/, "");
+  return normalized !== "auth0.com" && normalized.endsWith(".auth0.com");
+}
+
+export function resolveAuth0ManagementBaseUrl(issuer, managementBaseUrl) {
+  const issuerUrl = requirePublicHttpsUrl(issuer, "ZSSH_OAUTH_ISSUER");
+  const explicit = String(managementBaseUrl || "").trim();
+
+  if (!explicit) {
+    if (!isCanonicalAuth0TenantHostname(issuerUrl.hostname)) {
+      fail("AUTH0_MANAGEMENT_BASE_URL is required when ZSSH_OAUTH_ISSUER uses a custom Auth0 domain");
+    }
+    return new URL(issuerUrl.origin);
+  }
+
+  const managementBase = requirePublicHttpsUrl(explicit, "AUTH0_MANAGEMENT_BASE_URL");
+  if (!isCanonicalAuth0TenantHostname(managementBase.hostname)) {
+    fail("AUTH0_MANAGEMENT_BASE_URL must use a canonical *.auth0.com tenant domain");
+  }
+  if (
+    isCanonicalAuth0TenantHostname(issuerUrl.hostname) &&
+    managementBase.origin !== issuerUrl.origin
+  ) {
+    fail("AUTH0_MANAGEMENT_BASE_URL must match the canonical Auth0 issuer origin");
+  }
+  return managementBase;
+}
+
 export function validateAuth0TenantSettings(settings) {
   if (!settings || typeof settings !== "object" || Array.isArray(settings)) {
     fail("Auth0 tenant settings must be an object");
@@ -131,7 +160,7 @@ export async function checkAuth0ProductionReadiness({
   fetchImpl = fetch,
 }) {
   const issuerUrl = requirePublicHttpsUrl(issuer, "ZSSH_OAUTH_ISSUER");
-  const managementBase = requirePublicHttpsUrl(managementBaseUrl, "AUTH0_MANAGEMENT_BASE_URL");
+  const managementBase = resolveAuth0ManagementBaseUrl(issuer, managementBaseUrl);
   const resourceUrl = requirePublicHttpsUrl(resource, "zSSH OAuth resource");
   const token = String(managementToken || "").trim();
   if (token.length < 20) fail("AUTH0_MANAGEMENT_API_TOKEN is required");
@@ -176,6 +205,8 @@ export async function checkAuth0ProductionReadiness({
     ok: true,
     provider: "auth0",
     issuer: discovered.validated.issuer,
+    auth0_management_origin: managementBase.origin,
+    auth0_management_origin_derived: String(managementBaseUrl || "").trim().length === 0,
     authorization_server_metadata_url: discovered.url,
     registration_endpoint: discovered.validated.registration_endpoint,
     jwks_uri: jwksUri.href,

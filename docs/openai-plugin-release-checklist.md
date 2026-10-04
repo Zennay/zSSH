@@ -11,6 +11,7 @@ This checklist tracks the production path from the current review-ready MCP prof
 - [ ] Stable public HTTPS MCP endpoint configured
 - [ ] Published `/privacy` page discloses data categories, purposes, recipients, retention, and user controls for the actual production data flow
 - [ ] Production OAuth authorization server publishes discovery metadata with authorization-code flow, PKCE S256, and token endpoint auth methods
+- [ ] For a canonical `*.auth0.com` issuer, the Auth0 Management API origin is derived from that exact issuer origin; custom Auth0 login domains require explicit `AUTH0_MANAGEMENT_BASE_URL` on a canonical `*.auth0.com` tenant host
 - [ ] OAuth discovery advertises a ChatGPT-compatible client identification path: CIMD (`client_id_metadata_document_supported: true`) or DCR (`registration_endpoint`)
 - [ ] Resource-server metadata points to the production MCP resource
 - [ ] Health, OAuth metadata, challenge, and unauthenticated MCP checks do not redirect away from the submitted origin

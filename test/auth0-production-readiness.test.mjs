@@ -2,12 +2,38 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   checkAuth0ProductionReadiness,
+  resolveAuth0ManagementBaseUrl,
   validateAuth0DefaultUserGrant,
   validateAuth0ResourceServers,
   validateAuth0TenantSettings,
 } from "../scripts/check-auth0-production.mjs";
 
 const resource = "https://zssh.cheapgpt.shop";
+
+test("Auth0 management origin derives only from canonical tenant issuers", () => {
+  assert.equal(
+    resolveAuth0ManagementBaseUrl("https://tenant.eu.auth0.com/", "").origin,
+    "https://tenant.eu.auth0.com",
+  );
+  assert.throws(
+    () => resolveAuth0ManagementBaseUrl("https://login.cheapgpt.shop/", ""),
+    /required when ZSSH_OAUTH_ISSUER uses a custom Auth0 domain/,
+  );
+  assert.throws(
+    () => resolveAuth0ManagementBaseUrl(
+      "https://tenant.eu.auth0.com/",
+      "https://other.eu.auth0.com",
+    ),
+    /must match the canonical Auth0 issuer origin/,
+  );
+  assert.throws(
+    () => resolveAuth0ManagementBaseUrl(
+      "https://login.cheapgpt.shop/",
+      "https://management.cheapgpt.shop",
+    ),
+    /canonical \*\.auth0\.com tenant domain/,
+  );
+});
 
 test("Auth0 tenant settings enforce MCP production compatibility", () => {
   const good = {
@@ -138,7 +164,7 @@ test("Auth0 end-to-end preflight binds discovery to tenant settings and least-pr
 
   const result = await checkAuth0ProductionReadiness({
     issuer: metadata.issuer,
-    managementBaseUrl: "https://tenant.eu.auth0.com",
+    managementBaseUrl: "",
     managementToken: "management-token-0123456789abcdef",
     resource,
     fetchImpl,
@@ -146,6 +172,8 @@ test("Auth0 end-to-end preflight binds discovery to tenant settings and least-pr
 
   assert.equal(result.ok, true);
   assert.equal(result.provider, "auth0");
+  assert.equal(result.auth0_management_origin, "https://tenant.eu.auth0.com");
+  assert.equal(result.auth0_management_origin_derived, true);
   assert.deepEqual(result.client_registration_methods, ["dcr"]);
   assert.equal(result.tenant.resource_parameter_profile, "compatibility");
   assert.deepEqual(result.default_user_grant.scopes, ["zssh:read", "zssh:write"]);

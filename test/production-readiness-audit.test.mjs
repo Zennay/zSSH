@@ -97,6 +97,31 @@ test("treats Cloudflare zone ID as an optional legacy override", () => {
   assert.deepEqual(result.lanes.dns_publication.missing, []);
 });
 
+test("derives Auth0 management origin for canonical tenant issuers", () => {
+  const result = buildProductionReadinessAudit({
+    ...complete,
+    AUTH0_MANAGEMENT_BASE_URL: "",
+  });
+
+  assert.equal(result.ready.auth0_preflight, true);
+  assert.equal(result.lanes.auth0_preflight.configured.AUTH0_MANAGEMENT_BASE_URL, true);
+  assert.deepEqual(result.lanes.auth0_preflight.missing, []);
+  assert.equal(result.ready.final_release_config, true);
+});
+
+test("requires explicit canonical Auth0 management origin for custom issuer domains", () => {
+  const result = buildProductionReadinessAudit({
+    ...complete,
+    ZSSH_OAUTH_ISSUER: "https://login.cheapgpt.shop/",
+    AUTH0_MANAGEMENT_BASE_URL: "",
+  });
+
+  assert.equal(result.ready.auth0_preflight, false);
+  assert.ok(result.lanes.auth0_preflight.missing.includes("AUTH0_MANAGEMENT_BASE_URL"));
+  assert.equal(result.ready.final_release_config, false);
+  assert.ok(result.final_release_config.missing.includes("AUTH0_MANAGEMENT_BASE_URL"));
+});
+
 test("reports external-input-only when no repository-owned action remains", () => {
   const result = buildProductionReadinessAudit({
     ...complete,
