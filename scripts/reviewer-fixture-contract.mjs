@@ -38,3 +38,32 @@ export function assertReviewerFixturePaths(env = {}) {
     review_write_file: REVIEW_WRITE_FILE,
   };
 }
+
+export function reviewerFixtureReleaseMetadata({
+  reviewFile,
+  reviewWriteFile,
+} = {}) {
+  const readFile = clean(reviewFile);
+  const writeFile = clean(reviewWriteFile);
+  const releaseCompatible =
+    readFile === REVIEW_READ_FILE &&
+    writeFile === REVIEW_WRITE_FILE;
+
+  if (!releaseCompatible) {
+    return {
+      release_compatible: false,
+      release_variables: null,
+      release_blocker:
+        `reviewer fixture paths are not the canonical submission paths; production requires ${REVIEW_READ_FILE} and ${REVIEW_WRITE_FILE}`,
+    };
+  }
+
+  return {
+    release_compatible: true,
+    release_variables: {
+      ZSSH_REVIEW_FILE: REVIEW_READ_FILE,
+      ZSSH_REVIEW_WRITE_FILE: REVIEW_WRITE_FILE,
+    },
+    release_blocker: null,
+  };
+}
