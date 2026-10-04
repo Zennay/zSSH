@@ -219,6 +219,7 @@ test("rejects malformed configured values instead of reporting a false-ready lan
     ZSSH_MAIN_PROTECTION_VERIFIED: "0",
     ZSSH_MAIN_BRANCH_PROTECTED: "0",
     CLOUDFLARE_ZONE_ID: "not-a-zone",
+    CLOUDFLARE_ACCOUNT_ID: "not-an-account",
     ZSSH_OAUTH_ISSUER: "http://tenant.example.test/",
     AUTH0_MANAGEMENT_API_TOKEN: "short",
     ZSSH_PLUGIN_DEMO_RECORDING_URL: "https://127.0.0.1/demo",
@@ -237,7 +238,7 @@ test("rejects malformed configured values instead of reporting a false-ready lan
   );
   assert.deepEqual(
     result.lanes.dns_publication.invalid.map(item => item.name),
-    ["CLOUDFLARE_ZONE_ID"],
+    ["CLOUDFLARE_ZONE_ID", "CLOUDFLARE_ACCOUNT_ID"],
   );
   assert.deepEqual(
     result.lanes.auth0_preflight.invalid.map(item => item.name),
@@ -253,6 +254,25 @@ test("rejects malformed configured values instead of reporting a false-ready lan
       item => item.name === "ZSSH_REVIEW_CREDENTIALS_VERIFIED",
     ),
   );
+});
+
+test("classifies malformed Cloudflare account ID as provider configuration before DNS execution", () => {
+  const result = buildProductionReadinessAudit({
+    ...complete,
+    CLOUDFLARE_ACCOUNT_ID: "bad-account-id",
+    ZSSH_PUBLIC_ORIGIN_STAGE: "dns",
+  });
+
+  assert.equal(result.ready.dns_publication, false);
+  assert.equal(result.blocking_gate, "dns_publication");
+  assert.equal(result.blocking_action?.gate_kind, "provider_configuration");
+  assert.equal(result.blocking_action?.requires_external_input, true);
+  assert.deepEqual(
+    result.lanes.dns_publication.invalid.map(item => item.name),
+    ["CLOUDFLARE_ACCOUNT_ID"],
+  );
+  assert.match(result.blocking_action?.action || "", /CLOUDFLARE_ACCOUNT_ID/);
+  assert.doesNotMatch(result.blocking_action?.action || "", /Run the guarded zSSH production DNS publisher/);
 });
 
 test("rejects demo recording URL fragments before the final production probe", () => {
