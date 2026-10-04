@@ -74,6 +74,8 @@ test("fails closed on provider rejection without reflecting response details", a
     }),
     error => {
       assert.match(error.message, /HTTP 403/);
+      assert.match(error.message, /user-owned API token/);
+      assert.match(error.message, /My Profile > API Tokens/);
       assert.doesNotMatch(error.message, new RegExp(reflected));
       return true;
     },
