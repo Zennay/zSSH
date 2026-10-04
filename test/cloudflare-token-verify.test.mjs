@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 
 import {
   CLOUDFLARE_TOKEN_VERIFY_TIMEOUT_MS,
+  cloudflareTokenVerifyUrl,
   verifyCloudflareApiToken,
 } from "../scripts/verify-cloudflare-token.mjs";
 
@@ -16,7 +17,7 @@ function response(result, { status = 200, success = true } = {}) {
   };
 }
 
-test("accepts an active token without exposing token metadata", async () => {
+test("accepts an active user-owned token without exposing token metadata", async () => {
   const token = "cfut_test_secret_that_must_not_render";
   let request;
   const result = await verifyCloudflareApiToken({
@@ -44,6 +45,48 @@ test("accepts an active token without exposing token metadata", async () => {
   assert.doesNotMatch(JSON.stringify(result), new RegExp(token));
 });
 
+test("uses the account-token verification route when an account ID is configured", async () => {
+  const accountId = "0123456789abcdef0123456789abcdef";
+  let request;
+  const result = await verifyCloudflareApiToken({
+    apiToken: "cfat_test_secret_that_must_not_render",
+    accountId,
+    fetchImpl: async (url, init) => {
+      request = { url: String(url), init };
+      return response({
+        id: "fedcba9876543210fedcba9876543210",
+        status: "active",
+      });
+    },
+  });
+
+  assert.deepEqual(result, { ok: true, status: "active" });
+  assert.equal(
+    request.url,
+    `https://api.cloudflare.com/client/v4/accounts/${accountId}/tokens/verify`,
+  );
+});
+
+test("rejects malformed account IDs before contacting Cloudflare", async () => {
+  let called = false;
+  await assert.rejects(
+    verifyCloudflareApiToken({
+      apiToken: "test-token",
+      accountId: "not-an-account-id",
+      fetchImpl: async () => {
+        called = true;
+        return response({ status: "active" });
+      },
+    }),
+    /32-character hexadecimal account ID/,
+  );
+  assert.equal(called, false);
+  assert.equal(
+    cloudflareTokenVerifyUrl(),
+    "https://api.cloudflare.com/client/v4/user/tokens/verify",
+  );
+});
+
 test("rejects disabled, expired, and unknown token status", async () => {
   for (const status of ["disabled", "expired", ""]) {
     await assert.rejects(
@@ -56,7 +99,7 @@ test("rejects disabled, expired, and unknown token status", async () => {
   }
 });
 
-test("fails closed on provider rejection without reflecting response details", async () => {
+test("fails closed on rejected user-owned tokens without reflecting response details", async () => {
   const reflected = "must-not-leak";
   await assert.rejects(
     verifyCloudflareApiToken({
@@ -77,6 +120,29 @@ test("fails closed on provider rejection without reflecting response details", a
       assert.match(error.message, /user-owned API token/);
       assert.match(error.message, /My Profile > API Tokens/);
       assert.doesNotMatch(error.message, new RegExp(reflected));
+      return true;
+    },
+  );
+});
+
+test("fails closed on rejected account-owned tokens with account-specific guidance", async () => {
+  await assert.rejects(
+    verifyCloudflareApiToken({
+      apiToken: "test-token",
+      accountId: "0123456789abcdef0123456789abcdef",
+      fetchImpl: async () => ({
+        ok: false,
+        status: 403,
+        async json() {
+          return { success: false, errors: [{ message: "must-not-leak" }] };
+        },
+      }),
+    }),
+    error => {
+      assert.match(error.message, /HTTP 403/);
+      assert.match(error.message, /account-owned API token/);
+      assert.match(error.message, /matching CLOUDFLARE_ACCOUNT_ID/);
+      assert.doesNotMatch(error.message, /must-not-leak/);
       return true;
     },
   );
@@ -104,6 +170,34 @@ test("reports user-token guidance before parsing a rejected provider body", asyn
       assert.match(error.message, /My Profile > API Tokens/);
       assert.doesNotMatch(error.message, /invalid JSON/);
       assert.doesNotMatch(error.message, new RegExp(reflected));
+      return true;
+    },
+  );
+
+  assert.equal(parsed, false);
+});
+
+test("reports account-token guidance before parsing a rejected provider body", async () => {
+  let parsed = false;
+
+  await assert.rejects(
+    verifyCloudflareApiToken({
+      apiToken: "test-token",
+      accountId: "0123456789abcdef0123456789abcdef",
+      fetchImpl: async () => ({
+        ok: false,
+        status: 401,
+        async json() {
+          parsed = true;
+          throw new Error("provider-body-must-not-be-parsed");
+        },
+      }),
+    }),
+    error => {
+      assert.match(error.message, /HTTP 401/);
+      assert.match(error.message, /account-owned API token/);
+      assert.match(error.message, /matching CLOUDFLARE_ACCOUNT_ID/);
+      assert.doesNotMatch(error.message, /invalid JSON/);
       return true;
     },
   );
