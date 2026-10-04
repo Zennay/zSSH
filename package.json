@@ -27,7 +27,8 @@
     "oauth:auth0:preflight": "node scripts/check-auth0-production.mjs",
     "release:readiness": "node scripts/check-production-readiness-audit.mjs",
     "repo:main-protection:verify": "node scripts/check-main-protection.mjs",
-    "repo:main-protection:status": "node scripts/check-main-protection.mjs --public-status"
+    "repo:main-protection:status": "node scripts/check-main-protection.mjs --public-status",
+    "repo:main-protection:apply": "node scripts/apply-main-protection.mjs --apply"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.20.2",
