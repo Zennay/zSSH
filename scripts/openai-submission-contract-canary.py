@@ -62,6 +62,13 @@ missing_release_notes = copy.deepcopy(plugin)
 missing_release_notes["extensions"]["com.openai"]["publication"]["release_notes"] = ""
 expect_failure(lambda: builder.validate_plugin(missing_release_notes, listing), "publication.release_notes")
 
+unversioned_release_notes = copy.deepcopy(plugin)
+unversioned_release_notes["extensions"]["com.openai"]["publication"]["release_notes"] = "Public release candidate with scoped Linux operations."
+expect_failure(
+    lambda: builder.validate_plugin(unversioned_release_notes, listing),
+    "must mention the exact plugin version",
+)
+
 cross_origin_listing = copy.deepcopy(plugin)
 cross_origin_listing["extensions"]["com.openai"]["interface"]["supportURL"] = "https://support.example.net/zssh"
 expect_failure(
