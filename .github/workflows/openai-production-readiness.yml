@@ -75,18 +75,30 @@ jobs:
     needs: provenance
     runs-on: ubuntu-latest
     timeout-minutes: 3
+    outputs:
+      stage: ${{ steps.observe.outputs.stage }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22.23.3
       - name: Observe DNS, HTTPS, MCP auth and OAuth metadata
+        id: observe
         shell: bash
         env:
           ORIGIN_REPORT_PATH: ${{ runner.temp }}/zssh-public-origin-observation.json
         run: |
           set -Eeuo pipefail
           node scripts/observe-public-origin-readiness.mjs https://zssh.cheapgpt.shop/mcp | tee "$ORIGIN_REPORT_PATH"
+          STAGE="$(node --input-type=module - "$ORIGIN_REPORT_PATH" <<'NODE'
+          import { readFileSync } from "node:fs";
+          const result = JSON.parse(readFileSync(process.argv[2], "utf8"));
+          const stage = String(result.stage || "unknown");
+          if (!/^[a-z_]+$/.test(stage)) throw new Error("invalid public-origin stage");
+          process.stdout.write(stage);
+          NODE
+          )"
+          echo "stage=$STAGE" >> "$GITHUB_OUTPUT"
       - name: Summarize public origin state
         shell: bash
         env:
@@ -116,7 +128,7 @@ jobs:
 
   audit:
     name: Classify protected M5 inputs
-    needs: provenance
+    needs: [provenance, public_origin]
     permissions:
       contents: read
       issues: write
@@ -124,6 +136,7 @@ jobs:
     timeout-minutes: 5
     environment: openai-production
     env:
+      ZSSH_PUBLIC_ORIGIN_STAGE: ${{ needs.public_origin.outputs.stage }}
       CLOUDFLARE_ZONE_ID: ${{ vars.CLOUDFLARE_ZONE_ID }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       ZSSH_PLUGIN_MCP_URL: ${{ vars.ZSSH_PLUGIN_MCP_URL || 'https://zssh.cheapgpt.shop/mcp' }}
