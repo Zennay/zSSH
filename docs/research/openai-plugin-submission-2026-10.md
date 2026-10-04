@@ -192,3 +192,21 @@ Engineering decision:
 - The public zSSH server serves those pages itself with no scripts, no forms, no analytics, no token-bearing URLs, and a restrictive CSP/referrer/permissions policy.
 - The production submission probe treats those pages as release-critical infrastructure: no redirects, successful HTML response, expected zSSH content, and restrictive CSP are required before release evidence can be green.
 - This same-origin policy is stricter than the minimum documented URL requirement by design. It reduces mutable external dependencies and makes publisher/product/domain review evidence easier to reason about.
+
+
+## Reviewer credential readiness gate — 2026-10-04
+
+Primary sources re-checked on 2026-10-04:
+- https://developers.openai.com/plugins/deploy/submission
+- https://developers.openai.com/plugins/deploy/app-review
+
+Current platform facts:
+- Remote MCP review requires reviewer credentials that work without MFA, email confirmation, SMS confirmation, or private-network access.
+- For authenticated servers, the review team must be able to log into a demo account with no additional operator configuration.
+- Reviewer credentials belong in the secure Review details form, not in the plugin package.
+
+Engineering decision:
+- The automated bearer token used by zSSH's production probe is not sufficient evidence that the human reviewer login is ready.
+- The `openai-production` release gate therefore also requires a public HTTPS `ZSSH_REVIEW_LOGIN_URL` and an explicit `ZSSH_REVIEW_CREDENTIALS_VERIFIED=1` attestation.
+- The attestation may only be set after the dedicated reviewer login has been tested from outside the private network without MFA, email/SMS codes, magic links, or operator approval.
+- No username, password, access token, or other reviewer credential is written to the repository or uploaded as release evidence. Green evidence records only the public login origin/path and the boolean verification state.
