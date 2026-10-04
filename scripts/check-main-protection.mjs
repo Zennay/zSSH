@@ -60,6 +60,23 @@ export function assessMainProtection(
   };
 }
 
+export function assertCurrentBranchSha(branchSha, workflowSha) {
+  const normalizedBranchSha = String(branchSha || "").trim();
+  const normalizedWorkflowSha = String(workflowSha || "").trim();
+  if (!/^[a-f0-9]{40}$/i.test(normalizedBranchSha)) {
+    throw new Error("current branch SHA must be a 40-character Git SHA");
+  }
+  if (!/^[a-f0-9]{40}$/i.test(normalizedWorkflowSha)) {
+    throw new Error("GITHUB_SHA must be a 40-character Git SHA");
+  }
+  if (normalizedBranchSha.toLowerCase() !== normalizedWorkflowSha.toLowerCase()) {
+    throw new Error(
+      `workflow SHA ${normalizedWorkflowSha} is not the current protected branch head ${normalizedBranchSha}`
+    );
+  }
+  return true;
+}
+
 export function summarizeBranchMetadata(branch) {
   const contexts = [
     ...(Array.isArray(branch?.protection?.required_status_checks?.contexts)
@@ -70,9 +87,12 @@ export function summarizeBranchMetadata(branch) {
       : []),
   ];
 
+  const commitSha = String(branch?.commit?.sha || "").trim();
+
   return {
     protected: branch?.protected === true,
     protection_enabled: branch?.protection?.enabled === true,
+    commit_sha: /^[a-f0-9]{40}$/i.test(commitSha) ? commitSha : null,
     required_status_check_contexts: [...new Set(contexts.map(String))].sort(),
   };
 }
@@ -283,6 +303,9 @@ async function main() {
     console.log("ZSSH_MAIN_PROTECTION_STATUS", JSON.stringify(result));
     if (args.has("--require-protected") && !result.protected) {
       throw new Error(`branch ${result.branch} is not reported as protected by GitHub`);
+    }
+    if (args.has("--require-current-sha")) {
+      assertCurrentBranchSha(result.commit_sha, process.env.GITHUB_SHA);
     }
     return;
   }
