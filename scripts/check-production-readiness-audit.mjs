@@ -391,7 +391,7 @@ export function buildProductionReadinessAudit(env = process.env) {
       : "external_input_only";
 
   return {
-    schema_version: 2,
+    schema_version: 3,
     phase: "M5",
     goal: "public-plugin production submission",
     ready: {
