@@ -47,9 +47,36 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: node scripts/check-main-provenance.mjs
 
-  protect:
-    name: Apply and verify main protection
+  status:
+    name: Check current main protection
     needs: provenance
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      protected: ${{ steps.protection.outputs.protected }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Read live main protection status
+        id: protection
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          STATUS="$(node scripts/check-main-protection.mjs --public-status)"
+          echo "$STATUS"
+          JSON="${STATUS#ZSSH_MAIN_PROTECTION_STATUS }"
+          node -e 'const r=JSON.parse(process.argv[1]); process.stdout.write("protected=" + String(r.protected === true) + "\n")' "$JSON" >> "$GITHUB_OUTPUT"
+
+  protect:
+    name: Apply and verify main protection when needed
+    needs:
+      - provenance
+      - status
+    if: github.event_name == 'workflow_dispatch' || needs.status.outputs.protected != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     environment: repository-governance
