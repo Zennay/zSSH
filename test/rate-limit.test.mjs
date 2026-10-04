@@ -9,8 +9,15 @@ test("public rate-limit config is bounded and defaults to 120 requests per minut
     maxKeys: 10_000,
   });
   assert.equal(publicRateLimitFromEnv({ ZSSH_PUBLIC_RATE_LIMIT_PER_MINUTE: "30" }).limit, 30);
-  assert.equal(publicRateLimitFromEnv({ ZSSH_PUBLIC_RATE_LIMIT_PER_MINUTE: "0" }).limit, 120);
-  assert.equal(publicRateLimitFromEnv({ ZSSH_PUBLIC_RATE_LIMIT_PER_MINUTE: "999999" }).limit, 120);
+  assert.equal(publicRateLimitFromEnv({ ZSSH_PUBLIC_RATE_LIMIT_MAX_PROFILES: "500" }).maxKeys, 500);
+  assert.throws(
+    () => publicRateLimitFromEnv({ ZSSH_PUBLIC_RATE_LIMIT_PER_MINUTE: "0" }),
+    /ZSSH_PUBLIC_RATE_LIMIT_PER_MINUTE must be an integer between 1 and 6000/,
+  );
+  assert.throws(
+    () => publicRateLimitFromEnv({ ZSSH_PUBLIC_RATE_LIMIT_MAX_PROFILES: "2" }),
+    /ZSSH_PUBLIC_RATE_LIMIT_MAX_PROFILES must be an integer between 100 and 100000/,
+  );
 });
 
 test("fixed-window limiter isolates opaque profile keys and returns retry timing", () => {
