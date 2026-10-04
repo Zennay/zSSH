@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 
 import {
   CLOUDFLARE_TOKEN_VERIFY_TIMEOUT_MS,
+  cloudflareTokenVerifyUrl,
   verifyCloudflareApiToken,
 } from "../scripts/verify-cloudflare-token.mjs";
 
@@ -16,7 +17,7 @@ function response(result, { status = 200, success = true } = {}) {
   };
 }
 
-test("accepts an active token without exposing token metadata", async () => {
+test("accepts an active user-owned token without exposing token metadata", async () => {
   const token = "cfut_test_secret_that_must_not_render";
   let request;
   const result = await verifyCloudflareApiToken({
@@ -42,6 +43,48 @@ test("accepts an active token without exposing token metadata", async () => {
   assert.equal(CLOUDFLARE_TOKEN_VERIFY_TIMEOUT_MS, 10_000);
   assert.doesNotMatch(JSON.stringify(result), /0123456789abcdef/);
   assert.doesNotMatch(JSON.stringify(result), new RegExp(token));
+});
+
+test("uses the account-token verification route when an account ID is configured", async () => {
+  const accountId = "0123456789abcdef0123456789abcdef";
+  let request;
+  const result = await verifyCloudflareApiToken({
+    apiToken: "cfat_test_secret_that_must_not_render",
+    accountId,
+    fetchImpl: async (url, init) => {
+      request = { url: String(url), init };
+      return response({
+        id: "fedcba9876543210fedcba9876543210",
+        status: "active",
+      });
+    },
+  });
+
+  assert.deepEqual(result, { ok: true, status: "active" });
+  assert.equal(
+    request.url,
+    `https://api.cloudflare.com/client/v4/accounts/${accountId}/tokens/verify`,
+  );
+});
+
+test("rejects malformed account IDs before contacting Cloudflare", async () => {
+  let called = false;
+  await assert.rejects(
+    verifyCloudflareApiToken({
+      apiToken: "test-token",
+      accountId: "not-an-account-id",
+      fetchImpl: async () => {
+        called = true;
+        return response({ status: "active" });
+      },
+    }),
+    /32-character hexadecimal account ID/,
+  );
+  assert.equal(called, false);
+  assert.equal(
+    cloudflareTokenVerifyUrl(),
+    "https://api.cloudflare.com/client/v4/user/tokens/verify",
+  );
 });
 
 test("rejects disabled, expired, and unknown token status", async () => {
