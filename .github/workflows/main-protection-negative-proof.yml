@@ -44,10 +44,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     environment: repository-governance
-    env:
-      ZSSH_REPO_ADMIN_TOKEN: ${{ secrets.ZSSH_REPO_ADMIN_TOKEN }}
-      ZSSH_MAIN_PROTECTION_CANARY_TOKEN: ${{ secrets.ZSSH_MAIN_PROTECTION_CANARY_TOKEN }}
-      ZSSH_MAIN_PROTECTION_PROOF_CONFIRM: ${{ inputs.confirmation }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -59,6 +55,9 @@ jobs:
         shell: bash
         env:
           RECEIPT_PATH: ${{ runner.temp }}/zssh-main-protection-negative-proof.json
+          ZSSH_REPO_ADMIN_TOKEN: ${{ secrets.ZSSH_REPO_ADMIN_TOKEN }}
+          ZSSH_MAIN_PROTECTION_CANARY_TOKEN: ${{ secrets.ZSSH_MAIN_PROTECTION_CANARY_TOKEN }}
+          ZSSH_MAIN_PROTECTION_PROOF_CONFIRM: ${{ inputs.confirmation }}
         run: |
           set -Eeuo pipefail
           node scripts/prove-main-protection-rejection.mjs | tee "$RECEIPT_PATH"

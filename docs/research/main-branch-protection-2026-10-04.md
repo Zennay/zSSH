@@ -140,3 +140,25 @@ This applies to:
 - immutable negative-proof evidence reads for issue #100, canary ancestry, and current-main comparison.
 
 The retry changes availability only. They do not weaken protection requirements, accept stale SHAs, bypass branch protection, or convert a persistent GitHub API failure into a green result.
+
+
+## Governance credential step scope — 2026-10-04
+
+GitHub's current Actions security guidance recommends least-privilege credentials and explicitly notes that automatic secret redaction is not guaranteed. GitHub also documents that environment secrets become available to jobs that reference the protected environment after its protection rules pass.
+
+Primary sources re-checked on 2026-10-04:
+- https://docs.github.com/en/actions/reference/security/secure-use
+- https://docs.github.com/en/actions/how-tos/write-workflows/choose-what-workflows-do/use-secrets
+- https://docs.github.com/en/actions/how-tos/deploy/configure-and-manage-deployments/manage-environments
+
+The `repository-governance` environment remains the correct approval boundary, but job-level `env` unnecessarily made `ZSSH_REPO_ADMIN_TOKEN` and the negative-proof canary token available to checkout, setup, and artifact steps that never consume them.
+
+Decision:
+- keep the protected `repository-governance` environment and exact-current-main provenance gates unchanged;
+- remove governance credentials from job-level `env`;
+- inject `ZSSH_REPO_ADMIN_TOKEN` only into the branch-protection mutation step;
+- inject `ZSSH_REPO_ADMIN_TOKEN` and `ZSSH_MAIN_PROTECTION_CANARY_TOKEN` only into the controlled negative-proof step;
+- keep confirmation values step-scoped alongside the operation that consumes them;
+- add workflow-structure regression tests so checkout/setup/upload steps cannot silently regain those credentials.
+
+This narrows credential exposure only. It does not change branch-protection policy, environment approval, workflow triggers, token privileges, or the acceptance criteria for the rejected-direct-write proof.
