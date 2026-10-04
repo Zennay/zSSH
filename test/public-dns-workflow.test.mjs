@@ -5,6 +5,43 @@ import { readFileSync } from "node:fs";
 const workflowPath = new URL("../.github/workflows/public-dns-publish.yml", import.meta.url);
 const workflow = readFileSync(workflowPath, "utf8");
 
+function stepBlock(name) {
+  const marker = `      - name: ${name}\n`;
+  const start = workflow.indexOf(marker);
+  assert.notEqual(start, -1, `missing workflow step: ${name}`);
+  const next = workflow.indexOf("\n      - name:", start + marker.length);
+  return next === -1 ? workflow.slice(start) : workflow.slice(start, next);
+}
+
+test("Cloudflare API token is scoped only to provider API steps", () => {
+  const stepsIndex = workflow.indexOf("    steps:\n");
+  assert.notEqual(stepsIndex, -1);
+  assert.doesNotMatch(workflow.slice(0, stepsIndex), /CLOUDFLARE_API_TOKEN/);
+
+  for (const name of [
+    "Validate desired Cloudflare DNS change without mutation",
+    "Publish exact DNS-only A record",
+    "Re-read Cloudflare API and prove idempotent desired state",
+  ]) {
+    assert.match(
+      stepBlock(name),
+      /CLOUDFLARE_API_TOKEN: \$\{\{ secrets\.CLOUDFLARE_API_TOKEN \}\}/,
+    );
+  }
+
+  for (const name of [
+    "Require reviewed protected-main DNS activation",
+    "Require canonical protected-main manual DNS dispatch",
+    "Require explicit production DNS confirmation",
+    "Prove public DNS convergence and expose the next live stage",
+    "Upload non-secret DNS evidence",
+  ]) {
+    assert.doesNotMatch(stepBlock(name), /CLOUDFLARE_API_TOKEN/);
+  }
+
+  assert.equal((workflow.match(/CLOUDFLARE_API_TOKEN:/g) || []).length, 3);
+});
+
 test("production DNS publish proves external convergence before reporting success", () => {
   assert.match(
     workflow,
