@@ -58,6 +58,8 @@ test("renders only secret-safe blocking metadata", () => {
   assert.match(result.body, /activation-id=<8-80 safe characters>/);
   assert.match(result.body, /Never place a credential in the marker/);
   assert.match(result.body, /auth0_preflight/);
+  assert.match(result.body, /final_production_probe/);
+  assert.match(result.body, /Protected production submission probe/);
   assert.ok(
     result.body.includes(
       `https://github.com/Zennay/zSSH/blob/${sha}/docs/research/auth0-production-oauth-2026-10-04.md`,
@@ -126,6 +128,9 @@ test("renders the no-blocker state without inventing a gate", () => {
   assert.equal(result.title, "M5 release handoff: readiness gates green");
   assert.match(result.body, /Blocking gate: none/);
   assert.match(result.body, /Canonical final-submission checklist/);
+  assert.match(result.body, /protected OpenAI public release gate/i);
+  assert.match(result.body, /OPENAI_PUBLIC_RELEASE_GATE_GREEN/);
+  assert.match(result.body, /Only after that succeeds should the portal submission be performed/);
   assert.ok(
     result.body.includes(
       `https://github.com/Zennay/zSSH/blob/${sha}/docs/openai-plugin-release-checklist.md`,
