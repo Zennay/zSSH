@@ -494,6 +494,33 @@ test("readiness workflow carries live public-origin stage into DNS gate classifi
   assert.ok(readinessWorkflow.includes("ZSSH_PUBLIC_ORIGIN_STAGE: ${{ needs.public_origin.outputs.stage }}"));
 });
 
+test("readiness workflow limits protected secret references to the classifier step", () => {
+  const auditStart = readinessWorkflow.indexOf("  audit:");
+  assert.ok(auditStart >= 0, "missing protected readiness audit job");
+  const auditBlock = readinessWorkflow.slice(auditStart);
+  const auditHeader = auditBlock.split("\n    steps:")[0] || "";
+  const classifierTail = auditBlock.split("      - name: Build secret-safe readiness receipt")[1] || "";
+  const classifierStep = classifierTail.split("\n      - name:")[0] || "";
+
+  for (const secretName of [
+    "CLOUDFLARE_API_TOKEN",
+    "ZSSH_REVIEW_ACCESS_TOKEN",
+    "AUTH0_MANAGEMENT_API_TOKEN",
+    "OPENAI_APPS_CHALLENGE_TOKEN",
+  ]) {
+    assert.doesNotMatch(
+      auditHeader,
+      new RegExp(secretName),
+      `${secretName} must not be available to every protected readiness step`,
+    );
+    const secretReference = secretName + ": " + "${{ secrets." + secretName + " }}";
+    assert.ok(
+      classifierStep.includes(secretReference),
+      `${secretName} must be injected only into the secret-safe classifier step`,
+    );
+  }
+});
+
 test("readiness workflow summary exposes gate classification for autonomous consumers", () => {
   assert.ok(readinessWorkflow.includes("Execution state: ${result.execution_state}"));
   assert.ok(readinessWorkflow.includes("Blocking gate: ${result.blocking_gate || \"none\"}"));
