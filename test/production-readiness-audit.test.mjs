@@ -98,10 +98,8 @@ test("classifies an empty production environment into actionable M5 lanes", () =
   assert.equal(result.next_actions[2].lane, "auth0_preflight");
   assert.equal(result.next_actions[2].gate_kind, "provider_configuration");
   assert.equal(result.next_actions[2].requires_external_input, true);
-  assert.match(result.next_actions[2].action, /\.github\/openai-production-auth0-trigger/);
-  assert.match(result.next_actions[2].action, /QUALIFY_ZSSH_PRODUCTION_AUTH0/);
-  assert.match(result.next_actions[2].action, /activation-id=<8-80 safe characters>/);
-  assert.match(result.next_actions[2].action, /Never place a credential in the marker/);
+  assert.match(result.next_actions[2].action, /production Auth0 issuer and Management API token/);
+  assert.match(result.next_actions[2].action, /protected readiness audit performs the live Auth0 tenant\/API\/DCR qualification/);
   assert.deepEqual(result.external_input_gates, [
     "dns_publication",
     "auth0_preflight",
