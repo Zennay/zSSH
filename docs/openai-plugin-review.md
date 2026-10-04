@@ -101,7 +101,6 @@ Before pressing Submit:
 - run Scan Tools against the current production MCP server, resolve required findings, and set `ZSSH_OPENAI_TOOL_SCAN_VERIFIED=1` only after the portal scan is green;
 - connect the production OAuth reviewer account and pair it to the dedicated sample target;
 - run `npm run submission:probe` against that production endpoint;
-- scan the latest tools in the submission portal and resolve every required finding;
 - record the required reviewer walkthrough;
 - check the compact connection card on both ChatGPT desktop and mobile;
 - run the protected production release gate, then use the uploaded `zssh-openai-plugin.zip` whose SHA-256 is recorded in the paired evidence JSON;
