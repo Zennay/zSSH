@@ -106,3 +106,12 @@ PR #120 made the guarded main-protection workflow's merged-PR trigger canonical.
 
 This documentation-only evidence change is intentionally small: its merge should run the normal zSSH CI/release gates and then exercise the already-canonical `pull_request: closed` governance path. Success is measured independently through GitHub's live `main.protected` metadata and, where available, the resulting workflow run. If the protected repository-admin credential is absent, the lane must fail closed and `main` must remain unprotected.
 
+## Post-acceptance merged-PR behavior — 2026-10-04
+
+Issue #100 is now completed and canonical `main` is protected. The merged-PR governance workflow therefore checks GitHub's live public branch metadata before entering the privileged mutation job.
+
+- If GitHub already reports `main.protected=true`, a normal merged PR records the healthy status and skips the repository-admin mutation job.
+- If protection is missing, the merged-PR path still enters `repository-governance` and attempts the canonical fail-closed self-heal.
+- Manual `workflow_dispatch` remains an explicit apply/re-apply operation and still requires `PROTECT_ZSSH_MAIN` plus the isolated admin credential.
+
+This preserves autonomous self-healing without making every healthy protected merge fail merely because the bootstrap/admin credential is intentionally absent after acceptance.
