@@ -25,4 +25,5 @@ jobs:
       - name: Verify current main commit
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ZSSH_PROVENANCE_BASE_SHA: 15990579bd3bcc2ecf3b41849892247039585db6
         run: node scripts/check-main-provenance.mjs
