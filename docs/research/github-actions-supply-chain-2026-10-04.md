@@ -3,7 +3,7 @@
 ## Primary sources
 
 - GitHub Secure use reference: https://docs.github.com/en/actions/reference/security/secure-use
-- GitHub repository Actions settings: https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/enabling-features-for-your-repository/managing-github-actions-settings-for-a-repository
+- GitHub repository Actions settings: https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/enabling-features-for-your-repository/managing-github-actions-settings-for-a-repository\n- actions/checkout repository: https://github.com/actions/checkout
 
 GitHub documents full-length commit-SHA pinning as the immutable way to reference an action and exposes a repository policy that can require full-length SHA pins.
 
@@ -27,3 +27,10 @@ This extends the M5 DNS-workflow hardening from PR #169 across governance, relea
 The OpenAI public release gate treats every active `.github/workflows/**` change as release-critical on both pull requests and canonical-main pushes. This avoids a denylist-style gap where a new or previously omitted workflow (for example CI or provenance) could change release/security behavior without rerunning the release-contract gate. Explicit high-value paths remain listed for readability, while the wildcard is the fail-closed coverage boundary.
 
 Regression coverage in `test/release-workflow-trigger.test.mjs` requires pull-request/push parity and requires the workflow wildcard on both triggers.
+
+
+## Checkout credential persistence invariant
+
+The reviewed `actions/checkout` behavior persists the authentication token for later Git commands by default and supports `persist-credentials: false` to opt out. zSSH active workflows do not require authenticated Git mutation after checkout, so every active checkout step opts out explicitly.
+
+This narrows the lifetime and surface of the job-scoped GitHub credential independently of workflow-level `permissions:` least privilege. Repository-wide regression coverage in `test/workflow-action-pins.test.mjs` rejects any active `actions/checkout` step that omits `persist-credentials: false`.
