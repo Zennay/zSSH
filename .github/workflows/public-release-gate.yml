@@ -108,6 +108,7 @@ jobs:
       ZSSH_CHATGPT_DESKTOP_REVIEWED: ${{ vars.ZSSH_CHATGPT_DESKTOP_REVIEWED }}
       ZSSH_CHATGPT_MOBILE_REVIEWED: ${{ vars.ZSSH_CHATGPT_MOBILE_REVIEWED }}
       ZSSH_OPENAI_DOMAIN_VERIFIED: ${{ vars.ZSSH_OPENAI_DOMAIN_VERIFIED }}
+      ZSSH_OPENAI_DOMAIN_VERIFIED_HOST: ${{ vars.ZSSH_OPENAI_DOMAIN_VERIFIED_HOST }}
       ZSSH_OPENAI_TOOL_SCAN_VERIFIED: ${{ vars.ZSSH_OPENAI_TOOL_SCAN_VERIFIED }}
       ZSSH_OPENAI_TOOL_SCAN_SHA256: ${{ vars.ZSSH_OPENAI_TOOL_SCAN_SHA256 }}
       OPENAI_APPS_CHALLENGE_TOKEN: ${{ secrets.OPENAI_APPS_CHALLENGE_TOKEN }}
@@ -219,6 +220,7 @@ jobs:
             chatgpt_desktop_reviewed: true,
             chatgpt_mobile_reviewed: true,
             openai_domain_verified: true,
+            openai_domain_verified_host: process.env.ZSSH_OPENAI_DOMAIN_VERIFIED_HOST,
             openai_tool_scan_verified: true,
             openai_tool_scan_sha256: process.env.ZSSH_OPENAI_TOOL_SCAN_SHA256,
             tool_scan_sha256: probe.tool_scan_sha256,
