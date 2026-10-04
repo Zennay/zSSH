@@ -360,6 +360,7 @@ jobs:
         run: |
           set -Eeuo pipefail
           node --input-type=module <<'NODE'
+          import { createHash } from "node:crypto";
           import { readFileSync, writeFileSync } from "node:fs";
           import { assertHostSurfaceReviewBinding } from "./scripts/check-host-surface-review-binding.mjs";
           const endpoint = new URL(process.env.ZSSH_PLUGIN_MCP_URL);
@@ -437,6 +438,9 @@ jobs:
           if (bundle.version !== "0.1.2") {
             throw new Error("submission bundle version is not 0.1.2");
           }
+          const dependencyLockSha256 = createHash("sha256")
+            .update(readFileSync("package-lock.json"))
+            .digest("hex");
           const evidence = {
             ok: true,
             repository: process.env.GITHUB_REPOSITORY,
@@ -466,6 +470,7 @@ jobs:
             annotation_justifications_sha256: probe.annotation_justifications_sha256,
             plugin_version: bundle.version,
             submission_bundle_sha256: bundle.zip_sha256,
+            dependency_lock_sha256: dependencyLockSha256,
             redirect_policy: "manual-fail-closed",
             listing_urls_validated: true,
             listing_urls: bundle.listing_urls,
@@ -501,5 +506,6 @@ jobs:
             ${{ runner.temp }}/zssh-auth0-production-readiness.json
             ${{ runner.temp }}/zssh-public-ingress-preflight.json
             dist/zssh-openai-plugin.zip
+            package-lock.json
           if-no-files-found: error
           retention-days: 30
