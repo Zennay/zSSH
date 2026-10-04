@@ -6,6 +6,7 @@ import {
   assertPublicToolScopeContract,
   fetchAuthorizationServerMetadata,
   fetchNoRedirect,
+  isNonPublicHostname,
   protectedResourceMetadataUrl,
   publicToolContractFingerprint,
   validateProductionServerInfo,
@@ -42,6 +43,14 @@ const mcpUrl = validatePublicMcpUrl(required("ZSSH_PLUGIN_MCP_URL"), {
 });
 
 const accessToken = required("ZSSH_REVIEW_ACCESS_TOKEN");
+const demoRecordingUrl = new URL(required("ZSSH_PLUGIN_DEMO_RECORDING_URL"));
+if ((allowHttp ? !["http:", "https:"].includes(demoRecordingUrl.protocol) : demoRecordingUrl.protocol !== "https:") ||
+    demoRecordingUrl.username || demoRecordingUrl.password || demoRecordingUrl.hash) {
+  throw new Error("ZSSH_PLUGIN_DEMO_RECORDING_URL must be a reviewer-accessible HTTPS URL without credentials or fragment");
+}
+if (!allowHttp && isNonPublicHostname(demoRecordingUrl.hostname)) {
+  throw new Error("ZSSH_PLUGIN_DEMO_RECORDING_URL must use a public hostname");
+}
 const reviewReadFile = required("ZSSH_REVIEW_FILE");
 const reviewWriteFile = required("ZSSH_REVIEW_WRITE_FILE");
 const challengeToken = String(process.env.OPENAI_APPS_CHALLENGE_TOKEN || "").trim();
@@ -56,6 +65,29 @@ const listingPages = [
   ["privacy", new URL("/privacy", origin), "<h1>Privacy</h1>"],
   ["terms", new URL("/terms", origin), "<h1>Terms</h1>"],
 ];
+
+const demoResponse = await fetch(demoRecordingUrl, {
+  redirect: "follow",
+  headers: {
+    accept: "text/html,video/*;q=0.9,*/*;q=0.1",
+    range: "bytes=0-0",
+    "user-agent": "zssh-openai-submission-probe/1.0",
+  },
+  signal: AbortSignal.timeout(10000),
+});
+const demoFinalUrl = new URL(demoResponse.url || demoRecordingUrl.href);
+if (!demoResponse.ok) {
+  await demoResponse.body?.cancel().catch(() => {});
+  throw new Error("demo recording URL is not reviewer-accessible: HTTP " + demoResponse.status);
+}
+if ((allowHttp ? !["http:", "https:"].includes(demoFinalUrl.protocol) : demoFinalUrl.protocol !== "https:") ||
+    demoFinalUrl.username || demoFinalUrl.password ||
+    (!allowHttp && isNonPublicHostname(demoFinalUrl.hostname))) {
+  await demoResponse.body?.cancel().catch(() => {});
+  throw new Error("demo recording redirected to a non-public or unsafe URL");
+}
+const demoContentType = demoResponse.headers.get("content-type") || "";
+await demoResponse.body?.cancel().catch(() => {});
 
 for (const [name, listingUrl, marker] of listingPages) {
   const response = await fetchNoRedirect(listingUrl, { headers: { accept: "text/html" } }, name + " listing page");
@@ -244,6 +276,10 @@ try {
     oauth_resource: metadata.resource,
     authorization_servers: metadata.authorization_servers,
     domain_challenge_checked: Boolean(challengeToken),
+    demo_recording_accessible: true,
+    demo_recording_origin: demoFinalUrl.origin,
+    demo_recording_path: demoFinalUrl.pathname,
+    demo_recording_content_type: demoContentType,
     no_redirect_contract_validated: true,
     listing_urls_validated: true,
     listing_paths: listingPages.map(([, listingUrl]) => listingUrl.pathname),
