@@ -101,10 +101,22 @@ function invalidSummary(values) {
   }).join("\n");
 }
 
-export function renderM5BlockingIssue({ readiness, canonicalSha, repository = "Zennay/zSSH" }) {
+export function renderM5BlockingIssue({ readiness, canonicalSha, repository = "Zennay/zSSH", workflowRunId = "" }) {
   validateReadiness(readiness);
   const sha = String(canonicalSha || "").trim().toLowerCase();
   if (!/^[a-f0-9]{40}$/.test(sha)) fail("canonicalSha must be a 40-character Git SHA");
+  const repo = String(repository || "Zennay/zSSH").trim();
+  const repoParts = repo.split("/");
+  if (repoParts.length !== 2 || !repoParts[0] || !repoParts[1] || /\s/.test(repo)) {
+    fail("repository must be owner/name");
+  }
+  const runId = String(workflowRunId || "").trim();
+  if (runId && !/^[1-9]\d*$/.test(runId)) {
+    fail("workflowRunId must be a positive GitHub Actions run ID");
+  }
+  const readinessRunLine = runId
+    ? `- Readiness run: [\`${runId}\`](https://github.com/${repo}/actions/runs/${runId})`
+    : null;
 
   const gate = readiness.blocking_gate;
   const action = readiness.blocking_action;
@@ -134,13 +146,13 @@ export function renderM5BlockingIssue({ readiness, canonicalSha, repository = "Z
     });
   const laterGates = laterGateNames.map(name => ({
     name,
-    runbook: gateRunbookLine({ gate: name, repository, sha }),
+    runbook: gateRunbookLine({ gate: name, repository: repo, sha }),
   }));
 
   if (!gate) {
     const finalRunbookLine = gateRunbookLine({
       gate: "portal_and_host_attestations",
-      repository,
+      repository: repo,
       sha,
     });
     return {
@@ -150,6 +162,7 @@ export function renderM5BlockingIssue({ readiness, canonicalSha, repository = "Z
         "# zSSH M5 release handoff",
         "",
         `- Canonical main: \`${sha}\``,
+        ...(readinessRunLine ? [readinessRunLine] : []),
         `- Execution state: \`${executionState}\``,
         "- Blocking gate: none",
         "",
@@ -170,7 +183,7 @@ export function renderM5BlockingIssue({ readiness, canonicalSha, repository = "Z
   const actionText = cleanText(action?.action, 800) || "Resolve the active M5 blocking gate.";
   const gateKind = cleanText(action?.gate_kind, 120) || "unknown";
   const external = action?.requires_external_input === true;
-  const runbookLine = gateRunbookLine({ gate, repository, sha });
+  const runbookLine = gateRunbookLine({ gate, repository: repo, sha });
 
   return {
     title: `M5 active gate: ${gate}`,
@@ -179,6 +192,7 @@ export function renderM5BlockingIssue({ readiness, canonicalSha, repository = "Z
       "# zSSH M5 active blocking gate",
       "",
       `- Canonical main: \`${sha}\``,
+      ...(readinessRunLine ? [readinessRunLine] : []),
       `- Execution state: \`${executionState}\``,
       `- Blocking gate: \`${gate}\``,
       `- Gate kind: \`${gateKind}\``,
@@ -213,6 +227,7 @@ export async function syncM5BlockingIssue({
   token,
   readiness,
   canonicalSha,
+  workflowRunId = "",
   apiUrl = "https://api.github.com",
   fetchImpl = fetch,
 }) {
@@ -222,7 +237,7 @@ export async function syncM5BlockingIssue({
   const authToken = String(token || "").trim();
   if (!authToken) fail("GITHUB_TOKEN is required");
 
-  const rendered = renderM5BlockingIssue({ readiness, canonicalSha, repository });
+  const rendered = renderM5BlockingIssue({ readiness, canonicalSha, repository, workflowRunId });
   const response = await fetchImpl(
     `${apiUrl.replace(/\/$/, "")}/repos/${repository}/issues/${number}`,
     {
@@ -247,6 +262,7 @@ export async function syncM5BlockingIssue({
     issue_number: number,
     blocking_gate: readiness.blocking_gate,
     canonical_sha: String(canonicalSha).toLowerCase(),
+    workflow_run_id: String(workflowRunId || "").trim() || null,
     title: rendered.title,
   };
 }
@@ -261,6 +277,7 @@ async function main() {
     token: process.env.GITHUB_TOKEN,
     readiness,
     canonicalSha: process.env.GITHUB_SHA,
+    workflowRunId: process.env.GITHUB_RUN_ID,
     apiUrl: process.env.GITHUB_API_URL || "https://api.github.com",
   });
   console.log("ZSSH_M5_BLOCKING_ISSUE_SYNCED", JSON.stringify(result));
