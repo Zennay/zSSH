@@ -4,7 +4,7 @@ zSSH is a **standalone security-first remote operations project**. zCloud is its
 
 ## Current milestone
 
-**Public plugin candidate — review hardening.** The safe execution foundation, public OAuth resource-server profile, local target pairing/revocation, and machine-validated submission package are implemented. Remaining work is concentrated in production OAuth/reviewer setup, the public endpoint model, and final OpenAI portal validation.
+**M5 — public-plugin production submission.** The safe execution foundation, universal public MCP endpoint model, outbound target transport, public OAuth resource-server profile, local target pairing/revocation, and machine-validated submission package are implemented. The first live transition is now external production configuration: publish the reviewed DNS origin, then complete production OAuth/reviewer evidence and the final OpenAI portal/host validation gates.
 
 This branch proves the smallest safe foundation:
 
@@ -137,7 +137,7 @@ Set `ZSSH_PLUGIN_PROFILE=public` to advertise only a narrow review-oriented tool
 Privacy, terms, support, and the current review checklist are in [PRIVACY.md](./PRIVACY.md), [TERMS.md](./TERMS.md), [SUPPORT.md](./SUPPORT.md), and [docs/openai-plugin-review.md](./docs/openai-plugin-review.md).
 
 
-OpenAI's current plugin documentation uses remote MCP over Streamable HTTP. Public submission requires a stable public HTTPS endpoint, production OAuth, a current tool scan, domain verification, review cases, and reviewer credentials. zSSH already implements the OAuth resource-server boundary and target pairing; the remaining product decision is how a self-hosted per-user target maps to OpenAI's normal universal-endpoint model (template URLs are restricted to trusted developers).
+OpenAI's current plugin documentation uses remote MCP over Streamable HTTP. Public submission requires a stable public HTTPS endpoint, production OAuth, a current tool scan, domain verification, review cases, and reviewer credentials. zSSH already implements the universal public endpoint, OAuth resource-server boundary, opaque profile-to-target routing, outbound target transport, and local pairing gate. Remaining M5 work is live provider/reviewer/portal evidence rather than another endpoint-architecture decision.
 
 ### Public OAuth resource server
 
@@ -224,9 +224,17 @@ For the OpenAI reviewer target, prepare the target identity and review files tog
 npm run review:target
 ```
 
-By default this creates `~/zssh-review/sample.txt`, reserves `~/zssh-review/output.txt` for the write roundtrip, and creates/reuses `~/.config/zssh/agent-ed25519.pem`. It also persists `~/.config/zssh/reviewer-agent-public.json` directly in the `{version, targets}` format consumed by `ZSSH_AGENT_PUBLIC_KEYS_FILE`; no conversion is needed before registering the reviewer target at the gateway. The command is idempotent, automatically migrates the temporary PR #56 wrapper shape without rotating the identity, and prints a secret-safe JSON report with `ZSSH_REVIEW_FILE`, `ZSSH_REVIEW_WRITE_FILE`, the target ID, and a public-key SHA-256 fingerprint. It refuses partial identity state instead of silently replacing a key.
+By default this creates `~/zssh-review/sample.txt`, reserves `~/zssh-review/output.txt` for the write roundtrip, and creates/reuses `~/.config/zssh/agent-ed25519.pem`. It also persists `~/.config/zssh/reviewer-agent-public.json` directly in the `{version, targets}` format consumed by `ZSSH_AGENT_PUBLIC_KEYS_FILE`; no conversion is needed before registering the reviewer target at the gateway. The command is idempotent, automatically migrates the temporary PR #56 wrapper shape without rotating the identity, and refuses partial identity state instead of silently replacing a key.
 
-Override the reviewer root or target identity locations with `ZSSH_REVIEW_ROOT`, `ZSSH_REVIEW_AGENT_KEY_FILE`, `ZSSH_REVIEW_AGENT_PUBLIC_FILE`, and optionally `ZSSH_REVIEW_TARGET_ID`.
+The default `~/zssh-review` location is a **development/test fixture**, not the submitted production reviewer path. Its secret-safe JSON report intentionally returns `release_compatible=false` and `release_variables=null`; do not copy those local paths into `openai-production`.
+
+For the real submitted reviewer fixture, prepare `/srv/zssh-review` for the unprivileged target user first, then run:
+
+```bash
+ZSSH_REVIEW_ROOT=/srv/zssh-review npm run review:target
+```
+
+Only the exact submitted files `/srv/zssh-review/sample.txt` and `/srv/zssh-review/output.txt` produce `release_compatible=true` and the corresponding copyable `ZSSH_REVIEW_FILE` / `ZSSH_REVIEW_WRITE_FILE` values. Override identity locations with `ZSSH_REVIEW_AGENT_KEY_FILE`, `ZSSH_REVIEW_AGENT_PUBLIC_FILE`, and optionally `ZSSH_REVIEW_TARGET_ID`; changing `ZSSH_REVIEW_ROOT` away from the canonical `/srv/zssh-review` keeps the fixture non-release-compatible.
 
 The gateway's agent endpoints use signed POST requests with a target ID, timestamp, nonce, and SHA-256 body binding. Replays and stale timestamps fail closed. A new authenticated agent session replaces only the previous session for the same target. Tool forwarding is bounded to the existing public zSSH surface; raw shell, private Git/systemd operations, and arbitrary target URLs are not exposed through this transport.
 
