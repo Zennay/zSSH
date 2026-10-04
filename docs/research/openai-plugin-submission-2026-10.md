@@ -244,3 +244,23 @@ Engineering decision:
 - Set the domain attestation only after the OpenAI portal reports Verify Domain successful for the exact production MCP host.
 - Set the tool-scan attestation only after Scan Tools has completed successfully against the current production MCP server and required findings are resolved.
 - Release evidence records both attestations alongside the independently computed live tool-contract SHA-256. These attestations do not replace portal verification; they prevent zSSH automation from calling a release ready while those mandatory portal actions are still knowingly incomplete.
+
+
+## Exact tool-scan fingerprint binding — 2026-10-04
+
+Primary sources re-checked on 2026-10-04:
+- https://developers.openai.com/plugins/deploy/app-review
+- https://developers.openai.com/plugins/deploy/submission
+- https://developers.openai.com/plugins/deploy/submission-errors
+
+Current platform facts:
+- **Scan Tools** imports the live MCP tool metadata into the submission draft, including names, descriptions, schemas, security schemes, annotations and related metadata.
+- When tool metadata changes, OpenAI instructs developers to deploy the change and scan/rescan the production server again; a successful, current production tool scan is required for submission.
+- Therefore a generic boolean saying that a scan once succeeded is weaker evidence than binding the release candidate to the exact tool contract that was scanned.
+
+Engineering decision:
+- Keep `ZSSH_OPENAI_TOOL_SCAN_VERIFIED=1` as the explicit operator attestation that the real portal scan is green.
+- Add `ZSSH_OPENAI_TOOL_SCAN_SHA256` as the lowercase SHA-256 of the exact production tool contract that was present when that portal scan was completed.
+- The protected production release gate computes the live tool-contract fingerprint independently and fails closed unless it exactly matches `ZSSH_OPENAI_TOOL_SCAN_SHA256`.
+- A tool contract change therefore invalidates the prior portal-scan evidence until the production endpoint is rescanned and the attested fingerprint is refreshed.
+- The fingerprint is non-secret and is recorded in release evidence; credentials and tokens remain excluded.
