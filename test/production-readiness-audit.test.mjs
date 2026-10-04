@@ -202,6 +202,16 @@ test("protected readiness workflow proves merged-PR provenance before entering o
   );
   assert.match(
     readinessWorkflow,
+    /PROTECTED="\$\(node -e '[^']+' "\$REPORT_PATH"\)"/,
+    "readiness must parse the branch-status receipt without a fragile heredoc",
+  );
+  assert.doesNotMatch(
+    readinessWorkflow,
+    /<<\\'NODE\\'/,
+    "readiness protection parsing must not regress to the broken quoted heredoc form",
+  );
+  assert.match(
+    readinessWorkflow,
     /audit:\n    name: Classify protected M5 inputs\n    needs: provenance\n    runs-on: ubuntu-latest\n    timeout-minutes: 5\n    environment: openai-production/,
   );
 
