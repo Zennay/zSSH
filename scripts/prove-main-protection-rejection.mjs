@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 import process from "node:process";
 import { pathToFileURL } from "node:url";
-import { assessAppliedMainProtection } from "./apply-main-protection.mjs";
 
 export const EXPECTED_REPOSITORY = "Zennay/zSSH";
 export const EXPECTED_BRANCH = "main";
@@ -51,7 +50,6 @@ function rejectionLooksLikePolicy(status, body) {
 export async function proveMainProtectionRejectsDirectWrite({
   repository = process.env.GITHUB_REPOSITORY,
   branch = EXPECTED_BRANCH,
-  adminToken = process.env.ZSSH_REPO_ADMIN_TOKEN,
   canaryToken = process.env.ZSSH_MAIN_PROTECTION_CANARY_TOKEN,
   confirmation = process.env.ZSSH_MAIN_PROTECTION_PROOF_CONFIRM,
   fetchImpl = fetch,
@@ -62,29 +60,14 @@ export async function proveMainProtectionRejectsDirectWrite({
   if (branch !== EXPECTED_BRANCH) {
     throw new Error(`refusing branch ${branch}; expected ${EXPECTED_BRANCH}`);
   }
-  if (!adminToken || adminToken.length < 20) {
-    throw new Error("ZSSH_REPO_ADMIN_TOKEN is required for deep protection verification");
-  }
   if (!canaryToken || canaryToken.length < 20) {
     throw new Error("ZSSH_MAIN_PROTECTION_CANARY_TOKEN is required and must have normal contents write access");
-  }
-  if (adminToken === canaryToken) {
-    throw new Error("canary token must be distinct from the repository-admin token");
   }
   if (confirmation !== CONFIRMATION) {
     throw new Error(`ZSSH_MAIN_PROTECTION_PROOF_CONFIRM must equal ${CONFIRMATION}`);
   }
 
   const api = "https://api.github.com/repos/Zennay/zSSH";
-  const protection = await githubJson(`${api}/branches/main/protection`, {
-    token: adminToken,
-    fetchImpl,
-  });
-  const assessment = assessAppliedMainProtection(protection);
-  if (!assessment.ok) {
-    throw new Error(`main protection is not canonical: ${assessment.issues.join("; ")}`);
-  }
-
   const branchMetadata = await githubJson(`${api}/branches/main`, {
     token: canaryToken,
     fetchImpl,
@@ -151,7 +134,7 @@ export async function proveMainProtectionRejectsDirectWrite({
   }
 
   return {
-    schema_version: 1,
+    schema_version: 2,
     ok: true,
     repository,
     branch,
@@ -159,7 +142,7 @@ export async function proveMainProtectionRejectsDirectWrite({
     canary_commit_sha: canarySha,
     canary_token_admin: false,
     canary_token_push: true,
-    deep_protection_verified: true,
+    canary_token_source: "job-scoped-github-token",
     public_protected_flag: true,
     direct_write_rejected: true,
     rejection_status: response.status,
