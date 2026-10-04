@@ -30,32 +30,7 @@ function normalizeDnsName(value) {
 export function validateCloudflareZoneName(value) {
   const zoneName = normalizeDnsName(value);
   const label = "[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?";
-  const pattern = new RegExp(`^(?:${label}\\.)+${label}import net from "node:net";
-import { pathToFileURL } from "node:url";
-import { isPublicRoutableAddress } from "./check-public-ingress.mjs";
-import { validatePublicBaseUrl } from "./render-public-caddy.mjs";
-
-const CLOUDFLARE_API_ORIGIN = "https://api.cloudflare.com";
-
-function fail(message) {
-  throw new Error(message);
-}
-
-export function validateCloudflareZoneId(value) {
-  const zoneId = String(value || "").trim();
-  if (!/^[a-f0-9]{32}$/i.test(zoneId)) fail("CLOUDFLARE_ZONE_ID must be a 32-character hexadecimal zone ID");
-  return zoneId;
-}
-
-export function validatePublicIpv4(value) {
-  const ipv4 = String(value || "").trim();
-  if (net.isIP(ipv4) !== 4 || !isPublicRoutableAddress(ipv4)) {
-    fail("ZSSH_PUBLIC_IPV4 must be a publicly routable IPv4 address");
-  }
-  return ipv4;
-}
-
-, "i");
+  const pattern = new RegExp(`^(?:${label}\\.)+${label}$`, "i");
   if (!pattern.test(zoneName) || zoneName.length > 253) {
     fail("CLOUDFLARE_ZONE_NAME must be a valid DNS zone name");
   }
@@ -189,7 +164,7 @@ export async function reconcileCloudflareDns({
   }
 
   const targetUrl = existing
-    ? new URL(`/client/v4/zones/${checkedZoneId}/dns_records/${encodeURIComponent(String(existing.id || ""))}`, CLOUDFLARE_API_ORIGIN)
+    ? new URL(`/client/v4/zones/${zone.zoneId}/dns_records/${encodeURIComponent(String(existing.id || ""))}`, CLOUDFLARE_API_ORIGIN)
     : collectionUrl;
   if (existing && !/^[a-f0-9]{32}$/i.test(String(existing.id || ""))) {
     fail("existing Cloudflare A record has an invalid record ID");
