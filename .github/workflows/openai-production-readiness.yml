@@ -111,6 +111,9 @@ jobs:
   audit:
     name: Classify protected M5 inputs
     needs: provenance
+    permissions:
+      contents: read
+      issues: write
     runs-on: ubuntu-latest
     timeout-minutes: 5
     environment: openai-production
@@ -184,6 +187,15 @@ jobs:
           ];
           appendFileSync(process.env.GITHUB_STEP_SUMMARY, lines.join("\n") + "\n");
           NODE
+      - name: Sync active M5 blocking issue
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          READINESS_PATH: ${{ runner.temp }}/zssh-openai-production-readiness.json
+          ZSSH_M5_BLOCKING_ISSUE: "159"
+        run: |
+          set -Eeuo pipefail
+          node scripts/sync-m5-blocking-issue.mjs "$READINESS_PATH"
       - name: Upload non-secret readiness receipt
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
