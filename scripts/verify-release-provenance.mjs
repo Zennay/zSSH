@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { lstatSync, readFileSync, readlinkSync } from "node:fs";
+import { lstatSync, readFileSync, readlinkSync, readdirSync } from "node:fs";
 import path from "node:path";
 
 function fail(message) {
@@ -22,6 +22,8 @@ const tree = execFileSync(
 );
 
 const records = tree.toString("utf8").split("\0").filter(Boolean);
+const expectedFiles = new Set();
+const expectedDirectories = new Set();
 let checked = 0;
 
 for (const record of records) {
@@ -42,6 +44,13 @@ for (const record of records) {
     relativePath.split("/").some(part => part === "..")
   ) {
     fail(`unsafe tracked path ${JSON.stringify(relativePath)}`);
+  }
+
+  expectedFiles.add(relativePath);
+  let parent = path.posix.dirname(relativePath);
+  while (parent !== ".") {
+    expectedDirectories.add(parent);
+    parent = path.posix.dirname(parent);
   }
 
   const destination = path.resolve(releaseRoot, relativePath);
@@ -90,6 +99,29 @@ for (const record of records) {
 }
 
 if (checked === 0) fail("commit tree contains no tracked blobs");
+
+function verifyNoUnexpectedEntries(directory, relativeDirectory = "") {
+  for (const entry of readdirSync(directory, { withFileTypes: true })) {
+    const relativePath = relativeDirectory
+      ? `${relativeDirectory}/${entry.name}`
+      : entry.name;
+    const absolutePath = path.join(directory, entry.name);
+
+    if (entry.isDirectory()) {
+      if (!expectedDirectories.has(relativePath)) {
+        fail(`unexpected release path: ${relativePath}`);
+      }
+      verifyNoUnexpectedEntries(absolutePath, relativePath);
+      continue;
+    }
+
+    if (!expectedFiles.has(relativePath)) {
+      fail(`unexpected release path: ${relativePath}`);
+    }
+  }
+}
+
+verifyNoUnexpectedEntries(releaseRoot);
 
 process.stdout.write(JSON.stringify({
   ok: true,
