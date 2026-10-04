@@ -1,0 +1,63 @@
+name: zSSH main protection
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type PROTECT_ZSSH_MAIN to apply the canonical main protection policy
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  provenance:
+    name: Require canonical merged-PR provenance
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require canonical main ref
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test "$GITHUB_REF" = "refs/heads/main"
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Verify canonical main provenance
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ZSSH_PROVENANCE_BASE_SHA: 121411d24e288c2512d4851e973a0af80aa99733
+        run: node scripts/check-main-provenance.mjs
+
+  protect:
+    name: Apply and verify main protection
+    needs: provenance
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: repository-governance
+    env:
+      ZSSH_REPO_ADMIN_TOKEN: ${{ secrets.ZSSH_REPO_ADMIN_TOKEN }}
+      ZSSH_MAIN_PROTECTION_CONFIRM: ${{ inputs.confirmation }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Apply canonical branch protection
+        shell: bash
+        env:
+          RECEIPT_PATH: ${{ runner.temp }}/zssh-main-protection.json
+        run: |
+          set -Eeuo pipefail
+          node scripts/apply-main-protection.mjs --apply | tee "$RECEIPT_PATH"
+      - name: Upload non-secret protection receipt
+        uses: actions/upload-artifact@v4
+        with:
+          name: zssh-main-protection-${{ github.run_id }}
+          path: ${{ runner.temp }}/zssh-main-protection.json
+          if-no-files-found: error
+          retention-days: 30
