@@ -46,7 +46,12 @@ function validatePublicHttpsUrl(raw, {
   if (!allowQuery && (url.search || url.hash)) fail(`${name} must not contain query parameters or fragments`);
   if (url.hash) fail(`${name} must not contain a fragment`);
   const normalizedHostname = url.hostname.replace(/^\[|\]$/g, "");
-  if (requirePublicHostname && (isIP(normalizedHostname) !== 0 || isNonPublicHostname(normalizedHostname))) {
+  if (
+    requirePublicHostname &&
+    (!normalizedHostname.includes(".") ||
+      isIP(normalizedHostname) !== 0 ||
+      isNonPublicHostname(normalizedHostname))
+  ) {
     fail(`${name} must use a public hostname`);
   }
   return url;
