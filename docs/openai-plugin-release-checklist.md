@@ -14,6 +14,8 @@ This checklist tracks the production path from the current review-ready MCP prof
 - [ ] Domain verification challenge is live
 - [ ] Reviewer account exists without private user data
 - [ ] Dedicated paired target fixture is available
+- [ ] Production connection card exercised successfully in ChatGPT desktop; only then set `ZSSH_CHATGPT_DESKTOP_REVIEWED=1`
+- [ ] Production connection card exercised successfully in ChatGPT mobile; only then set `ZSSH_CHATGPT_MOBILE_REVIEWED=1`
 
 ## Canonical release provenance
 
@@ -58,6 +60,8 @@ Record:
 - authorization-server metadata URL(s), issuer(s), and PKCE S256 evidence emitted by the production probe;
 - same-origin listing-site proof for `/`, `/support`, `/privacy`, and `/terms`, including restrictive CSP and no-redirect validation;
 - reviewer walkthrough result;
+- live ChatGPT desktop connection-card result;
+- live ChatGPT mobile connection-card result;
 - portal scan findings and resolutions.
 
 A green local canary alone does not indicate production submission readiness. The zSSH repository intentionally does not own the VPS runner; live rollout evidence is produced through the dedicated zCloud VPS release lane so repository-scoped runner queues cannot masquerade as deployment proof.
