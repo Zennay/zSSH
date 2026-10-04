@@ -1,14 +1,17 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
+import { readFileSync } from "node:fs";
 import {
   assertExactBearerResourceMetadata,
   assertPublicToolScopeContract,
+  assertReviewTestCasesMatchPublicToolContract,
   authorizationServerMetadataUrls,
   fetchAuthorizationServerMetadata,
   fetchNoRedirect,
   isNonPublicHostname,
   protectedResourceMetadataUrl,
+  PUBLIC_TOOL_SCOPE_CONTRACT,
   publicToolContractFingerprint,
   validateAuthorizationServerMetadata,
   validateProductionServerInfo,
@@ -222,6 +225,52 @@ test("public tool scope contract rejects scope drift and unreviewed surface expa
     ? { ...tool, _meta: { securitySchemes: [{ type: "oauth2", scopes: ["zssh:write"] }] } }
     : tool);
   assert.throws(() => assertPublicToolScopeContract(metadataDrift), /get_profile.*zssh:read/);
+});
+
+test("submitted reviewer cases stay bound to the reviewed public tool contract", () => {
+  const manifest = JSON.parse(
+    readFileSync(new URL("../submission/plugin.template.json", import.meta.url), "utf8"),
+  );
+  const result = assertReviewTestCasesMatchPublicToolContract(manifest);
+  assert.equal(result.positive_count, 5);
+  assert.equal(result.negative_count, 3);
+  assert.deepEqual(
+    result.referenced_tools,
+    [
+      "get_disk_usage",
+      "get_memory_usage",
+      "get_pairing_status",
+      "get_profile",
+      "get_system_uptime",
+      "zssh_read_file",
+      "zssh_write_file",
+    ],
+  );
+  for (const name of result.referenced_tools) {
+    assert.equal(Object.hasOwn(PUBLIC_TOOL_SCOPE_CONTRACT, name), true);
+  }
+
+  const staleTool = structuredClone(manifest);
+  staleTool.extensions["com.openai"].review.test_cases.positive[0].tools_triggered = "renamed_uptime_tool";
+  assert.throws(
+    () => assertReviewTestCasesMatchPublicToolContract(staleTool),
+    /outside the reviewed public contract: renamed_uptime_tool/,
+  );
+
+  const duplicateTool = structuredClone(manifest);
+  duplicateTool.extensions["com.openai"].review.test_cases.positive[0].tools_triggered =
+    "get_system_uptime, get_system_uptime";
+  assert.throws(
+    () => assertReviewTestCasesMatchPublicToolContract(duplicateTool),
+    /duplicate tools_triggered names/,
+  );
+
+  const shortList = structuredClone(manifest);
+  shortList.extensions["com.openai"].review.test_cases.positive.pop();
+  assert.throws(
+    () => assertReviewTestCasesMatchPublicToolContract(shortList),
+    /exactly five positive/,
+  );
 });
 
 test("public tool contract fingerprint is stable across ordering but changes with metadata", () => {

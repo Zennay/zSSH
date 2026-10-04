@@ -254,6 +254,64 @@ export const PUBLIC_TOOL_SCOPE_CONTRACT = Object.freeze(
   JSON.parse(readFileSync(new URL("./submission/public-tool-contract.json", import.meta.url), "utf8"))
 );
 
+export function assertReviewTestCasesMatchPublicToolContract(
+  manifest,
+  expected = PUBLIC_TOOL_SCOPE_CONTRACT,
+) {
+  const testCases = manifest?.extensions?.["com.openai"]?.review?.test_cases;
+  const positive = testCases?.positive;
+  const negative = testCases?.negative;
+
+  if (!Array.isArray(positive) || positive.length !== 5) {
+    fail("OpenAI MCP review requires exactly five positive test cases");
+  }
+  if (!Array.isArray(negative) || negative.length !== 3) {
+    fail("OpenAI MCP review requires exactly three negative test cases");
+  }
+
+  const allowed = new Set(Object.keys(expected));
+  const referenced = new Set();
+
+  for (const [index, item] of positive.entries()) {
+    for (const field of ["description", "prompt", "tools_triggered", "expected_behavior"]) {
+      if (!String(item?.[field] || "").trim()) {
+        fail(`positive review case ${index + 1} is missing ${field}`);
+      }
+    }
+
+    const names = String(item.tools_triggered)
+      .split(",")
+      .map(name => name.trim())
+      .filter(Boolean);
+
+    if (new Set(names).size !== names.length) {
+      fail(`positive review case ${index + 1} contains duplicate tools_triggered names`);
+    }
+
+    const unknown = names.filter(name => !allowed.has(name));
+    if (unknown.length > 0) {
+      fail(
+        `positive review case ${index + 1} references tools outside the reviewed public contract: ${unknown.join(", ")}`,
+      );
+    }
+    names.forEach(name => referenced.add(name));
+  }
+
+  for (const [index, item] of negative.entries()) {
+    for (const field of ["description", "prompt"]) {
+      if (!String(item?.[field] || "").trim()) {
+        fail(`negative review case ${index + 1} is missing ${field}`);
+      }
+    }
+  }
+
+  return {
+    positive_count: positive.length,
+    negative_count: negative.length,
+    referenced_tools: [...referenced].sort(),
+  };
+}
+
 function assertExactOAuthScheme(tool, location, schemes, expectedScope) {
   if (!Array.isArray(schemes)) {
     fail(`${tool.name} is missing ${location} OAuth security metadata`);
