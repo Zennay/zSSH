@@ -1,6 +1,6 @@
 # OpenAI public plugin readiness
 
-Updated: 2026-10-01
+Updated: 2026-10-04
 
 zSSH has two deliberately separate surfaces:
 
@@ -97,10 +97,10 @@ Before pressing Submit:
 - deploy the current public profile to a stable HTTPS endpoint;
 - complete developer/business identity verification in the OpenAI Platform Dashboard;
 - use a project with global data residency for the MCP submission;
-- complete the live domain-verification challenge;
+- complete the live domain-verification challenge and set `ZSSH_OPENAI_DOMAIN_VERIFIED=1` only after the portal reports Verify Domain successful;
+- run Scan Tools against the current production MCP server, resolve required findings, and set `ZSSH_OPENAI_TOOL_SCAN_VERIFIED=1` only after the portal scan is green;
 - connect the production OAuth reviewer account and pair it to the dedicated sample target;
 - run `npm run submission:probe` against that production endpoint;
-- scan the latest tools in the submission portal and resolve every required finding;
 - record the required reviewer walkthrough;
 - check the compact connection card on both ChatGPT desktop and mobile;
 - run the protected production release gate, then use the uploaded `zssh-openai-plugin.zip` whose SHA-256 is recorded in the paired evidence JSON;
@@ -117,6 +117,10 @@ ZSSH_REVIEW_FILE=/srv/zssh-review/sample.txt \
 ZSSH_REVIEW_WRITE_FILE=/srv/zssh-review/output.txt \
 OPENAI_APPS_CHALLENGE_TOKEN='<current dashboard challenge token>' \
 npm run submission:probe
+
+# The protected GitHub openai-production release environment additionally requires:
+# ZSSH_OPENAI_DOMAIN_VERIFIED=1
+# ZSSH_OPENAI_TOOL_SCAN_VERIFIED=1
 ```
 
 The probe checks the health endpoint, OAuth protected-resource metadata, unauthenticated challenge behavior, tool scan, OAuth schemes, annotations, absence of generic executors, profile and pairing state, public metadata minimization, read-only system tools, and the reviewer file read/write roundtrip. It never prints the access token.
