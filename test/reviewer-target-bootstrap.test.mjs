@@ -39,8 +39,11 @@ test("reviewer target bootstrap is idempotent and never prints private key mater
     assert.match(first.report.public_key_sha256, /^[a-f0-9]{64}$/);
     assert.equal(first.report.private_key_printed, false);
     assert.doesNotMatch(JSON.stringify(first.report), /BEGIN PRIVATE KEY/);
-    assert.equal(first.report.release_variables.ZSSH_REVIEW_FILE, path.join(first.reviewRoot, "sample.txt"));
-    assert.equal(first.report.release_variables.ZSSH_REVIEW_WRITE_FILE, path.join(first.reviewRoot, "output.txt"));
+    assert.equal(first.report.review_file, path.join(first.reviewRoot, "sample.txt"));
+    assert.equal(first.report.review_write_file, path.join(first.reviewRoot, "output.txt"));
+    assert.equal(first.report.release_compatible, false);
+    assert.equal(first.report.release_variables, null);
+    assert.match(first.report.release_blocker, /do not copy dev\/test paths into openai-production/);
 
     const keyFile = path.join(home, ".config", "zssh", "agent-ed25519.pem");
     const publicFile = path.join(home, ".config", "zssh", "reviewer-agent-public.json");
