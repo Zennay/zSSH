@@ -210,10 +210,10 @@ jobs:
     timeout-minutes: 15
     environment: openai-production
     env:
-      ZSSH_PLUGIN_MCP_URL: ${{ vars.ZSSH_PLUGIN_MCP_URL }}
-      ZSSH_REVIEW_FILE: ${{ vars.ZSSH_REVIEW_FILE }}
+      ZSSH_PLUGIN_MCP_URL: ${{ vars.ZSSH_PLUGIN_MCP_URL || 'https://zssh.cheapgpt.shop/mcp' }}
+      ZSSH_REVIEW_FILE: ${{ vars.ZSSH_REVIEW_FILE || '/srv/zssh-review/sample.txt' }}
       ZSSH_PLUGIN_DEMO_RECORDING_URL: ${{ vars.ZSSH_PLUGIN_DEMO_RECORDING_URL }}
-      ZSSH_REVIEW_WRITE_FILE: ${{ vars.ZSSH_REVIEW_WRITE_FILE }}
+      ZSSH_REVIEW_WRITE_FILE: ${{ vars.ZSSH_REVIEW_WRITE_FILE || '/srv/zssh-review/output.txt' }}
       ZSSH_REVIEW_ACCESS_TOKEN: ${{ secrets.ZSSH_REVIEW_ACCESS_TOKEN }}
       ZSSH_REVIEW_LOGIN_URL: ${{ vars.ZSSH_REVIEW_LOGIN_URL }}
       ZSSH_REVIEW_LOGIN_VERIFIED_URL: ${{ vars.ZSSH_REVIEW_LOGIN_VERIFIED_URL }}
