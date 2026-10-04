@@ -79,12 +79,31 @@ test("never serializes protected values", () => {
   assert.equal(buildProductionReadinessAudit(complete).ready.final_release_config, true);
 });
 
+test("protected readiness workflow runs automatically only for merged PRs and keeps manual dispatch", () => {
+  assert.match(
+    readinessWorkflow,
+    /on:\n  workflow_dispatch:\n  pull_request:\n    types:\n      - closed\n    branches:\n      - main/,
+  );
+  assert.match(
+    readinessWorkflow,
+    /provenance:\n    name: Canonical main provenance\n    if: github\.event_name == 'workflow_dispatch' \|\| github\.event\.pull_request\.merged == true/,
+  );
+  assert.match(
+    readinessWorkflow,
+    /Bind merged PR event to canonical main SHA[\s\S]*if: github\.event_name == 'pull_request'[\s\S]*MERGED_PR_SHA: \$\{\{ github\.event\.pull_request\.merge_commit_sha \}\}[\s\S]*test "\$GITHUB_SHA" = "\$MERGED_PR_SHA"/,
+  );
+  assert.doesNotMatch(
+    readinessWorkflow,
+    /^  push:/m,
+    "protected readiness must not auto-run on direct main pushes while branch protection is absent",
+  );
+});
 
 test("protected readiness workflow proves merged-PR provenance before entering openai-production", () => {
   assert.match(readinessWorkflow, /permissions:\n  contents: read\n  pull-requests: read/);
   assert.match(
     readinessWorkflow,
-    /provenance:[\s\S]*Require dispatched SHA to originate from a merged PR[\s\S]*node scripts\/check-main-provenance\.mjs/,
+    /provenance:[\s\S]*Require candidate SHA to originate from a merged PR[\s\S]*node scripts\/check-main-provenance\.mjs/,
   );
   assert.match(
     readinessWorkflow,
