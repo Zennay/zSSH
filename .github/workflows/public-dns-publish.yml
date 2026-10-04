@@ -7,16 +7,6 @@ on:
       - ".github/openai-production-dns-trigger"
   workflow_dispatch:
     inputs:
-      public_base_url:
-        description: Exact public zSSH HTTPS origin
-        required: true
-        default: https://zssh.cheapgpt.shop
-        type: string
-      ipv4:
-        description: Exact direct public IPv4 for the zSSH origin
-        required: true
-        default: 198.244.191.182
-        type: string
       confirmation:
         description: Type PUBLISH_ZSSH_PRODUCTION_DNS to permit the DNS write
         required: true
@@ -39,8 +29,8 @@ jobs:
     env:
       CLOUDFLARE_ZONE_ID: ${{ vars.CLOUDFLARE_ZONE_ID }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      ZSSH_PUBLIC_BASE_URL: ${{ github.event_name == 'workflow_dispatch' && inputs.public_base_url || 'https://zssh.cheapgpt.shop' }}
-      ZSSH_PUBLIC_IPV4: ${{ github.event_name == 'workflow_dispatch' && inputs.ipv4 || '198.244.191.182' }}
+      ZSSH_PUBLIC_BASE_URL: https://zssh.cheapgpt.shop
+      ZSSH_PUBLIC_IPV4: 198.244.191.182
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
