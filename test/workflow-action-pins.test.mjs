@@ -29,3 +29,34 @@ test("all active GitHub Actions use immutable full commit SHAs", () => {
     }
   }
 });
+
+
+test("all active checkout steps disable persisted Git credentials", () => {
+  const workflowFiles = readdirSync(workflowsDir)
+    .filter((name) => name.endsWith(".yml") || name.endsWith(".yaml"))
+    .sort();
+
+  for (const name of workflowFiles) {
+    const workflow = readFileSync(join(workflowsDir.pathname, name), "utf8");
+    const lines = workflow.split("\n");
+
+    for (let index = 0; index < lines.length; index += 1) {
+      if (!/uses:\s*actions\/checkout@[0-9a-f]{40}\b/i.test(lines[index])) continue;
+
+      const leading = lines[index].match(/^(\s*)/)?.[1] || "";
+      const directStep = lines[index].trimStart().startsWith("- uses:");
+      const stepIndentLength = directStep ? leading.length : Math.max(0, leading.length - 2);
+      const stepPrefix = " ".repeat(stepIndentLength) + "- ";
+
+      let end = index + 1;
+      while (end < lines.length && !lines[end].startsWith(stepPrefix)) end += 1;
+      const checkoutStep = lines.slice(index, end).join("\n");
+
+      assert.match(
+        checkoutStep,
+        /persist-credentials:\s*false/,
+        `${name}: actions/checkout must set persist-credentials: false`,
+      );
+    }
+  }
+});
