@@ -42,3 +42,12 @@ test("public privacy page contains the minimum directory disclosures", () => {
   assert.match(privacy, /target owner can approve or immediately revoke pairing/i);
   assert.match(privacy, /passwords, private keys, bearer tokens, API keys, MFA\/OTP codes/i);
 });
+
+
+test("public support page exposes actionable support and private security contact routes", () => {
+  const support = publicSiteResponse("/support").body;
+  assert.match(support, /<h2>Contact support<\/h2>/i);
+  assert.match(support, /href="https:\/\/github\.com\/Zennay\/zSSH\/issues"/i);
+  assert.match(support, /href="https:\/\/github\.com\/Zennay\/zSSH\/security\/advisories\/new"/i);
+  assert.match(support, /Never post passwords, private keys, bearer tokens, API keys, MFA\/OTP codes, capability URLs/i);
+});
