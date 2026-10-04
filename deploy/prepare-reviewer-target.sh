@@ -57,12 +57,24 @@ else
 import { readFileSync, writeFileSync } from "node:fs";
 const [source, target] = process.argv.slice(2);
 const report = JSON.parse(readFileSync(source, "utf8"));
-writeFileSync(target, JSON.stringify({
-  target_id: report.target_id,
-  gateway_public_key_config: report.gateway_public_key_config,
-}, null, 2) + "\n", { mode: 0o600 });
+writeFileSync(target, JSON.stringify(report.gateway_public_key_config, null, 2) + "\n", { mode: 0o600 });
 NODE
 fi
+
+# PR #56 originally persisted a wrapper around gateway_public_key_config.
+# Normalize that already-deployed shape in place without rotating the key.
+"$NODE_BIN" --input-type=module - "$PUBLIC_FILE" <<'NODE'
+import { readFileSync, writeFileSync } from "node:fs";
+const [file] = process.argv.slice(2);
+const parsed = JSON.parse(readFileSync(file, "utf8"));
+const config = parsed?.gateway_public_key_config ?? parsed;
+if (config?.version !== 1 || !config.targets || typeof config.targets !== "object" || Array.isArray(config.targets)) {
+  throw new Error("reviewer gateway public-key config is invalid");
+}
+const entries = Object.entries(config.targets);
+if (entries.length !== 1) throw new Error("reviewer gateway public-key config must contain exactly one target");
+writeFileSync(file, JSON.stringify(config, null, 2) + "\n", { mode: 0o600 });
+NODE
 
 chmod 600 "$KEY_FILE" "$PUBLIC_FILE"
 chmod 700 "$REVIEW_ROOT"
@@ -75,8 +87,8 @@ import { readFileSync } from "node:fs";
 const [fixtureFile, publicFile, privateKeyFile] = process.argv.slice(2);
 const fixture = JSON.parse(readFileSync(fixtureFile, "utf8"));
 const pub = JSON.parse(readFileSync(publicFile, "utf8"));
-const targetId = String(pub.target_id || Object.keys(pub.gateway_public_key_config?.targets || {})[0] || "");
-const record = pub.gateway_public_key_config?.targets?.[targetId];
+const targetId = String(Object.keys(pub.targets || {})[0] || "");
+const record = pub.targets?.[targetId];
 if (!/^zt_[A-Za-z0-9_-]{8,96}$/.test(targetId)) throw new Error("reviewer target id is invalid");
 if (!record?.public_key_pem?.includes("BEGIN PUBLIC KEY")) throw new Error("reviewer public key config is invalid");
 

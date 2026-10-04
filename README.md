@@ -207,7 +207,7 @@ For the OpenAI reviewer target, prepare the target identity and review files tog
 npm run review:target
 ```
 
-By default this creates `~/zssh-review/sample.txt`, reserves `~/zssh-review/output.txt` for the write roundtrip, and creates/reuses `~/.config/zssh/agent-ed25519.pem`. It also persists `~/.config/zssh/reviewer-agent-public.json` containing only the opaque target ID and gateway public-key configuration. The command is idempotent and prints a secret-safe JSON report with `ZSSH_REVIEW_FILE`, `ZSSH_REVIEW_WRITE_FILE`, the target ID, and a public-key SHA-256 fingerprint. It refuses partial identity state instead of silently replacing a key.
+By default this creates `~/zssh-review/sample.txt`, reserves `~/zssh-review/output.txt` for the write roundtrip, and creates/reuses `~/.config/zssh/agent-ed25519.pem`. It also persists `~/.config/zssh/reviewer-agent-public.json` directly in the `{version, targets}` format consumed by `ZSSH_AGENT_PUBLIC_KEYS_FILE`; no conversion is needed before registering the reviewer target at the gateway. The command is idempotent, automatically migrates the temporary PR #56 wrapper shape without rotating the identity, and prints a secret-safe JSON report with `ZSSH_REVIEW_FILE`, `ZSSH_REVIEW_WRITE_FILE`, the target ID, and a public-key SHA-256 fingerprint. It refuses partial identity state instead of silently replacing a key.
 
 Override the reviewer root or target identity locations with `ZSSH_REVIEW_ROOT`, `ZSSH_REVIEW_AGENT_KEY_FILE`, `ZSSH_REVIEW_AGENT_PUBLIC_FILE`, and optionally `ZSSH_REVIEW_TARGET_ID`.
 
