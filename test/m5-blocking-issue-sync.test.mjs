@@ -121,3 +121,18 @@ test("protected readiness audit grants issue write only to the audit job and syn
     /Sync active M5 blocking issue[\s\S]*ZSSH_M5_BLOCKING_ISSUE: "159"[\s\S]*node scripts\/sync-m5-blocking-issue\.mjs "\$READINESS_PATH"/,
   );
 });
+
+
+test("protected readiness audit follows canonical main pushes instead of pull-request close timing", () => {
+  assert.match(
+    workflow,
+    /on:\n  workflow_dispatch:\n  push:\n    branches:\n      - main/,
+  );
+  assert.doesNotMatch(workflow, /pull_request:\n    types:\n      - closed/);
+  assert.match(
+    workflow,
+    /provenance:[\s\S]*if: github\.event_name == 'workflow_dispatch' \|\| github\.event_name == 'push'/,
+  );
+  assert.doesNotMatch(workflow, /Bind merged PR event to canonical main SHA/);
+  assert.match(workflow, /concurrency:[\s\S]*group: zssh-openai-production-readiness[\s\S]*cancel-in-progress: true/);
+});
