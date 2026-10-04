@@ -158,7 +158,7 @@ function validateAuth0Lane(env) {
 
 function validateReviewerFixtureLane(env) {
   const issues = compactIssues([
-    validateHttpsUrl(env, "ZSSH_PLUGIN_DEMO_RECORDING_URL"),
+    validateHttpsUrl(env, "ZSSH_PLUGIN_DEMO_RECORDING_URL", { requirePublicHostname: true }),
     validateMinLength(env, "ZSSH_REVIEW_ACCESS_TOKEN", 20),
     validateHttpsUrl(env, "ZSSH_REVIEW_LOGIN_URL", { requirePublicHostname: true }),
   ]);
