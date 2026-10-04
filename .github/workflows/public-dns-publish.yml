@@ -61,9 +61,11 @@ jobs:
       - name: Require explicit production DNS confirmation
         if: github.event_name == 'workflow_dispatch'
         shell: bash
+        env:
+          ZSSH_DNS_CONFIRMATION: ${{ inputs.confirmation }}
         run: |
           set -Eeuo pipefail
-          test "${{ inputs.confirmation }}" = "PUBLISH_ZSSH_PRODUCTION_DNS"
+          test "$ZSSH_DNS_CONFIRMATION" = "PUBLISH_ZSSH_PRODUCTION_DNS"
       - name: Validate desired Cloudflare DNS change without mutation
         env:
           ZSSH_DNS_APPLY: "0"
