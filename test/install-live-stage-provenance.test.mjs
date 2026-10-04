@@ -91,3 +91,13 @@ test("all production installers rebuild runtime dependencies from the locked gra
     assert.match(source, expected);
   }
 });
+
+
+test("production installers allow only the npm-managed node_modules subtree during provenance checks", () => {
+  for (const source of [installer, publicGatewayInstaller, targetAgentInstaller]) {
+    assert.match(
+      source,
+      /"\$NODE_BIN" --input-type=module - "\$SOURCE_ROOT" "\$REPO_SHA" "\$RELEASE" --allow-node-modules/,
+    );
+  }
+});
