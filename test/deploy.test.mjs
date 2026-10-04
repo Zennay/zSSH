@@ -16,6 +16,8 @@ test("live installer keeps production raw shell fail-closed and secrets outside 
   assert.match(text, /openssl rand -hex 32|randomBytes\(32\)/);
   assert.match(text, /gateway\.env/);
   assert.match(text, /chmod 600 "\$ENV_FILE"/);
+  assert.match(text, /git -C "\$SOURCE_ROOT" archive --format=tar "\$REPO_SHA" \| tar -x -C "\$STAGE"/);
+  assert.doesNotMatch(text, /cp -a "\$SOURCE\/\." "\$STAGE\//);
   assert.match(text, /live-canary\.mjs/);
   assert.doesNotMatch(text, /ZSSH_DEV_BEARER_TOKEN=[A-Za-z0-9]{20,}/);
   assert.doesNotMatch(text, /\bsudo\b/);
