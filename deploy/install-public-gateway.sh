@@ -100,8 +100,15 @@ httpsUrl(jwks, "ZSSH_OAUTH_JWKS_URI");
 const normalizedTarget = normalizeTargetId(targetId);
 if (normalizedTarget === "local") throw new Error("public gateway requires an opaque zt_ target id");
 
-if (!path.isAbsolute(trustFile) || !fs.statSync(trustFile).isFile()) {
-  throw new Error("ZSSH_AGENT_PUBLIC_KEYS_FILE must be an existing absolute file");
+if (!path.isAbsolute(trustFile)) {
+  throw new Error("ZSSH_AGENT_PUBLIC_KEYS_FILE must be an absolute file");
+}
+const trustStat = fs.lstatSync(trustFile);
+if (!trustStat.isFile() || trustStat.isSymbolicLink()) {
+  throw new Error("ZSSH_AGENT_PUBLIC_KEYS_FILE must be a regular non-symlink file");
+}
+if ((trustStat.mode & 0o022) !== 0) {
+  throw new Error("ZSSH_AGENT_PUBLIC_KEYS_FILE must not be group/world writable");
 }
 const trusted = agentPublicKeysFromEnv({ ZSSH_AGENT_PUBLIC_KEYS_FILE: trustFile });
 if (!trusted.has(normalizedTarget)) {
@@ -154,6 +161,13 @@ if [[ ! -d "$RELEASE" ]]; then
   mv "$STAGE" "$RELEASE"
 fi
 
+ENV_BACKUP=""
+if [[ -f "$ENV_FILE" ]]; then
+  ENV_BACKUP="$CONFIG/.public-gateway.env.backup.$"
+  cp "$ENV_FILE" "$ENV_BACKUP"
+  chmod 600 "$ENV_BACKUP"
+fi
+
 umask 077
 {
   echo "NODE_ENV=production"
@@ -191,25 +205,54 @@ chmod 600 "$ENV_FILE"
 sed "s|@NODE_BIN@|$NODE_BIN|g" "$SOURCE_ROOT/deploy/zssh-public.service.in" > "$UNIT"
 chmod 600 "$UNIT"
 
-TMP_LINK="$BASE/.current.$$"
+PREVIOUS=""
+if [[ -L "$CURRENT" ]]; then
+  PREVIOUS="$(readlink -f "$CURRENT" || true)"
+fi
+
+TMP_LINK="$BASE/.current.$"
 ln -s "$RELEASE" "$TMP_LINK"
 mv -Tf "$TMP_LINK" "$CURRENT"
 
 export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
 export DBUS_SESSION_BUS_ADDRESS="${DBUS_SESSION_BUS_ADDRESS:-unix:path=$XDG_RUNTIME_DIR/bus}"
+
+rollback_public_gateway() {
+  echo "zSSH public gateway validation failed; restoring previous state" >&2
+  if [[ -n "$ENV_BACKUP" && -f "$ENV_BACKUP" ]]; then
+    mv -f "$ENV_BACKUP" "$ENV_FILE"
+  fi
+  if [[ -n "$PREVIOUS" && -d "$PREVIOUS" ]]; then
+    local rollback_link="$BASE/.rollback.$"
+    ln -s "$PREVIOUS" "$rollback_link"
+    mv -Tf "$rollback_link" "$CURRENT"
+    systemctl --user daemon-reload || true
+    systemctl --user restart zssh-public.service || true
+  else
+    systemctl --user disable --now zssh-public.service || true
+    rm -f "$CURRENT"
+  fi
+}
+
 systemctl --user daemon-reload
-systemctl --user enable --now zssh-public.service >/dev/null
+if ! systemctl --user enable --now zssh-public.service >/dev/null; then
+  rollback_public_gateway
+  exit 2
+fi
 
 health="http://127.0.0.1:$PORT_VALUE/health"
 for _ in $(seq 1 20); do
   if curl --fail --silent --show-error "$health" >/dev/null; then
     systemctl --user is-active --quiet zssh-public.service
-    printf 'ZSSH_PUBLIC_GATEWAY_INSTALL_GREEN sha=%s endpoint=%s/mcp target=%s service=zssh-public.service port=%s\n'       "$REPO_SHA" "${ZSSH_PUBLIC_BASE_URL%/}" "$ZSSH_TARGET_ID" "$PORT_VALUE"
+    [[ -z "$ENV_BACKUP" ]] || rm -f "$ENV_BACKUP"
+    printf 'ZSSH_PUBLIC_GATEWAY_INSTALL_GREEN sha=%s endpoint=%s/mcp target=%s service=zssh-public.service port=%s\n' \
+      "$REPO_SHA" "${ZSSH_PUBLIC_BASE_URL%/}" "$ZSSH_TARGET_ID" "$PORT_VALUE"
     exit 0
   fi
   sleep 1
 done
 
 systemctl --user status zssh-public.service --no-pager || true
+rollback_public_gateway
 echo "zSSH public gateway failed local health validation" >&2
 exit 2
