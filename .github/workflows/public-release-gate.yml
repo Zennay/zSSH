@@ -209,7 +209,6 @@ jobs:
         shell: bash
         env:
           BUNDLE_REPORT_PATH: ${{ runner.temp }}/zssh-openai-bundle.json
-          AUTH0_REPORT_PATH: ${{ runner.temp }}/zssh-auth0-production-readiness.json
         run: |
           set -Eeuo pipefail
           python3 scripts/build-openai-plugin.py \
@@ -234,6 +233,7 @@ jobs:
           EVIDENCE_PATH: ${{ runner.temp }}/zssh-openai-release-evidence.json
           PROBE_REPORT_PATH: ${{ runner.temp }}/zssh-openai-production-probe.json
           BUNDLE_REPORT_PATH: ${{ runner.temp }}/zssh-openai-bundle.json
+          AUTH0_REPORT_PATH: ${{ runner.temp }}/zssh-auth0-production-readiness.json
         run: |
           set -Eeuo pipefail
           node --input-type=module <<'NODE'
