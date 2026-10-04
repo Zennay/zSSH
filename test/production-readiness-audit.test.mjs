@@ -128,7 +128,7 @@ test("keeps DNS as an internal execution gate when credentials exist but public 
   assert.deepEqual(result.internal_action_gates, ["dns_publication"]);
 });
 
-test("keeps completed DNS green after the one-time Cloudflare credential is removed", () => {
+test("keeps completed DNS green and exposes the remaining internal ingress rollout", () => {
   const result = buildProductionReadinessAudit({
     ...complete,
     CLOUDFLARE_API_TOKEN: "",
@@ -136,8 +136,30 @@ test("keeps completed DNS green after the one-time Cloudflare credential is remo
   });
 
   assert.equal(result.ready.dns_publication, true);
+  assert.equal(result.ready.public_ingress, false);
   assert.deepEqual(result.lanes.dns_publication.missing, []);
-  assert.notEqual(result.blocking_gate, "dns_publication");
+  assert.equal(result.blocking_gate, "public_ingress");
+  assert.equal(result.blocking_action?.gate_kind, "internal_deployment");
+  assert.equal(result.blocking_action?.requires_external_input, false);
+  assert.match(result.blocking_action?.action || "", /zssh-public\.service/);
+  assert.match(result.blocking_action?.action || "", /Caddy promotion/);
+  assert.deepEqual(result.internal_action_gates, ["public_ingress"]);
+});
+
+test("treats the public ingress boundary as proven once health and MCP auth reach OAuth metadata", () => {
+  const result = buildProductionReadinessAudit({
+    ...complete,
+    ZSSH_PUBLIC_ORIGIN_STAGE: "oauth_metadata",
+    ZSSH_OAUTH_ISSUER: "",
+    AUTH0_MANAGEMENT_BASE_URL: "",
+    AUTH0_MANAGEMENT_API_TOKEN: "",
+  });
+
+  assert.equal(result.ready.dns_publication, true);
+  assert.equal(result.ready.public_ingress, true);
+  assert.equal(result.blocking_gate, "auth0_preflight");
+  assert.equal(result.blocking_action?.requires_external_input, true);
+  assert.deepEqual(result.internal_action_gates, []);
 });
 
 test("derives Auth0 management origin for canonical tenant issuers", () => {
@@ -546,6 +568,7 @@ test("readiness workflow limits protected secret references to the classifier st
 });
 
 test("readiness workflow summary exposes gate classification for autonomous consumers", () => {
+  assert.ok(readinessWorkflow.includes("Public ingress: ${result.ready.public_ingress ? \"ready\" : \"needs rollout\"}"));
   assert.ok(readinessWorkflow.includes("Execution state: ${result.execution_state}"));
   assert.ok(readinessWorkflow.includes("Blocking gate: ${result.blocking_gate || \"none\"}"));
   assert.ok(readinessWorkflow.includes("Internal action gates: ${result.internal_action_gates.join(\", \") || \"none\"}"));
