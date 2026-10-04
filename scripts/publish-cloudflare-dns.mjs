@@ -252,11 +252,12 @@ export async function reconcileCloudflareDns({
   let previousIpv4 = null;
   let previousTtl = null;
   let previousProxied = null;
+  let previousStateSha256 = null;
   if (existing) {
     previousIpv4 = String(existing.content || "").trim();
     previousTtl = Number(existing.ttl);
     previousProxied = existing.proxied === true;
-    const previousStateSha256 = cloudflareDnsRecordStateSha256(existing);
+    previousStateSha256 = cloudflareDnsRecordStateSha256(existing);
 
     const preconditionEvidence = {
       previous_ipv4: previousIpv4,
@@ -355,6 +356,7 @@ export async function reconcileCloudflareDns({
       previous_ipv4: previousIpv4,
       previous_ttl: previousTtl,
       previous_proxied: previousProxied,
+      previous_state_sha256: previousStateSha256,
     } : {}),
     zone_source: zone.source,
   };
