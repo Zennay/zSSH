@@ -314,7 +314,19 @@ test("reviewed Auth0 activation is bound to exact current protected main", () =>
   );
   assert.match(
     auth0Workflow,
-    /test "\$\(cat \.github\/openai-production-auth0-trigger\)" = "QUALIFY_ZSSH_PRODUCTION_AUTH0"/,
+    /mapfile -t activation_lines < \.github\/openai-production-auth0-trigger/,
+  );
+  assert.match(
+    auth0Workflow,
+    /test "\$\{activation_lines\[0\]:-\}" = "QUALIFY_ZSSH_PRODUCTION_AUTH0"/,
+  );
+  assert.match(
+    auth0Workflow,
+    /test "\$\{#activation_lines\[@\]\}" -le 2/,
+  );
+  assert.match(
+    auth0Workflow,
+    /activation-id=\[A-Za-z0-9\._:-\]\{8,80\}/,
   );
   assert.match(
     auth0Workflow,
