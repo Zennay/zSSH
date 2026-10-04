@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   assessMainProtection,
+  assertCurrentBranchSha,
   inspectBranchProtectionFlag,
   summarizeBranchMetadata,
   verifyMainProtection,
@@ -107,6 +108,7 @@ test("summarizes public branch metadata without claiming admin policy details", 
   assert.deepEqual(
     summarizeBranchMetadata({
       protected: false,
+      commit: { sha: "a".repeat(40) },
       protection: {
         enabled: false,
         required_status_checks: {
@@ -118,6 +120,7 @@ test("summarizes public branch metadata without claiming admin policy details", 
     {
       protected: false,
       protection_enabled: false,
+      commit_sha: "a".repeat(40),
       required_status_check_contexts: [],
     },
   );
@@ -132,6 +135,7 @@ test("reads the ordinary branch endpoint with the Actions token", async () => {
       calls.push({ url, options });
       return response(200, {
         name: "main",
+        commit: { sha: "b".repeat(40) },
         protected: true,
         protection: {
           enabled: true,
@@ -146,12 +150,30 @@ test("reads the ordinary branch endpoint with the Actions token", async () => {
 
   assert.equal(result.ok, true);
   assert.equal(result.protected, true);
+  assert.equal(result.commit_sha, "b".repeat(40));
   assert.equal(result.source, "branch-metadata");
   assert.deepEqual(result.required_status_check_contexts, ["test"]);
   assert.equal(JSON.stringify(result).includes("actions-token"), false);
   assert.equal(
     calls[0].url,
     "https://api.github.com/repos/Zennay/zSSH/branches/main",
+  );
+});
+
+test("requires workflow SHA to equal the current protected branch head", () => {
+  const current = "c".repeat(40);
+  assert.equal(assertCurrentBranchSha(current, current.toUpperCase()), true);
+  assert.throws(
+    () => assertCurrentBranchSha(current, "d".repeat(40)),
+    /not the current protected branch head/,
+  );
+  assert.throws(
+    () => assertCurrentBranchSha("", current),
+    /current branch SHA/,
+  );
+  assert.throws(
+    () => assertCurrentBranchSha(current, "not-a-sha"),
+    /GITHUB_SHA/,
   );
 });
 

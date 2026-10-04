@@ -49,6 +49,21 @@ test("production DNS target cannot be overridden by manual dispatch inputs", () 
   assert.match(workflow, /ZSSH_PUBLIC_IPV4: 198\.244\.191\.182/);
 });
 
+test("manual production DNS dispatch is bound to the current protected main revision", () => {
+  assert.match(
+    workflow,
+    /Require canonical protected-main manual DNS dispatch[\s\S]*test "\$GITHUB_REF" = "refs\/heads\/main"/,
+  );
+  assert.match(
+    workflow,
+    /Require canonical protected-main manual DNS dispatch[\s\S]*node scripts\/check-main-provenance\.mjs/,
+  );
+  assert.match(
+    workflow,
+    /Require canonical protected-main manual DNS dispatch[\s\S]*check-main-protection\.mjs --public-status --require-protected --require-current-sha/,
+  );
+});
+
 test("manual DNS publication still requires explicit confirmation", () => {
   assert.match(workflow, /if: github\.event_name == 'workflow_dispatch'[\s\S]*PUBLISH_ZSSH_PRODUCTION_DNS/);
 });
