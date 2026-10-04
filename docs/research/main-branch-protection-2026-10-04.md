@@ -115,3 +115,14 @@ Issue #100 is now completed and canonical `main` is protected. The merged-PR gov
 - Manual `workflow_dispatch` remains an explicit apply/re-apply operation and still requires `PROTECT_ZSSH_MAIN` plus the isolated admin credential.
 
 This preserves autonomous self-healing without making every healthy protected merge fail merely because the bootstrap/admin credential is intentionally absent after acceptance.
+
+
+## Exact-current-main governance secret binding — 2026-10-04
+
+The `repository-governance` workflows consume higher-privilege credentials than ordinary CI, so the same stale-run rule used by the M5 provider lanes applies here as well.
+
+- The `zSSH main protection` status gate now requires `--require-current-sha` while reading live branch metadata. If `main` advances after a merged-PR or manual run was queued, that stale run stops before the `repository-governance` mutation job can consume `ZSSH_REPO_ADMIN_TOKEN`.
+- The controlled negative-proof workflow requires both `--require-protected` and `--require-current-sha` before its protected environment can expose the admin/canary credentials.
+- Regression tests lock both workflow contracts.
+
+This does not weaken self-healing: the application lane still permits `protected=false` so it can repair missing protection, but only when the workflow SHA is the exact current `main` revision.
