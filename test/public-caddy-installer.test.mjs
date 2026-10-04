@@ -181,3 +181,20 @@ test("public Caddy installer rejects duplicate managed markers before mutation",
     await rm(value.root, { recursive: true, force: true });
   }
 });
+
+
+test("public Caddy renderer is loaded from the exact immutable Git commit", async () => {
+  const installer = await readFile(path.join(ROOT, "deploy", "install-public-caddy.sh"), "utf8");
+
+  assert.match(installer, /ZSSH_EXPECTED_SHA/);
+  assert.match(
+    installer,
+    /archive --format=tar "\$REPO_SHA" scripts\/render-public-caddy\.mjs/,
+  );
+  assert.match(installer, /"\$NODE_BIN" "\$renderer" > "\$rendered"/);
+  assert.doesNotMatch(
+    installer,
+    /"\$NODE_BIN" "\$SOURCE_ROOT\/scripts\/render-public-caddy\.mjs"/,
+  );
+  assert.match(installer, /release_sha=%s/);
+});
