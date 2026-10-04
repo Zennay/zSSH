@@ -12,9 +12,10 @@ This note covers only controlled publication of that DNS-only A record. Producti
   - https://developers.cloudflare.com/api/resources/dns/subresources/records/
   - create: `POST /zones/{zone_id}/dns_records`
   - update: `PATCH /zones/{zone_id}/dns_records/{dns_record_id}`
-- Cloudflare DNS TTL reference:
+- Cloudflare DNS TTL/reference:
   - https://developers.cloudflare.com/dns/manage-dns-records/reference/ttl/
-  - the API uses `ttl: 1` for automatic TTL; Cloudflare currently documents Auto as 300 seconds for DNS-only records.
+  - https://developers.cloudflare.com/api/resources/dns/subresources/records/
+  - the API uses `ttl: 1` for automatic TTL; record responses also expose stable record IDs, TTL and `proxied` state, so zSSH can bind an apply operation to the exact record state observed by its preceding dry-run.
 - Cloudflare zone lookup API:
   - https://developers.cloudflare.com/api/resources/zones/methods/list/
   - exact-name zone discovery uses `GET /zones?name=cheapgpt.shop` and requires `Zone Read`.
@@ -41,7 +42,8 @@ The reconciler:
 8. forces `ttl: 1` (Cloudflare Auto) and treats TTL drift as non-converged state rather than reporting a false `noop`;
 9. is idempotent and returns `noop` only when IPv4, DNS-only proxy mode, and automatic TTL all match the reviewed desired state;
 10. never prints the API token or zone ID in its evidence output;
-11. never overwrites an unexpected existing A record: a replacement requires `ZSSH_DNS_EXPECTED_CURRENT_IPV4` to exactly match the reviewed current value, while an unconfigured dry-run reports `would_update_requires_precondition` plus the non-secret previous IPv4/TTL/proxy state.
+11. never overwrites an unexpected existing A record: a replacement requires `ZSSH_DNS_EXPECTED_CURRENT_IPV4` to exactly match the independently reviewed current value, while an unconfigured dry-run reports `would_update_requires_precondition` plus the non-secret previous IPv4/TTL/proxy state;
+12. closes the plan-to-apply TOCTOU window by hashing the exact observed Cloudflare record ID + name + IPv4 + TTL + proxy state in the dry-run evidence. The protected workflow passes that SHA-256 directly to the apply step as `ZSSH_DNS_EXPECTED_CURRENT_STATE_SHA256`; if the record is replaced, disappears, changes TTL/proxy mode, or otherwise differs before mutation, apply fails closed. This fingerprint is runtime evidence, not a manually maintained GitHub variable.
 
 The workflow runs in the protected `openai-production` environment. Its production destination is repository-locked to `https://zssh.cheapgpt.shop` / `198.244.191.182` / zone `cheapgpt.shop`; manual dispatch cannot substitute another hostname or address. Manual dispatch is also bound to `refs/heads/main`, merged-PR provenance, live branch protection, and the exact current GitHub-reported main SHA before the protected environment may mutate DNS, then requires the explicit phrase `PUBLISH_ZSSH_PRODUCTION_DNS`. A reviewed canonical-main activation may also run through the dedicated `.github/openai-production-dns-trigger` marker after provenance and branch-protection checks pass. Both paths perform a dry-run first, apply the change, re-read Cloudflare, require an idempotent `noop` result, and then prove external DNS convergence.
 
@@ -55,6 +57,7 @@ Because this lane can mutate production DNS, its reusable GitHub Actions are pin
 - preferred token scope: only the `cheapgpt.shop` zone with `Zone Read` + DNS write permission
 - optional compatibility variable: `CLOUDFLARE_ZONE_ID` for a DNS-write-only token; when absent, zSSH discovers the zone ID without printing it
 - optional safety variable: `ZSSH_DNS_EXPECTED_CURRENT_IPV4`; leave it unset when the hostname has no A record or is already exactly correct, and set it only to the independently reviewed current IPv4 when intentionally replacing an existing A record
+- automatic runtime precondition: the non-mutating plan emits `previous_state_sha256` for an existing non-converged record and the same workflow passes it to apply as `ZSSH_DNS_EXPECTED_CURRENT_STATE_SHA256`; operators must not preconfigure or guess this value
 - the production workflow pins `CLOUDFLARE_ZONE_NAME=cheapgpt.shop`; the generic repository CLI still accepts a zone-name override for non-production testing
 
 The token is an external credential and is intentionally not stored in the repository.
@@ -86,8 +89,8 @@ Use this sequence once the external Cloudflare credential has been created. It i
 4. Dispatch **zSSH production DNS publish** from canonical `main` and enter the exact confirmation phrase `PUBLISH_ZSSH_PRODUCTION_DNS`.
 5. Treat the run as green only when all of these stages succeed in order:
    - merged-PR provenance and current protected-main verification;
-   - non-mutating Cloudflare plan;
-   - exact DNS-only A-record publication;
+   - non-mutating Cloudflare plan, including an automatic state fingerprint whenever an existing non-converged A record is present;
+   - exact DNS-only A-record publication bound to that same plan-state fingerprint;
    - Cloudflare re-read returning the idempotent `noop` state with `ttl: 1` and `proxied: false`;
    - external DNS observation advancing beyond the `dns` stage.
 6. Retain the workflow artifact. It should contain the plan, mutation result, post-write verification, and public-origin observation JSON. These are non-secret evidence and must not contain the API token or zone ID.
