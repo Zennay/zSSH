@@ -29,3 +29,10 @@ Add an external, credential-free ingress preflight that can be run from GitHub-h
 The check deliberately does not accept credentials and does not claim that reviewer login, OAuth authorization code flow, target pairing, demo recording, OpenAI domain verification, Scan Tools, or ChatGPT desktop/mobile review are complete. Those remain later gates.
 
 The shared production URL guard is also hardened so `example.com`, `example.net`, `example.org` and their subdomains cannot be mistaken for public production endpoints.
+
+
+## Final protected-release binding — 2026-10-04
+
+The final `workflow_dispatch` production release gate now reruns this same external ingress proof against the exact configured `ZSSH_PLUGIN_MCP_URL` before the end-to-end submission probe. The resulting non-secret JSON is uploaded with preflight/release artifacts and is parsed again while the release receipt is assembled.
+
+The receipt fails closed unless the ingress evidence belongs to the exact submitted MCP URL and proves healthy HTTPS, the unauthenticated MCP 401 boundary, and protected-resource metadata. This removes a checklist gap where a separately green ingress run could otherwise become stale before the final protected release.
