@@ -1,14 +1,17 @@
-function positiveInteger(value, fallback, { min = 1, max = Number.MAX_SAFE_INTEGER } = {}) {
+function boundedEnvInteger(name, value, fallback, { min = 1, max = Number.MAX_SAFE_INTEGER } = {}) {
+  if (value === undefined || value === null || String(value).trim() === "") return fallback;
   const parsed = Number(value);
-  if (!Number.isInteger(parsed) || parsed < min || parsed > max) return fallback;
+  if (!Number.isInteger(parsed) || parsed < min || parsed > max) {
+    throw new Error(`${name} must be an integer between ${min} and ${max}`);
+  }
   return parsed;
 }
 
 export function publicRateLimitFromEnv(env = process.env) {
   return {
-    limit: positiveInteger(env.ZSSH_PUBLIC_RATE_LIMIT_PER_MINUTE, 120, { min: 1, max: 6000 }),
+    limit: boundedEnvInteger("ZSSH_PUBLIC_RATE_LIMIT_PER_MINUTE", env.ZSSH_PUBLIC_RATE_LIMIT_PER_MINUTE, 120, { min: 1, max: 6000 }),
     windowMs: 60_000,
-    maxKeys: positiveInteger(env.ZSSH_PUBLIC_RATE_LIMIT_MAX_PROFILES, 10_000, { min: 100, max: 100_000 }),
+    maxKeys: boundedEnvInteger("ZSSH_PUBLIC_RATE_LIMIT_MAX_PROFILES", env.ZSSH_PUBLIC_RATE_LIMIT_MAX_PROFILES, 10_000, { min: 100, max: 100_000 }),
   };
 }
 
