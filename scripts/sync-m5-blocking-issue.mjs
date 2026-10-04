@@ -90,6 +90,11 @@ export function renderM5BlockingIssue({ readiness, canonicalSha, repository = "Z
     .filter(lane => lane !== gate);
 
   if (!gate) {
+    const finalRunbookLine = gateRunbookLine({
+      gate: "portal_and_host_attestations",
+      repository,
+      sha,
+    });
     return {
       title: "M5 release handoff: readiness gates green",
       body: [
@@ -101,6 +106,9 @@ export function renderM5BlockingIssue({ readiness, canonicalSha, repository = "Z
         "- Blocking gate: none",
         "",
         "All machine-readable M5 readiness gates are green. Continue only with the final submission/portal operation required by the release handbook.",
+        "",
+        "## Canonical final-submission checklist",
+        finalRunbookLine,
         "",
         "## Safety",
         "This issue is maintained automatically from the secret-safe protected readiness receipt. Never paste credential values into this issue.",
