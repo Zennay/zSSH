@@ -50,7 +50,7 @@ function gateRunbookLine({ gate, repository: repo, sha }) {
   if (!runbook) return null;
   const repo = String(repository || "Zennay/zSSH").trim();
   const parts = repo.split("/");
-  if (parts.length !== 2 || !parts[0] || !parts[1] || /\\s/.test(repo)) {
+  if (parts.length !== 2 || !parts[0] || !parts[1] || /\s/.test(repo)) {
     fail("repository must be owner/name");
   }
   return `[${runbook.label}](https://github.com/${repo}/blob/${sha}/${runbook.path})`;
@@ -111,9 +111,9 @@ export function renderM5BlockingIssue({ readiness, canonicalSha, repository = "Z
     fail("repository must be owner/name");
   }
   const runId = String(workflowRunId || "").trim();
-  if (runId && !/^\\d+$/.test(runId)) fail("workflowRunId must be a positive GitHub Actions run ID");
+  if (runId && !/^\d+$/.test(runId)) fail("workflowRunId must be a positive GitHub Actions run ID");
   const readinessRunLine = runId
-    ? `- Readiness run: [\\`${runId}\\`](https://github.com/${repo}/actions/runs/${runId})`
+    ? "- Readiness run: [`" + runId + "`](https://github.com/" + repo + "/actions/runs/" + runId + ")"
     : null;
 
   const gate = readiness.blocking_gate;
