@@ -69,6 +69,8 @@ test("OAuth authorization-server metadata must prove authorization code and PKCE
     authorization_endpoint: "https://auth.zssh.dev/tenant/authorize",
     token_endpoint: "https://auth.zssh.dev/tenant/token",
     registration_endpoint: "https://auth.zssh.dev/tenant/register",
+    client_id_metadata_document_supported: true,
+    authorization_response_iss_parameter_supported: true,
     response_types_supported: ["code"],
     code_challenge_methods_supported: ["S256"],
     token_endpoint_auth_methods_supported: ["none", "client_secret_post"],
@@ -77,6 +79,9 @@ test("OAuth authorization-server metadata must prove authorization code and PKCE
   assert.equal(validated.pkce_s256, true);
   assert.equal(validated.authorization_code, true);
   assert.equal(validated.registration_endpoint, good.registration_endpoint);
+  assert.equal(validated.client_id_metadata_document_supported, true);
+  assert.deepEqual(validated.client_registration_methods, ["cimd", "dcr"]);
+  assert.equal(validated.authorization_response_iss_parameter_supported, true);
 
   assert.throws(
     () => validateAuthorizationServerMetadata({ ...good, issuer: "https://other.zssh.dev" }, good.issuer),
@@ -94,6 +99,22 @@ test("OAuth authorization-server metadata must prove authorization code and PKCE
     () => validateAuthorizationServerMetadata({ ...good, token_endpoint_auth_methods_supported: [] }, good.issuer),
     /token_endpoint_auth_methods_supported/
   );
+  const noRegistration = { ...good };
+  delete noRegistration.registration_endpoint;
+  delete noRegistration.client_id_metadata_document_supported;
+  assert.throws(
+    () => validateAuthorizationServerMetadata(noRegistration, good.issuer),
+    /client identification via CIMD or DCR/
+  );
+
+  const cimdOnly = { ...good };
+  delete cimdOnly.registration_endpoint;
+  const cimdValidated = validateAuthorizationServerMetadata(cimdOnly, good.issuer);
+  assert.deepEqual(cimdValidated.client_registration_methods, ["cimd"]);
+
+  const dcrOnly = { ...good, client_id_metadata_document_supported: false };
+  const dcrValidated = validateAuthorizationServerMetadata(dcrOnly, good.issuer);
+  assert.deepEqual(dcrValidated.client_registration_methods, ["dcr"]);
 });
 
 test("OAuth authorization-server discovery falls back from RFC 8414 to OIDC metadata", async () => {
@@ -102,6 +123,7 @@ test("OAuth authorization-server discovery falls back from RFC 8414 to OIDC meta
     issuer: "http://127.0.0.1:8080/tenant",
     authorization_endpoint: "http://127.0.0.1:8080/tenant/authorize",
     token_endpoint: "http://127.0.0.1:8080/tenant/token",
+    client_id_metadata_document_supported: true,
     response_types_supported: ["code"],
     code_challenge_methods_supported: ["S256"],
     token_endpoint_auth_methods_supported: ["none"],
