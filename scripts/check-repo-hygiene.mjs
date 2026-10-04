@@ -7,12 +7,8 @@ const workflowDir = join(root, ".github", "workflows");
 
 const forbidden = [
   {
-    pattern: /^ftmo-pr\d+.*\.ya?ml$/i,
-    reason: "temporary FTMO PR proof workflows must not live in the zSSH release repository",
-  },
-  {
-    pattern: /^ftmo-main.*-pr\d+.*\.ya?ml$/i,
-    reason: "temporary FTMO PR recovery workflows must not live in the zSSH release repository",
+    pattern: /^(?:ftmo|zcloud|haxlab|raiseai)[-_].*\.ya?ml$/i,
+    reason: "cross-project portfolio workflows must not live in the zSSH release repository",
   },
 ];
 
