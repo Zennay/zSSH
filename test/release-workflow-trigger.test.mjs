@@ -56,9 +56,13 @@ test("release-critical pull_request and push path filters stay in parity", () =>
 
   for (const governancePath of [
     ".github/workflows/main-protection.yml",
+    ".github/workflows/main-protection-negative-proof.yml",
     "scripts/apply-main-protection.mjs",
+    "scripts/prove-main-protection-rejection.mjs",
     "test/main-protection-apply.test.mjs",
+    "test/main-protection-negative-proof.test.mjs",
     "docs/research/main-branch-protection-2026-10-04.md",
+    "docs/research/main-protection-negative-proof-2026-10-04.md",
   ]) {
     assert.ok(
       pullRequestPaths.includes(governancePath),

@@ -10,6 +10,7 @@ on:
       - ".github/workflows/auth0-production-preflight.yml"
       - ".github/workflows/openai-production-readiness.yml"
       - ".github/workflows/main-protection.yml"
+      - ".github/workflows/main-protection-negative-proof.yml"
       - ".github/workflows/public-origin-watch.yml"
       - ".github/openai-production-probe-trigger"
       - "release-contract.mjs"
@@ -34,6 +35,7 @@ on:
       - "scripts/check-main-provenance.mjs"
       - "scripts/check-main-protection.mjs"
       - "scripts/apply-main-protection.mjs"
+      - "scripts/prove-main-protection-rejection.mjs"
       - "scripts/check-public-ingress.mjs"
       - "scripts/observe-public-origin-readiness.mjs"
       - "scripts/publish-cloudflare-dns.mjs"
@@ -51,6 +53,7 @@ on:
       - "test/main-provenance.test.mjs"
       - "test/main-protection.test.mjs"
       - "test/main-protection-apply.test.mjs"
+      - "test/main-protection-negative-proof.test.mjs"
       - "test/public-caddy-renderer.test.mjs"
       - "test/public-ingress-preflight.test.mjs"
       - "test/public-origin-observation.test.mjs"
@@ -60,6 +63,7 @@ on:
       - "docs/openai-plugin-*.md"
       - "docs/research/cloudflare-dns-publication-2026-10-04.md"
       - "docs/research/main-branch-protection-2026-10-04.md"
+      - "docs/research/main-protection-negative-proof-2026-10-04.md"
   push:
     branches: [main]
     paths:
@@ -69,6 +73,7 @@ on:
       - ".github/workflows/auth0-production-preflight.yml"
       - ".github/workflows/openai-production-readiness.yml"
       - ".github/workflows/main-protection.yml"
+      - ".github/workflows/main-protection-negative-proof.yml"
       - ".github/workflows/public-origin-watch.yml"
       - ".github/openai-production-probe-trigger"
       - "release-contract.mjs"
@@ -93,6 +98,7 @@ on:
       - "scripts/check-main-provenance.mjs"
       - "scripts/check-main-protection.mjs"
       - "scripts/apply-main-protection.mjs"
+      - "scripts/prove-main-protection-rejection.mjs"
       - "scripts/check-public-ingress.mjs"
       - "scripts/observe-public-origin-readiness.mjs"
       - "scripts/publish-cloudflare-dns.mjs"
@@ -110,6 +116,7 @@ on:
       - "test/main-provenance.test.mjs"
       - "test/main-protection.test.mjs"
       - "test/main-protection-apply.test.mjs"
+      - "test/main-protection-negative-proof.test.mjs"
       - "test/public-caddy-renderer.test.mjs"
       - "test/public-ingress-preflight.test.mjs"
       - "test/public-origin-observation.test.mjs"
@@ -119,6 +126,7 @@ on:
       - "docs/openai-plugin-*.md"
       - "docs/research/cloudflare-dns-publication-2026-10-04.md"
       - "docs/research/main-branch-protection-2026-10-04.md"
+      - "docs/research/main-protection-negative-proof-2026-10-04.md"
   workflow_dispatch:
 
 permissions:
@@ -142,7 +150,7 @@ jobs:
       - name: Self-test release configuration guard
         run: node scripts/check-public-release-config.mjs --self-test
       - name: Exercise release and portal binding contracts
-        run: node --test test/release-contract.test.mjs test/auth0-production-readiness.test.mjs test/production-readiness-audit.test.mjs test/domain-verification-binding.test.mjs test/host-surface-review-binding.test.mjs test/tool-scan-binding.test.mjs test/annotation-justifications.test.mjs test/public-caddy-renderer.test.mjs test/public-caddy-installer.test.mjs test/public-ingress-preflight.test.mjs test/public-origin-observation.test.mjs test/cloudflare-dns-publish.test.mjs test/main-protection.test.mjs test/main-protection-apply.test.mjs test/release-workflow-trigger.test.mjs
+        run: node --test test/release-contract.test.mjs test/auth0-production-readiness.test.mjs test/production-readiness-audit.test.mjs test/domain-verification-binding.test.mjs test/host-surface-review-binding.test.mjs test/tool-scan-binding.test.mjs test/annotation-justifications.test.mjs test/public-caddy-renderer.test.mjs test/public-caddy-installer.test.mjs test/public-ingress-preflight.test.mjs test/public-origin-observation.test.mjs test/cloudflare-dns-publish.test.mjs test/main-protection.test.mjs test/main-protection-apply.test.mjs test/main-protection-negative-proof.test.mjs test/release-workflow-trigger.test.mjs
       - name: Validate release scripts
         run: |
           node --check release-contract.mjs
@@ -156,6 +164,7 @@ jobs:
           node --check scripts/check-main-provenance.mjs
           node --check scripts/check-main-protection.mjs
           node --check scripts/apply-main-protection.mjs
+          node --check scripts/prove-main-protection-rejection.mjs
           node --check scripts/check-public-ingress.mjs
           node --check scripts/observe-public-origin-readiness.mjs
           node --check scripts/publish-cloudflare-dns.mjs
