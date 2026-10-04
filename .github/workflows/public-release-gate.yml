@@ -178,6 +178,7 @@ jobs:
       ZSSH_REVIEW_LOGIN_URL: ${{ vars.ZSSH_REVIEW_LOGIN_URL }}
       ZSSH_REVIEW_LOGIN_VERIFIED_URL: ${{ vars.ZSSH_REVIEW_LOGIN_VERIFIED_URL }}
       ZSSH_REVIEW_CREDENTIALS_VERIFIED: ${{ vars.ZSSH_REVIEW_CREDENTIALS_VERIFIED }}
+      ZSSH_MAIN_PROTECTION_VERIFIED: ${{ vars.ZSSH_MAIN_PROTECTION_VERIFIED }}
       ZSSH_CHATGPT_DESKTOP_REVIEWED: ${{ vars.ZSSH_CHATGPT_DESKTOP_REVIEWED }}
       ZSSH_CHATGPT_MOBILE_REVIEWED: ${{ vars.ZSSH_CHATGPT_MOBILE_REVIEWED }}
       ZSSH_CHATGPT_REVIEW_SHA256: ${{ vars.ZSSH_CHATGPT_REVIEW_SHA256 }}
@@ -319,6 +320,9 @@ jobs:
           if (probe.listing_urls_validated !== true) {
             throw new Error("production probe did not prove same-origin public listing pages");
           }
+          if (process.env.ZSSH_MAIN_PROTECTION_VERIFIED !== "1") {
+            throw new Error("main branch protection has not been attested after a controlled rejected-direct-push proof");
+          }
           if (process.env.ZSSH_CHATGPT_DESKTOP_REVIEWED !== "1") {
             throw new Error("production connection card has not been attested green in ChatGPT desktop");
           }
@@ -352,6 +356,7 @@ jobs:
             review_login_path: reviewLogin.pathname,
             review_login_verified_url: process.env.ZSSH_REVIEW_LOGIN_VERIFIED_URL,
             reviewer_credentials_verified: process.env.ZSSH_REVIEW_CREDENTIALS_VERIFIED === "1",
+            main_protection_verified: true,
             chatgpt_desktop_reviewed: true,
             chatgpt_mobile_reviewed: true,
             chatgpt_review_sha256: hostSurface.chatgpt_review_sha256,
