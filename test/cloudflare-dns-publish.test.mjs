@@ -61,6 +61,7 @@ test("discovers the exact active zone when CLOUDFLARE_ZONE_ID is omitted", async
 test("zone autodiscovery fails closed on missing, duplicate, or unrelated zones", async () => {
   for (const zones of [
     [],
+    [{ id: zoneId, name: "cheapgpt.shop", status: "pending" }],
     [
       { id: zoneId, name: "cheapgpt.shop", status: "active" },
       { id: "11111111111111111111111111111111", name: "cheapgpt.shop", status: "active" },
