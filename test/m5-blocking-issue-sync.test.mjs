@@ -204,6 +204,14 @@ test("sync uses the token only as an Authorization header", async () => {
   assert.match(request.init.body, /Cloudflare production DNS publication/);
 });
 
+test("protected readiness audit passes Cloudflare account ID into the M5 classifier", () => {
+  const auditJob = workflow.split("\n  audit:\n")[1] || "";
+  assert.match(
+    auditJob,
+    /environment: openai-production[\s\S]*CLOUDFLARE_ZONE_ID: \$\{\{ vars\.CLOUDFLARE_ZONE_ID \}\}[\s\S]*CLOUDFLARE_ACCOUNT_ID: \$\{\{ vars\.CLOUDFLARE_ACCOUNT_ID \}\}[\s\S]*Build secret-safe readiness receipt/,
+  );
+});
+
 test("protected readiness audit grants issue write only to the audit job and syncs issue 159", () => {
   assert.match(
     workflow,
