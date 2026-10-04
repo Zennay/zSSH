@@ -53,3 +53,22 @@ Decision:
 - add regression coverage that rejects any `${{ github.* }}` expression inside that source-validation shell body.
 
 This does not relax source verification or broaden workflow permissions. It only removes event-controlled text from generated shell source before the external production ingress evidence lane executes.
+
+
+## workflow_run checkout ordering — 2026-10-04
+
+GitHub's current Actions secure-use guidance warns that privileged `workflow_run` workflows must not process code from untrusted repositories or pull-request forks as trusted code. GitHub's detailed checkout guidance also notes that checkout itself does not execute the checked-out code, but later steps can turn an unsafe checkout into privileged code execution.
+
+Primary sources re-checked on 2026-10-04:
+- https://docs.github.com/en/actions/reference/security/secure-use
+- https://docs.github.com/en/actions/reference/security/securely-using-pull_request_target
+
+The zSSH public-ingress chain already verifies that its upstream production-DNS run succeeded, used branch `main`, and came from the same repository. Those checks do not require repository contents, so performing checkout first is unnecessary trust expansion.
+
+Decision:
+- validate `workflow_run` conclusion, branch, and repository identity before `actions/checkout`;
+- only after that source gate may the workflow check out the upstream `head_sha`;
+- retain `persist-credentials: false`, read-only job permissions, and the existing manual protected-main path;
+- add a regression assertion that the source-validation step occurs before checkout.
+
+This is defense in depth: it does not claim that `actions/checkout` alone executes attacker-controlled code. It ensures zSSH rejects a non-canonical `workflow_run` source before materializing that source into the job workspace.
