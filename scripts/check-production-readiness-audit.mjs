@@ -74,7 +74,7 @@ function validationIssue(name, reason) {
   return { name, reason };
 }
 
-function validateHttpsUrl(env, name, { requirePublicHostname = false } = {}) {
+function validateHttpsUrl(env, name, { requirePublicHostname = false, allowFragment = true } = {}) {
   if (!configured(env, name)) return null;
 
   let url;
@@ -86,6 +86,10 @@ function validateHttpsUrl(env, name, { requirePublicHostname = false } = {}) {
 
   if (url.protocol !== "https:" || url.username || url.password) {
     return validationIssue(name, "must be an HTTPS URL without embedded credentials");
+  }
+
+  if (!allowFragment && url.hash) {
+    return validationIssue(name, "must not contain a URL fragment");
   }
 
   if (
@@ -204,7 +208,10 @@ function validateReviewerFixtureLane(env) {
     { requirePublicHostname: true },
   );
   const issues = compactIssues([
-    validateHttpsUrl(env, "ZSSH_PLUGIN_DEMO_RECORDING_URL", { requirePublicHostname: true }),
+    validateHttpsUrl(env, "ZSSH_PLUGIN_DEMO_RECORDING_URL", {
+      requirePublicHostname: true,
+      allowFragment: false,
+    }),
     validateMinLength(env, "ZSSH_REVIEW_ACCESS_TOKEN", 20),
     reviewLoginIssue,
   ]);
