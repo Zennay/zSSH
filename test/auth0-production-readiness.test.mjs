@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import {
   checkAuth0ProductionReadiness,
   resolveAuth0ManagementBaseUrl,
@@ -9,6 +10,32 @@ import {
 } from "../scripts/check-auth0-production.mjs";
 
 const resource = "https://zssh.cheapgpt.shop";
+
+const auth0Workflow = readFileSync(
+  new URL("../.github/workflows/auth0-production-preflight.yml", import.meta.url),
+  "utf8",
+);
+
+test("Auth0 management token is scoped only to the provider validation step", () => {
+  const stepsIndex = auth0Workflow.indexOf("    steps:\n");
+  assert.notEqual(stepsIndex, -1);
+  assert.doesNotMatch(auth0Workflow.slice(0, stepsIndex), /AUTH0_MANAGEMENT_API_TOKEN/);
+
+  const marker = "      - name: Validate Auth0 tenant, API and DCR grant\n";
+  const start = auth0Workflow.indexOf(marker);
+  assert.notEqual(start, -1);
+  const next = auth0Workflow.indexOf("\n      - name:", start + marker.length);
+  const validationStep = next === -1
+    ? auth0Workflow.slice(start)
+    : auth0Workflow.slice(start, next);
+
+  assert.match(
+    validationStep,
+    /AUTH0_MANAGEMENT_API_TOKEN: \$\{\{ secrets\.AUTH0_MANAGEMENT_API_TOKEN \}\}/,
+  );
+  assert.equal((auth0Workflow.match(/AUTH0_MANAGEMENT_API_TOKEN:/g) || []).length, 1);
+});
+
 
 test("Auth0 management origin derives only from canonical tenant issuers", () => {
   assert.equal(
