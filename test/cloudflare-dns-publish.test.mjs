@@ -59,6 +59,24 @@ test("discovers the exact active zone when CLOUDFLARE_ZONE_ID is omitted", async
   assert.equal(calls[1].init.method, "GET");
 });
 
+test("configured zone ID still validates hostname ownership before provider access", async () => {
+  let fetched = false;
+  await assert.rejects(
+    resolveCloudflareZoneId({
+      zoneId,
+      zoneName: "other.example",
+      apiToken: "test-token-not-secret",
+      hostname: "zssh.cheapgpt.shop",
+      fetchImpl: async () => {
+        fetched = true;
+        throw new Error("provider access should not occur");
+      },
+    }),
+    /must belong/,
+  );
+  assert.equal(fetched, false);
+});
+
 test("zone autodiscovery fails closed on missing, duplicate, or unrelated zones", async () => {
   for (const zones of [
     [],
