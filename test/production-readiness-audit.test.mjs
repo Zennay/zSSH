@@ -243,22 +243,14 @@ test("protected readiness workflow proves merged-PR provenance before entering o
 
 
 test("canonical non-secret production defaults stay available without environment-variable provisioning", () => {
-  assert.match(
-    auth0Workflow,
-    /ZSSH_PLUGIN_MCP_URL: \\$\\{\\{ vars\\.ZSSH_PLUGIN_MCP_URL \\|\\| 'https:\\/\\/zssh\\.cheapgpt\\.shop\\/mcp' \\}\\}/,
-  );
+  const mcpDefault = "ZSSH_PLUGIN_MCP_URL: ${{ vars.ZSSH_PLUGIN_MCP_URL || 'https://zssh.cheapgpt.shop/mcp' }}";
+  const readDefault = "ZSSH_REVIEW_FILE: ${{ vars.ZSSH_REVIEW_FILE || '/srv/zssh-review/sample.txt' }}";
+  const writeDefault = "ZSSH_REVIEW_WRITE_FILE: ${{ vars.ZSSH_REVIEW_WRITE_FILE || '/srv/zssh-review/output.txt' }}";
+
+  assert.ok(auth0Workflow.includes(mcpDefault));
   for (const workflow of [readinessWorkflow, publicReleaseWorkflow]) {
-    assert.match(
-      workflow,
-      /ZSSH_PLUGIN_MCP_URL: \\$\\{\\{ vars\\.ZSSH_PLUGIN_MCP_URL \\|\\| 'https:\\/\\/zssh\\.cheapgpt\\.shop\\/mcp' \\}\\}/,
-    );
-    assert.match(
-      workflow,
-      /ZSSH_REVIEW_FILE: \\$\\{\\{ vars\\.ZSSH_REVIEW_FILE \\|\\| '\\/srv\\/zssh-review\\/sample\\.txt' \\}\\}/,
-    );
-    assert.match(
-      workflow,
-      /ZSSH_REVIEW_WRITE_FILE: \\$\\{\\{ vars\\.ZSSH_REVIEW_WRITE_FILE \\|\\| '\\/srv\\/zssh-review\\/output\\.txt' \\}\\}/,
-    );
+    assert.ok(workflow.includes(mcpDefault));
+    assert.ok(workflow.includes(readDefault));
+    assert.ok(workflow.includes(writeDefault));
   }
 });
