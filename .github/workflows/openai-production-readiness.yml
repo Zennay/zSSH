@@ -41,6 +41,7 @@ jobs:
       ZSSH_REVIEW_LOGIN_URL: ${{ vars.ZSSH_REVIEW_LOGIN_URL }}
       ZSSH_REVIEW_LOGIN_VERIFIED_URL: ${{ vars.ZSSH_REVIEW_LOGIN_VERIFIED_URL }}
       ZSSH_REVIEW_CREDENTIALS_VERIFIED: ${{ vars.ZSSH_REVIEW_CREDENTIALS_VERIFIED }}
+      ZSSH_MAIN_PROTECTION_VERIFIED: ${{ vars.ZSSH_MAIN_PROTECTION_VERIFIED }}
       ZSSH_CHATGPT_DESKTOP_REVIEWED: ${{ vars.ZSSH_CHATGPT_DESKTOP_REVIEWED }}
       ZSSH_CHATGPT_MOBILE_REVIEWED: ${{ vars.ZSSH_CHATGPT_MOBILE_REVIEWED }}
       ZSSH_CHATGPT_REVIEW_SHA256: ${{ vars.ZSSH_CHATGPT_REVIEW_SHA256 }}
@@ -78,6 +79,7 @@ jobs:
           const lines = [
             "# zSSH M5 production readiness",
             "",
+            `- Main protection: ${result.ready.repository_governance ? "verified" : "not verified"}`,
             `- DNS publication inputs: ${result.ready.dns_publication ? "ready" : "missing inputs"}`,
             `- Auth0 preflight inputs: ${result.ready.auth0_preflight ? "ready" : "missing inputs"}`,
             `- Reviewer fixture inputs: ${result.ready.reviewer_fixture ? "ready" : "missing inputs"}`,
