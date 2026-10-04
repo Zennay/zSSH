@@ -60,4 +60,4 @@ OPENAI_APPS_CHALLENGE_TOKEN='<current dashboard challenge token>' \
 npm run submission:probe
 ```
 
-The probe verifies the live health endpoint, RFC 9728 resource metadata, unauthenticated 401/WWW-Authenticate behavior, public tool scan, required annotations and OAuth schemes, absence of generic executors, profile and pairing state, minimized public metadata, read-only system tools, and the reviewer file read/write roundtrip. It never prints the access token.
+The probe verifies the live health endpoint, reviewer-accessible demo recording URL from a public CI runner, RFC 9728 resource metadata, unauthenticated 401/WWW-Authenticate behavior, public tool scan, required annotations and OAuth schemes, absence of generic executors, profile and pairing state, minimized public metadata, read-only system tools, and the reviewer file read/write roundtrip. The demo check follows ordinary HTTPS redirects but never sends the reviewer access token to the recording host. It never prints the access token.

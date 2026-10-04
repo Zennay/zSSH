@@ -210,3 +210,19 @@ Engineering decision:
 - The `openai-production` release gate therefore also requires a public HTTPS `ZSSH_REVIEW_LOGIN_URL` and an explicit `ZSSH_REVIEW_CREDENTIALS_VERIFIED=1` attestation.
 - The attestation may only be set after the dedicated reviewer login has been tested from outside the private network without MFA, email/SMS codes, magic links, or operator approval.
 - No username, password, access token, or other reviewer credential is written to the repository or uploaded as release evidence. Green evidence records only the public login origin/path and the boolean verification state.
+
+
+## Demo recording accessibility proof — 2026-10-04
+
+Primary source re-checked on 2026-10-04:
+- https://developers.openai.com/plugins/deploy/submission
+
+Current platform fact:
+- Initial MCP review requires a reviewer-accessible video walkthrough URL.
+
+Engineering decision:
+- URL syntax alone is not sufficient release evidence. The production submission probe must anonymously reach the configured demo recording URL from GitHub-hosted CI before release evidence can be green.
+- Ordinary HTTPS redirects are allowed because common reviewer-facing video hosts redirect to a playback page or CDN. The final resolved location must still be HTTPS and public in production mode.
+- The probe sends no OAuth bearer token, reviewer credential, cookie, or query-injected secret to the demo host.
+- The probe requests only enough content to prove reachability and cancels the response body instead of downloading the recording.
+- Release evidence records only the resolved demo origin/path and content type, not credentials or private query values.
