@@ -39,6 +39,7 @@ fi
 : "${ZSSH_PUBLIC_ALLOWED_ROOTS:?Set ZSSH_PUBLIC_ALLOWED_ROOTS to explicit reviewer-safe roots}"
 
 PORT_VALUE="${ZSSH_PUBLIC_GATEWAY_PORT:-8789}"
+RATE_LIMIT_VALUE="${ZSSH_PUBLIC_RATE_LIMIT_PER_MINUTE:-120}"
 CHALLENGE_TOKEN="${OPENAI_APPS_CHALLENGE_TOKEN:-}"
 
 validate_plain_env_value() {
@@ -62,6 +63,10 @@ if [[ -n "$CHALLENGE_TOKEN" ]]; then
 fi
 [[ "$PORT_VALUE" =~ ^[0-9]+$ ]] && (( PORT_VALUE >= 1024 && PORT_VALUE <= 65535 )) || {
   echo "ZSSH_PUBLIC_GATEWAY_PORT must be an integer between 1024 and 65535" >&2
+  exit 2
+}
+[[ "$RATE_LIMIT_VALUE" =~ ^[0-9]+$ ]] && (( RATE_LIMIT_VALUE >= 1 && RATE_LIMIT_VALUE <= 6000 )) || {
+  echo "ZSSH_PUBLIC_RATE_LIMIT_PER_MINUTE must be an integer between 1 and 6000" >&2
   exit 2
 }
 
@@ -180,6 +185,7 @@ umask 077
   echo "ZSSH_OAUTH_SCOPES=zssh:read,zssh:write"
   echo "ZSSH_OAUTH_READ_SCOPE=zssh:read"
   echo "ZSSH_OAUTH_WRITE_SCOPE=zssh:write"
+  echo "ZSSH_PUBLIC_RATE_LIMIT_PER_MINUTE=$RATE_LIMIT_VALUE"
   echo "ZSSH_PAIRING_REQUIRED=1"
   echo "ZSSH_PAIRING_FILE=$PAIRING_FILE"
   echo "ZSSH_PAIRING_REQUEST_TTL_SECONDS=900"
