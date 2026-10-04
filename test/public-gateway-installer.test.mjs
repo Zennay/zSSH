@@ -187,7 +187,9 @@ test("public gateway service and installer preserve isolated hardened deployment
 
   assert.match(installer, /git -C "\$SOURCE_ROOT" archive --format=tar "\$REPO_SHA"/);
   assert.doesNotMatch(installer, /cp -a "\$SOURCE_ROOT\/\."/);
-  assert.match(installer, /rollback_public_gateway/);\n  assert.match(installer, /public-gateway\\.env\\.backup\\.\\$\\$/);\n  assert.match(installer, /rm -f "\\$ENV_FILE"/);
+  assert.match(installer, /rollback_public_gateway/);
+  assert.match(installer, /public-gateway\.env\.backup\.\$\$/);
+  assert.match(installer, /rm -f "\$ENV_FILE"/);
   assert.match(installer, /ZSSH_PLUGIN_PROFILE=public/);
   assert.match(installer, /ZSSH_PUBLIC_AUTH_MODE=oauth/);
   assert.match(installer, /ZSSH_PUBLIC_RATE_LIMIT_PER_MINUTE=\$RATE_LIMIT_VALUE/);
