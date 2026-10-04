@@ -68,6 +68,13 @@ try {
   }
 
   const pairingTool = tools.find(tool => tool.name === "get_pairing_status");
+  const pairingProperties = pairingTool?.outputSchema?.properties || {};
+  for (const forbidden of ["profile_id", "expires_at"]) {
+    if (Object.hasOwn(pairingProperties, forbidden)) {
+      throw new Error(`get_pairing_status exposes unnecessary public metadata: ${forbidden}`);
+    }
+  }
+
   const connectionUiUri = pairingTool?._meta?.ui?.resourceUri;
   if (connectionUiUri !== "ui://zssh/connection-card-v1.html") {
     throw new Error("get_pairing_status is not linked to the connection UI resource");
@@ -84,6 +91,9 @@ try {
   }
   if (!String(ui?.text || "").includes("Approval stays local to the Linux target.")) {
     throw new Error("connection UI does not explain the local approval boundary");
+  }
+  if (/profile_id|id="profile"|>Profile</i.test(String(ui?.text || ""))) {
+    throw new Error("connection UI exposes internal profile metadata");
   }
   if (/<iframe\b/i.test(String(ui?.text || ""))) {
     throw new Error("connection UI must not embed third-party frames");
