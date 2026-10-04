@@ -58,7 +58,7 @@ test("all active checkout steps disable persisted Git credentials", () => {
 
       assert.match(
         block.join("\n"),
-        /persist-credentials:\s*false/,
+        /^\s+persist-credentials:\s*false\s*(?:#.*)?$/m,
         `${name}: actions/checkout must set persist-credentials: false`,
       );
     }
