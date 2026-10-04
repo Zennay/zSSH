@@ -29,7 +29,6 @@ jobs:
     env:
       CLOUDFLARE_ZONE_ID: ${{ vars.CLOUDFLARE_ZONE_ID }}
       CLOUDFLARE_ZONE_NAME: cheapgpt.shop
-      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       ZSSH_PUBLIC_BASE_URL: https://zssh.cheapgpt.shop
       ZSSH_PUBLIC_IPV4: 198.244.191.182
     steps:
@@ -67,6 +66,7 @@ jobs:
         env:
           ZSSH_DNS_APPLY: "0"
           EVIDENCE_PATH: ${{ runner.temp }}/zssh-cloudflare-dns-plan.json
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -75,6 +75,7 @@ jobs:
         env:
           ZSSH_DNS_APPLY: "1"
           EVIDENCE_PATH: ${{ runner.temp }}/zssh-cloudflare-dns-result.json
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -83,6 +84,7 @@ jobs:
         env:
           ZSSH_DNS_APPLY: "0"
           EVIDENCE_PATH: ${{ runner.temp }}/zssh-cloudflare-dns-verify.json
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         shell: bash
         run: |
           set -Eeuo pipefail
