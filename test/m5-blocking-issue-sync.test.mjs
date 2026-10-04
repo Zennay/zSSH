@@ -227,12 +227,12 @@ test("protected readiness audit grants issue write only to the audit job and syn
 test("protected readiness audit follows canonical main pushes instead of pull-request close timing", () => {
   assert.match(
     workflow,
-    /on:\n  workflow_dispatch:\n  push:\n    branches:\n      - main/,
+    /on:\n  workflow_dispatch:\n  workflow_run:\n    workflows:\n      - zSSH production DNS publish\n    types:\n      - completed\n  push:\n    branches:\n      - main/,
   );
   assert.doesNotMatch(workflow, /pull_request:\n    types:\n      - closed/);
   assert.match(
     workflow,
-    /provenance:[\s\S]*if: github\.event_name == 'workflow_dispatch' \|\| github\.event_name == 'push'/,
+    /provenance:[\s\S]*if: github\.event_name != 'workflow_run' \|\| \(github\.event\.workflow_run\.conclusion == 'success' && github\.event\.workflow_run\.head_branch == 'main'\)/,
   );
   assert.doesNotMatch(workflow, /Bind merged PR event to canonical main SHA/);
   assert.match(workflow, /concurrency:[\s\S]*group: zssh-openai-production-readiness[\s\S]*cancel-in-progress: true/);
