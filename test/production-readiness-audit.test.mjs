@@ -495,10 +495,12 @@ test("readiness workflow carries live public-origin stage into DNS gate classifi
 });
 
 test("readiness workflow limits protected secret references to the classifier step", () => {
-  const auditBlock = readinessWorkflow.match(/  audit:[\\s\\S]*$/)?.[0] || "";
-  const auditHeader = auditBlock.split("    steps:")[0] || "";
+  const auditStart = readinessWorkflow.indexOf("  audit:");
+  assert.ok(auditStart >= 0, "missing protected readiness audit job");
+  const auditBlock = readinessWorkflow.slice(auditStart);
+  const auditHeader = auditBlock.split("\n    steps:")[0] || "";
   const classifierTail = auditBlock.split("      - name: Build secret-safe readiness receipt")[1] || "";
-  const classifierStep = classifierTail.split("\\n      - name:")[0] || "";
+  const classifierStep = classifierTail.split("\n      - name:")[0] || "";
 
   for (const secretName of [
     "CLOUDFLARE_API_TOKEN",
@@ -511,9 +513,9 @@ test("readiness workflow limits protected secret references to the classifier st
       new RegExp(secretName),
       `${secretName} must not be available to every protected readiness step`,
     );
-    assert.match(
-      classifierStep,
-      new RegExp(`${secretName}: \\\${\\{\\{ secrets\\.${secretName} \\\}\}}`),
+    const secretReference = secretName + ": " + "${{ secrets." + secretName + " }}";
+    assert.ok(
+      classifierStep.includes(secretReference),
       `${secretName} must be injected only into the secret-safe classifier step`,
     );
   }
