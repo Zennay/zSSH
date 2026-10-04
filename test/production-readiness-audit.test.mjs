@@ -29,7 +29,7 @@ const complete = {
   CLOUDFLARE_ZONE_ID: "0123456789abcdef0123456789abcdef",
   CLOUDFLARE_API_TOKEN: "placeholder-cf-value",
   ZSSH_PLUGIN_MCP_URL: "https://zssh.cheapgpt.shop/mcp",
-  ZSSH_PLUGIN_DEMO_RECORDING_URL: "https://review.example/zssh-demo",
+  ZSSH_PLUGIN_DEMO_RECORDING_URL: "https://review.zssh.dev/zssh-demo",
   ZSSH_REVIEW_ACCESS_TOKEN: "placeholder-review-value",
   ZSSH_REVIEW_LOGIN_URL: "https://tenant.eu.auth0.com/u/login",
   ZSSH_REVIEW_LOGIN_VERIFIED_URL: "https://tenant.eu.auth0.com/u/login",
