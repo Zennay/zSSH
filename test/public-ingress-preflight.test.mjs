@@ -25,11 +25,19 @@ test("ingress preflight automatically follows successful canonical production DN
     /ref: \$\{\{ github\.event_name == 'workflow_run' && github\.event\.workflow_run\.head_sha \|\| github\.sha \}\}/,
   );
   assert.match(workflow, /persist-credentials: false/);
-  assert.match(workflow, /test "\$\{\{ github\.event\.workflow_run\.head_branch \}\}" = "main"/);
-  assert.match(
-    workflow,
-    /test "\$\{\{ github\.event\.workflow_run\.head_repository\.full_name \}\}" = "\$\{\{ github\.repository \}\}"/,
-  );
+
+  const sourceTail = workflow.split("      - name: Require successful canonical production DNS source")[1];
+  assert.ok(sourceTail, "missing canonical production DNS source step");
+  const sourceStep = sourceTail.split("\n      - ")[0];
+  assert.match(sourceStep, /ZSSH_SOURCE_CONCLUSION: \$\{\{ github\.event\.workflow_run\.conclusion \}\}/);
+  assert.match(sourceStep, /ZSSH_SOURCE_HEAD_BRANCH: \$\{\{ github\.event\.workflow_run\.head_branch \}\}/);
+  assert.match(sourceStep, /ZSSH_SOURCE_REPOSITORY: \$\{\{ github\.event\.workflow_run\.head_repository\.full_name \}\}/);
+  assert.match(sourceStep, /ZSSH_EXPECTED_REPOSITORY: \$\{\{ github\.repository \}\}/);
+  const sourceScript = sourceStep.split("run: |")[1] || "";
+  assert.match(sourceScript, /test "\$ZSSH_SOURCE_CONCLUSION" = "success"/);
+  assert.match(sourceScript, /test "\$ZSSH_SOURCE_HEAD_BRANCH" = "main"/);
+  assert.match(sourceScript, /test "\$ZSSH_SOURCE_REPOSITORY" = "\$ZSSH_EXPECTED_REPOSITORY"/);
+  assert.doesNotMatch(sourceScript, /\$\{\{\s*github\./);
   assert.match(
     workflow,
     /ZSSH_PLUGIN_MCP_URL: https:\/\/zssh\.cheapgpt\.shop\/mcp/,
