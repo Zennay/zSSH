@@ -120,6 +120,7 @@ test("release-critical pull_request and push path filters stay in parity", () =>
     ".github/openai-production-dns-trigger",
     "scripts/publish-cloudflare-dns.mjs",
     "test/cloudflare-dns-publish.test.mjs",
+    "test/cloudflare-request-timeout.test.mjs",
     "test/public-dns-workflow.test.mjs",
   ]) {
     assert.ok(pullRequestPaths.includes(runtimePath), `pull_request trigger must include release-critical runtime path ${runtimePath}`);
