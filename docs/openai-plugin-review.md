@@ -127,6 +127,7 @@ npm run submission:probe
 # The protected GitHub openai-production release environment additionally requires:
 # ZSSH_REVIEW_LOGIN_VERIFIED_URL=<exact tested reviewer login URL>
 # ZSSH_REVIEW_CREDENTIALS_VERIFIED=1
+# ZSSH_MAIN_PROTECTION_VERIFIED=1
 # ZSSH_CHATGPT_DESKTOP_REVIEWED=1
 # ZSSH_CHATGPT_MOBILE_REVIEWED=1
 # ZSSH_CHATGPT_REVIEW_SHA256=<exact reviewed host-surface fingerprint>
