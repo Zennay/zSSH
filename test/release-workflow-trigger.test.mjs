@@ -103,6 +103,7 @@ test("release-critical pull_request and push path filters stay in parity", () =>
     ".github/workflows/public-dns-publish.yml",
     "scripts/publish-cloudflare-dns.mjs",
     "test/cloudflare-dns-publish.test.mjs",
+    "test/public-dns-workflow.test.mjs",
   ]) {
     assert.ok(pullRequestPaths.includes(runtimePath), `pull_request trigger must include release-critical runtime path ${runtimePath}`);
     assert.ok(pushPaths.includes(runtimePath), `push trigger must include release-critical runtime path ${runtimePath}`);
