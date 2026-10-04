@@ -104,6 +104,7 @@ jobs:
       ZSSH_CHATGPT_MOBILE_REVIEWED: ${{ vars.ZSSH_CHATGPT_MOBILE_REVIEWED }}
       ZSSH_OPENAI_DOMAIN_VERIFIED: ${{ vars.ZSSH_OPENAI_DOMAIN_VERIFIED }}
       ZSSH_OPENAI_TOOL_SCAN_VERIFIED: ${{ vars.ZSSH_OPENAI_TOOL_SCAN_VERIFIED }}
+      ZSSH_OPENAI_TOOL_SCAN_SHA256: ${{ vars.ZSSH_OPENAI_TOOL_SCAN_SHA256 }}
       OPENAI_APPS_CHALLENGE_TOKEN: ${{ secrets.OPENAI_APPS_CHALLENGE_TOKEN }}
       ZSSH_REQUIRE_OUTBOUND_AGENT: "1"
     steps:
@@ -162,6 +163,9 @@ jobs:
           if (!/^[a-f0-9]{64}$/.test(String(probe.tool_scan_sha256 || ""))) {
             throw new Error("production probe did not emit a valid tool scan fingerprint");
           }
+          if (process.env.ZSSH_OPENAI_TOOL_SCAN_SHA256 !== probe.tool_scan_sha256) {
+            throw new Error("OpenAI portal Scan Tools attestation is stale: configured fingerprint does not match the exact live production tool contract");
+          }
           if (probe.oauth_authorization_server_metadata_validated !== true || probe.oauth_pkce_s256_validated !== true) {
             throw new Error("production probe did not prove OAuth authorization-server metadata + PKCE S256");
           }
@@ -207,6 +211,7 @@ jobs:
             chatgpt_mobile_reviewed: true,
             openai_domain_verified: true,
             openai_tool_scan_verified: true,
+            openai_tool_scan_sha256: process.env.ZSSH_OPENAI_TOOL_SCAN_SHA256,
             tool_scan_sha256: probe.tool_scan_sha256,
             plugin_version: bundle.version,
             submission_bundle_sha256: bundle.zip_sha256,
