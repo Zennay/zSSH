@@ -148,6 +148,34 @@ test("rejects mismatched blocking action metadata", () => {
   );
 });
 
+test("renders invalid Cloudflare account configuration as a provider-configuration gate", () => {
+  const result = renderM5BlockingIssue({
+    readiness: receipt({
+      blocking_action: {
+        lane: "dns_publication",
+        gate_kind: "provider_configuration",
+        requires_external_input: true,
+        action: "Repair the invalid optional Cloudflare configuration before DNS execution.",
+        missing: [],
+        invalid: [
+          {
+            name: "CLOUDFLARE_ACCOUNT_ID",
+            reason: "must be a 32-character hexadecimal Cloudflare account ID",
+          },
+        ],
+      },
+    }),
+    canonicalSha: sha,
+  });
+
+  assert.match(result.body, /Gate kind: `provider_configuration`/);
+  assert.match(
+    result.body,
+    /\`CLOUDFLARE_ACCOUNT_ID\`: must be a 32-character hexadecimal Cloudflare account ID/,
+  );
+  assert.doesNotMatch(result.body, /Run the guarded zSSH production DNS publisher/);
+});
+
 test("sync uses the token only as an Authorization header", async () => {
   const token = "github-token-secret-value";
   let request;
