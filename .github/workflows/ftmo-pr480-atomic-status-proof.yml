@@ -92,9 +92,11 @@ jobs:
               "proof":[
                   "exact-sha-checkout",
                   "autonomous-runtime-compile",
-                  "random-exclusive-status-temp",
+                  "descriptor-bound-exclusive-status-temp",
+                  "secure-missing-parent-creation",
                   "stale-temp-symlink-regression",
-                  "symlink-parent-rejection",
+                  "no-follow-status-parent-ancestry",
+                  "status-parent-permission-seal",
                   "file-and-parent-fsync",
                   "permanent-self-hosted-status-integrity-gate",
                   "deploy-lockstep-regressions",
