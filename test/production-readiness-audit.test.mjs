@@ -394,27 +394,24 @@ test("never serializes protected values", () => {
   assert.equal(result.blocking_action, null);
 });
 
-test("protected readiness workflow runs automatically only for merged PRs and keeps manual dispatch", () => {
+test("protected readiness workflow follows canonical main pushes and keeps manual dispatch", () => {
   assert.match(
     readinessWorkflow,
-    /on:\n  workflow_dispatch:\n  pull_request:\n    types:\n      - closed\n    branches:\n      - main/,
+    /on:\n  workflow_dispatch:\n  push:\n    branches:\n      - main/,
   );
   assert.match(
     readinessWorkflow,
-    /provenance:\n    name: Canonical main provenance\n    if: github\.event_name == 'workflow_dispatch' \|\| github\.event\.pull_request\.merged == true/,
+    /provenance:\n    name: Canonical main provenance\n    if: github\.event_name == 'workflow_dispatch' \|\| github\.event_name == 'push'/,
   );
-  assert.match(
-    readinessWorkflow,
-    /Bind merged PR event to canonical main SHA[\s\S]*if: github\.event_name == 'pull_request'[\s\S]*MERGED_PR_SHA: \$\{\{ github\.event\.pull_request\.merge_commit_sha \}\}[\s\S]*test "\$GITHUB_SHA" = "\$MERGED_PR_SHA"/,
-  );
+  assert.doesNotMatch(readinessWorkflow, /Bind merged PR event to canonical main SHA/);
   assert.match(
     readinessWorkflow,
     /Require canonical main ref for manual readiness audit[\s\S]*if: github\.event_name == 'workflow_dispatch'[\s\S]*test "\$GITHUB_REF" = "refs\/heads\/main"/,
   );
   assert.doesNotMatch(
     readinessWorkflow,
-    /^  push:/m,
-    "protected readiness must not auto-run on direct main pushes while branch protection is absent",
+    /^  pull_request:/m,
+    "readiness convergence must be driven by canonical main state, not closed-PR event timing",
   );
 });
 
