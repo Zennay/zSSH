@@ -41,6 +41,7 @@ test("reviewer target bootstrap is idempotent and never prints private key mater
     assert.doesNotMatch(JSON.stringify(first.report), /BEGIN PRIVATE KEY/);
     assert.equal(first.report.review_file, path.join(first.reviewRoot, "sample.txt"));
     assert.equal(first.report.review_write_file, path.join(first.reviewRoot, "output.txt"));
+    assert.equal(first.report.release_guard_enforced, false);
     assert.equal(first.report.release_compatible, false);
     assert.equal(first.report.release_variables, null);
     assert.match(first.report.release_blocker, /do not copy dev\/test paths into openai-production/);
@@ -80,6 +81,19 @@ test("reviewer target bootstrap is idempotent and never prints private key mater
   }
 });
 
+test("reviewer target bootstrap release guard rejects non-canonical dev fixture", async () => {
+  const home = await mkdtemp(path.join(os.tmpdir(), "zssh-review-bootstrap-release-guard-"));
+
+  try {
+    await assert.rejects(
+      () => runBootstrap(home, { ZSSH_REVIEW_REQUIRE_RELEASE_COMPATIBLE: "1" }),
+      /reviewer fixture is not at the canonical submitted paths/,
+    );
+  } finally {
+    await rm(home, { recursive: true, force: true });
+  }
+});
+
 test("reviewer target bootstrap fails closed on partial identity state", async () => {
   const home = await mkdtemp(path.join(os.tmpdir(), "zssh-review-bootstrap-partial-"));
   const config = path.join(home, ".config", "zssh");
@@ -108,7 +122,11 @@ test("README does not present the default reviewer fixture as production-compati
   assert.match(readme, /default .*development\/test fixture/i);
   assert.match(readme, /release_compatible=false/);
   assert.match(readme, /release_variables=null/);
-  assert.match(readme, /ZSSH_REVIEW_ROOT=\/srv\/zssh-review npm run review:target/);
+  assert.match(
+    readme,
+    /ZSSH_REVIEW_ROOT=\/srv\/zssh-review ZSSH_REVIEW_REQUIRE_RELEASE_COMPATIBLE=1 npm run review:target/,
+  );
+  assert.match(readme, /fails closed instead of returning a development-only fixture/);
   assert.match(readme, /Only the exact submitted files `\/srv\/zssh-review\/sample\.txt` and `\/srv\/zssh-review\/output\.txt` produce `release_compatible=true`/);
   assert.doesNotMatch(
     readme,
