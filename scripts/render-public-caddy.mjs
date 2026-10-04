@@ -8,7 +8,7 @@ function fail(message) {
 }
 
 function normalizeHostname(hostname) {
-  return String(hostname || "").replace(/^\[|\]$/g, "").toLowerCase();
+  return String(hostname || "").trim().replace(/^\[|\]$/g, "").toLowerCase().replace(/\.$/, "");
 }
 
 export function validatePublicBaseUrl(value) {
