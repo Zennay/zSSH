@@ -32,6 +32,14 @@ test("ingress preflight automatically follows successful canonical production DN
   );
   assert.match(
     workflow,
+    /Require successful exact-current-main production DNS source[\s\S]*GITHUB_SHA="\$\{\{ github\.event\.workflow_run\.head_sha \}\}" node scripts\/check-main-provenance\.mjs/,
+  );
+  assert.match(
+    workflow,
+    /Require successful exact-current-main production DNS source[\s\S]*GITHUB_SHA="\$\{\{ github\.event\.workflow_run\.head_sha \}\}" node scripts\/check-main-protection\.mjs --public-status --require-protected --require-current-sha/,
+  );
+  assert.match(
+    workflow,
     /ZSSH_PLUGIN_MCP_URL: https:\/\/zssh\.cheapgpt\.shop\/mcp/,
   );
   assert.doesNotMatch(workflow, /inputs\.mcp_url/);
