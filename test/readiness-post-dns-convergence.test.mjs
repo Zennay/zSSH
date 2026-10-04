@@ -15,7 +15,7 @@ test("successful production DNS completion automatically reclassifies the M5 gat
   assert.match(dnsWorkflow, /^name: zSSH production DNS publish$/m);
   assert.match(
     readinessWorkflow,
-    /workflow_run:\n    workflows:\n      - zSSH production DNS publish\n      - zSSH public ingress external preflight\n      - Auth0 production readiness\n    types:\n      - completed/,
+    /schedule:\n    - cron: "17 \\* \\* \\* \\*"\n  workflow_run:\n    workflows:\n      - zSSH production DNS publish\n      - zSSH public ingress external preflight\n      - Auth0 production readiness\n    types:\n      - completed/,
   );
   assert.match(
     readinessWorkflow,
