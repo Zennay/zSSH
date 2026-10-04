@@ -4,6 +4,7 @@ import path from "node:path";
 import process from "node:process";
 import { pathToFileURL } from "node:url";
 import { isNonPublicHostname, validatePublicMcpUrl } from "../release-contract.mjs";
+import { resolveAuth0ManagementBaseUrl } from "./check-auth0-production.mjs";
 import { assertDomainVerificationBinding } from "./check-domain-verification-binding.mjs";
 import {
   assertHostSurfaceReviewBinding,
@@ -39,6 +40,16 @@ export function publicReleaseConfigPresence(env = process.env) {
   const configured = Object.fromEntries(
     REQUIRED_RELEASE_CONFIG.map(name => [name, String(env[name] || "").trim().length > 0])
   );
+
+  if (!configured.AUTH0_MANAGEMENT_BASE_URL && configured.ZSSH_OAUTH_ISSUER) {
+    try {
+      resolveAuth0ManagementBaseUrl(env.ZSSH_OAUTH_ISSUER, "");
+      configured.AUTH0_MANAGEMENT_BASE_URL = true;
+    } catch {
+      // Custom Auth0 domains still require an explicit canonical management origin.
+    }
+  }
+
   const missing = REQUIRED_RELEASE_CONFIG.filter(name => !configured[name]);
   return {
     ok: missing.length === 0,
@@ -90,7 +101,10 @@ export function validatePublicReleaseConfig(env = process.env) {
   );
   const demoRecordingUrl = requirePublicHttpsUrl(env, "ZSSH_PLUGIN_DEMO_RECORDING_URL");
   const oauthIssuerUrl = requirePublicHttpsUrl(env, "ZSSH_OAUTH_ISSUER");
-  const auth0ManagementBaseUrl = requirePublicHttpsUrl(env, "AUTH0_MANAGEMENT_BASE_URL");
+  const auth0ManagementBaseUrl = resolveAuth0ManagementBaseUrl(
+    env.ZSSH_OAUTH_ISSUER,
+    env.AUTH0_MANAGEMENT_BASE_URL,
+  );
   const auth0ManagementToken = requireValue(env, "AUTH0_MANAGEMENT_API_TOKEN", { minLength: 20 });
   const accessToken = requireValue(env, "ZSSH_REVIEW_ACCESS_TOKEN", { minLength: 20 });
   const reviewLoginUrl = requirePublicHttpsUrl(env, "ZSSH_REVIEW_LOGIN_URL");
@@ -220,6 +234,26 @@ export function runSelfTest() {
 
   const presence = publicReleaseConfigPresence(good);
   if (!presence.ok || presence.missing.length !== 0) fail("self-test valid configuration presence failed");
+
+  const derivedAuth0 = { ...good, AUTH0_MANAGEMENT_BASE_URL: "" };
+  const derivedResult = validatePublicReleaseConfig(derivedAuth0);
+  if (derivedResult.auth0_management_origin !== "https://tenant.eu.auth0.com") {
+    fail("self-test Auth0 management origin derivation failed");
+  }
+  const derivedPresence = publicReleaseConfigPresence(derivedAuth0);
+  if (!derivedPresence.ok || derivedPresence.configured.AUTH0_MANAGEMENT_BASE_URL !== true) {
+    fail("self-test derived Auth0 management presence failed");
+  }
+
+  const customAuth0Missing = publicReleaseConfigPresence({
+    ...good,
+    ZSSH_OAUTH_ISSUER: "https://login.example.com/",
+    AUTH0_MANAGEMENT_BASE_URL: "",
+  });
+  if (!customAuth0Missing.missing.includes("AUTH0_MANAGEMENT_BASE_URL")) {
+    fail("self-test custom Auth0 domain must require explicit management origin");
+  }
+
   const missingPresence = publicReleaseConfigPresence({ ...good, OPENAI_APPS_CHALLENGE_TOKEN: "" });
   if (missingPresence.ok || !missingPresence.missing.includes("OPENAI_APPS_CHALLENGE_TOKEN")) {
     fail("self-test missing configuration presence failed");
@@ -232,7 +266,19 @@ export function runSelfTest() {
   assertThrows(() => validatePublicReleaseConfig({ ...good, ZSSH_PLUGIN_DEMO_RECORDING_URL: "http://review.zssh.dev/demo" }), /HTTPS URL/);
   assertThrows(() => validatePublicReleaseConfig({ ...good, ZSSH_PLUGIN_DEMO_RECORDING_URL: "https://127.0.0.1/demo" }), /public DNS hostname/);
   assertThrows(() => validatePublicReleaseConfig({ ...good, ZSSH_OAUTH_ISSUER: "http://tenant.eu.auth0.com" }), /HTTPS URL/);
-  assertThrows(() => validatePublicReleaseConfig({ ...good, AUTH0_MANAGEMENT_BASE_URL: "https://127.0.0.1" }), /public DNS hostname/);
+  assertThrows(() => validatePublicReleaseConfig({ ...good, AUTH0_MANAGEMENT_BASE_URL: "https://127.0.0.1" }), /public hostname/);
+  assertThrows(
+    () => validatePublicReleaseConfig({ ...good, AUTH0_MANAGEMENT_BASE_URL: "https://other.eu.auth0.com" }),
+    /must match the canonical Auth0 issuer origin/,
+  );
+  assertThrows(
+    () => validatePublicReleaseConfig({
+      ...good,
+      ZSSH_OAUTH_ISSUER: "https://login.example.com/",
+      AUTH0_MANAGEMENT_BASE_URL: "",
+    }),
+    /required when ZSSH_OAUTH_ISSUER uses a custom Auth0 domain/,
+  );
   assertThrows(() => validatePublicReleaseConfig({ ...good, AUTH0_MANAGEMENT_API_TOKEN: "short" }), /at least 20/);
   assertThrows(() => validatePublicReleaseConfig({ ...good, ZSSH_REVIEW_WRITE_FILE: good.ZSSH_REVIEW_FILE }), /different files/);
   assertThrows(() => validatePublicReleaseConfig({ ...good, ZSSH_REVIEW_ACCESS_TOKEN: "short" }), /at least 20/);

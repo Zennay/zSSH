@@ -28,8 +28,14 @@ zSSH will fail closed unless the production Auth0 tenant proves all of the follo
 8. Exactly one default **user-delegated** third-party client grant exists for that API and grants exactly those two scopes; `allow_all_scopes` is forbidden.
 9. Public authorization-server metadata exposes DCR, authorization code, PKCE S256 and a public JWKS URI.
 
+## Management API origin boundary
+
+For a canonical Auth0 tenant issuer such as `https://tenant.eu.auth0.com/`, zSSH derives the Management API origin from the issuer origin. This removes a redundant non-secret production input while keeping the bearer token bound to the same canonical Auth0 tenant host.
+
+For a custom Auth0 login domain, derivation is intentionally disabled. `AUTH0_MANAGEMENT_BASE_URL` must then be supplied explicitly and must use a canonical `*.auth0.com` tenant hostname. This prevents the protected Management API token from being sent to an arbitrary custom-domain origin.
+
 ## Evidence and secret boundary
 
-`scripts/check-auth0-production.mjs` reads the Auth0 Management API with a protected token and emits only non-secret configuration evidence. It never prints or persists the management token, reviewer password, OAuth access token, or user data.
+`scripts/check-auth0-production.mjs` reads the Auth0 Management API with a protected token and emits only non-secret configuration evidence, including whether the management origin was derived. It never prints or persists the management token, reviewer password, OAuth access token, or user data.
 
 The protected `openai-production` release workflow must run this check before the final submission probe. A green bearer-token probe alone is no longer sufficient to prove provider configuration.

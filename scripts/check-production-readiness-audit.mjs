@@ -11,6 +11,7 @@ import {
   publicReleaseConfigPresence,
   validatePublicReleaseConfig,
 } from "./check-public-release-config.mjs";
+import { resolveAuth0ManagementBaseUrl } from "./check-auth0-production.mjs";
 import { validateCloudflareZoneId } from "./publish-cloudflare-dns.mjs";
 
 const PROVIDER_LANES = {
@@ -128,6 +129,18 @@ function validateDnsLane(env) {
   }
 }
 
+function auth0ManagementBaseConfigured(env) {
+  if (configured(env, "AUTH0_MANAGEMENT_BASE_URL")) return true;
+  if (!configured(env, "ZSSH_OAUTH_ISSUER")) return false;
+
+  try {
+    resolveAuth0ManagementBaseUrl(value(env, "ZSSH_OAUTH_ISSUER"), "");
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function validateAuth0Lane(env) {
   const issues = [];
 
@@ -146,11 +159,27 @@ function validateAuth0Lane(env) {
     }
   }
 
+  const issuerIssue = validateHttpsUrl(env, "ZSSH_OAUTH_ISSUER", { requirePublicHostname: true });
   issues.push(
-    validateHttpsUrl(env, "ZSSH_OAUTH_ISSUER", { requirePublicHostname: true }),
-    validateHttpsUrl(env, "AUTH0_MANAGEMENT_BASE_URL", { requirePublicHostname: true }),
+    issuerIssue,
     validateMinLength(env, "AUTH0_MANAGEMENT_API_TOKEN", 20),
   );
+
+  if (!issuerIssue && configured(env, "AUTH0_MANAGEMENT_BASE_URL")) {
+    try {
+      resolveAuth0ManagementBaseUrl(
+        value(env, "ZSSH_OAUTH_ISSUER"),
+        value(env, "AUTH0_MANAGEMENT_BASE_URL"),
+      );
+    } catch (error) {
+      issues.push(
+        validationIssue(
+          "AUTH0_MANAGEMENT_BASE_URL",
+          String(error?.message || "must be a canonical Auth0 management origin"),
+        ),
+      );
+    }
+  }
 
   return compactIssues(issues);
 }
@@ -256,7 +285,12 @@ const LANE_VALIDATORS = {
 };
 
 function laneStatus(env, laneName, names) {
-  const present = Object.fromEntries(names.map(name => [name, configured(env, name)]));
+  const present = Object.fromEntries(names.map(name => [
+    name,
+    laneName === "auth0_preflight" && name === "AUTH0_MANAGEMENT_BASE_URL"
+      ? auth0ManagementBaseConfigured(env)
+      : configured(env, name),
+  ]));
   const missing = names.filter(name => !present[name]);
   const invalid = LANE_VALIDATORS[laneName]?.(env) || [];
 
@@ -337,7 +371,7 @@ export function buildProductionReadinessAudit(env = process.env) {
       lane: "auth0_preflight",
       gate_kind: "provider_configuration",
       requires_external_input: true,
-      action: "Provision valid production Auth0 issuer/management inputs, then run Auth0 production readiness.",
+      action: "Provision the production Auth0 issuer and Management API token, then run Auth0 production readiness. For canonical *.auth0.com issuers the management origin is derived automatically; custom Auth0 domains still require an explicit canonical *.auth0.com AUTH0_MANAGEMENT_BASE_URL.",
       missing: lanes.auth0_preflight.missing,
       invalid: lanes.auth0_preflight.invalid,
     });
