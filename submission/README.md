@@ -35,6 +35,16 @@ The review cases assume the dedicated review target has `/srv/zssh-review` confi
 
 The final directory submission also needs a verified developer identity, successful domain verification, a current production tool scan, and reviewer-accessible OAuth credentials.
 
+## Reviewer account release gate
+
+OpenAI review requires a dedicated demo account that works immediately for the reviewer. Before setting `ZSSH_REVIEW_CREDENTIALS_VERIFIED=1`, verify that the reviewer can use `ZSSH_REVIEW_LOGIN_URL` from the public internet without MFA, email/SMS confirmation, magic links, private-network access, or any operator approval step.
+
+The username/password or other reviewer credentials must **not** be committed, placed in the plugin ZIP, printed by CI, or stored in release artifacts. Enter those credentials only in the secure Review details form. The GitHub release environment stores only:
+
+- `ZSSH_REVIEW_LOGIN_URL` as a non-secret variable;
+- `ZSSH_REVIEW_CREDENTIALS_VERIFIED=1` as a non-secret operator attestation after the login has actually been tested;
+- `ZSSH_REVIEW_ACCESS_TOKEN` separately as a secret used only by the automated end-to-end MCP probe.
+
 ## Production readiness probe
 
 After the public OAuth endpoint, reviewer account, pairing, review fixture, and OpenAI domain challenge are configured, run:
@@ -42,6 +52,8 @@ After the public OAuth endpoint, reviewer account, pairing, review fixture, and 
 ```bash
 ZSSH_PLUGIN_MCP_URL=https://mcp.example.com/mcp \
 ZSSH_REVIEW_ACCESS_TOKEN='<short-lived reviewer access token>' \
+ZSSH_REVIEW_LOGIN_URL=https://auth.example.com/login \
+ZSSH_REVIEW_CREDENTIALS_VERIFIED=1 \
 ZSSH_REVIEW_FILE=/srv/zssh-review/sample.txt \
 ZSSH_REVIEW_WRITE_FILE=/srv/zssh-review/output.txt \
 OPENAI_APPS_CHALLENGE_TOKEN='<current dashboard challenge token>' \
