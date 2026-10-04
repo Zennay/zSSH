@@ -67,6 +67,9 @@ test("release-critical pull_request and push path filters stay in parity", () =>
     "test/public-gateway-installer.test.mjs",
     "deploy/install-public-caddy.sh",
     "test/public-caddy-installer.test.mjs",
+    ".github/workflows/public-dns-publish.yml",
+    "scripts/publish-cloudflare-dns.mjs",
+    "test/cloudflare-dns-publish.test.mjs",
   ]) {
     assert.ok(pullRequestPaths.includes(runtimePath), `pull_request trigger must include release-critical runtime path ${runtimePath}`);
     assert.ok(pushPaths.includes(runtimePath), `push trigger must include release-critical runtime path ${runtimePath}`);

@@ -23,6 +23,7 @@
     "mcp:client-token-canary": "node client-token-canary.mjs",
     "agent:init": "node scripts/create-agent-identity.mjs",
     "gateway:public:caddy:install": "bash deploy/install-public-caddy.sh",
+    "gateway:public:dns": "node scripts/publish-cloudflare-dns.mjs",
     "oauth:auth0:preflight": "node scripts/check-auth0-production.mjs"
   },
   "dependencies": {
