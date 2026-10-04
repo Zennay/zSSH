@@ -13,6 +13,7 @@ import {
 } from "./check-public-release-config.mjs";
 import { resolveAuth0ManagementBaseUrl } from "./check-auth0-production.mjs";
 import { validateCloudflareZoneId } from "./publish-cloudflare-dns.mjs";
+import { cloudflareTokenVerifyUrl } from "./verify-cloudflare-token.mjs";
 import { reviewerFixturePathIssues } from "./reviewer-fixture-contract.mjs";
 
 const PROVIDER_LANES = {
@@ -22,6 +23,7 @@ const PROVIDER_LANES = {
   ],
   dns_publication: [
     "CLOUDFLARE_API_TOKEN",
+    "CLOUDFLARE_ACCOUNT_ID",
   ],
   auth0_preflight: [
     "ZSSH_PLUGIN_MCP_URL",
@@ -136,19 +138,35 @@ function compactIssues(issues) {
 }
 
 function validateDnsLane(env) {
-  if (!configured(env, "CLOUDFLARE_ZONE_ID")) return [];
+  const issues = [];
 
-  try {
-    validateCloudflareZoneId(value(env, "CLOUDFLARE_ZONE_ID"));
-    return [];
-  } catch {
-    return [
-      validationIssue(
-        "CLOUDFLARE_ZONE_ID",
-        "must be a 32-character hexadecimal Cloudflare zone ID",
-      ),
-    ];
+  if (configured(env, "CLOUDFLARE_ZONE_ID")) {
+    try {
+      validateCloudflareZoneId(value(env, "CLOUDFLARE_ZONE_ID"));
+    } catch {
+      issues.push(
+        validationIssue(
+          "CLOUDFLARE_ZONE_ID",
+          "must be a 32-character hexadecimal Cloudflare zone ID",
+        ),
+      );
+    }
   }
+
+  if (configured(env, "CLOUDFLARE_ACCOUNT_ID")) {
+    try {
+      cloudflareTokenVerifyUrl({ accountId: value(env, "CLOUDFLARE_ACCOUNT_ID") });
+    } catch {
+      issues.push(
+        validationIssue(
+          "CLOUDFLARE_ACCOUNT_ID",
+          "must be a 32-character hexadecimal Cloudflare account ID",
+        ),
+      );
+    }
+  }
+
+  return issues;
 }
 
 function auth0ManagementBaseConfigured(env) {
@@ -427,7 +445,7 @@ export function buildProductionReadinessAudit(env = process.env) {
           : "provider_credentials",
       requires_external_input: configInvalid || !tokenPresent,
       action: configInvalid
-        ? "Repair or remove the invalid optional Cloudflare zone override, then rerun protected readiness."
+        ? "Repair or remove the invalid optional Cloudflare configuration reported below (CLOUDFLARE_ACCOUNT_ID and/or CLOUDFLARE_ZONE_ID), then rerun protected readiness before DNS execution."
         : tokenPresent
           ? `Run the guarded zSSH production DNS publisher; live public-origin evidence is still at stage ${value(env, "ZSSH_PUBLIC_ORIGIN_STAGE") || "unknown"}.`
           : "Provision a protected Cloudflare API token scoped only to cheapgpt.shop with Zone Read + DNS Write. For durable CI/CD prefer an account-owned token and set CLOUDFLARE_ACCOUNT_ID; user-owned tokens from My Profile > API Tokens remain supported when CLOUDFLARE_ACCOUNT_ID is unset. The preflight uses /accounts/{account_id}/tokens/verify only for the explicit account path and /user/tokens/verify otherwise. Then run zSSH production DNS publish. CLOUDFLARE_ZONE_ID remains an optional legacy override for DNS-write-only tokens.",
