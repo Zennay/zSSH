@@ -105,6 +105,20 @@ test("OAuth authorization-server metadata must prove authorization code and PKCE
     () => validateAuthorizationServerMetadata({ ...good, token_endpoint_auth_methods_supported: [] }, good.issuer),
     /token_endpoint_auth_methods_supported/
   );
+  assert.throws(
+    () => validateAuthorizationServerMetadata(
+      { ...good, token_endpoint_auth_methods_supported: ["tls_client_auth", "self_signed_tls_client_auth"] },
+      good.issuer
+    ),
+    /ChatGPT-compatible token endpoint authentication method/
+  );
+  for (const method of ["none", "private_key_jwt", "client_secret_post", "client_secret_basic"]) {
+    const methodOnly = validateAuthorizationServerMetadata(
+      { ...good, token_endpoint_auth_methods_supported: [method] },
+      good.issuer
+    );
+    assert.deepEqual(methodOnly.token_endpoint_auth_methods, [method]);
+  }
   const noRegistration = { ...good };
   delete noRegistration.registration_endpoint;
   delete noRegistration.client_id_metadata_document_supported;

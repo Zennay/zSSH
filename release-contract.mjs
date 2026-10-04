@@ -149,6 +149,18 @@ export function validateAuthorizationServerMetadata(metadata, expectedIssuer, {
   if (!Array.isArray(metadata.token_endpoint_auth_methods_supported) || metadata.token_endpoint_auth_methods_supported.length < 1) {
     fail("OAuth authorization server metadata must publish token_endpoint_auth_methods_supported");
   }
+  const tokenEndpointAuthMethods = [...new Set(metadata.token_endpoint_auth_methods_supported.map(String))];
+  const chatgptCompatibleTokenAuthMethods = new Set([
+    "none",
+    "private_key_jwt",
+    "client_secret_post",
+    "client_secret_basic",
+  ]);
+  if (!tokenEndpointAuthMethods.some(method => chatgptCompatibleTokenAuthMethods.has(method))) {
+    fail(
+      "OAuth authorization server metadata must advertise at least one ChatGPT-compatible token endpoint authentication method"
+    );
+  }
 
   const registrationEndpoint = metadata.registration_endpoint
     ? validateMetadataEndpoint(metadata.registration_endpoint, "registration_endpoint", urlOptions)
@@ -171,7 +183,7 @@ export function validateAuthorizationServerMetadata(metadata, expectedIssuer, {
     authorization_response_iss_parameter_supported: metadata.authorization_response_iss_parameter_supported === true,
     pkce_s256: true,
     authorization_code: true,
-    token_endpoint_auth_methods: [...new Set(metadata.token_endpoint_auth_methods_supported.map(String))],
+    token_endpoint_auth_methods: tokenEndpointAuthMethods,
   };
 }
 
