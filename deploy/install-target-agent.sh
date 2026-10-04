@@ -50,10 +50,12 @@ validate_plain_env_value() {
   local name="$1"
   local value="$2"
   [[ -n "$value" ]] || { echo "$name must not be empty" >&2; exit 2; }
-  [[ "$value" != *[[:space:]#\\"\']* ]] || {
-    echo "$name must not contain whitespace, quotes, backslashes, or #" >&2
-    exit 2
-  }
+  case "$value" in
+    *[[:space:]]*|*'#'*|*'\\'*|*'"'*|*"'"*)
+      echo "$name must not contain whitespace, quotes, backslashes, or #" >&2
+      exit 2
+      ;;
+  esac
 }
 
 if [[ ! -f "$ENV_FILE" ]]; then
