@@ -10,7 +10,7 @@ This checklist tracks the production path from the current review-ready MCP prof
 - [ ] `main` rejects direct writes for normal user/automation paths, requires pull-request-based changes plus the zSSH CI/repository-hygiene check, and the canonical controlled direct-push canary is rejected; protected release workflows derive the governance attestation live from that immutable GitHub evidence
 - [ ] Stable public HTTPS MCP endpoint configured
 - [ ] Published `/privacy` page discloses data categories, purposes, recipients, retention, and user controls for the actual production data flow
-- [ ] Production OAuth authorization server publishes discovery metadata with authorization-code flow, PKCE S256, and token endpoint auth methods
+- [ ] Production OAuth authorization server publishes discovery metadata with authorization-code flow, PKCE S256, and at least one ChatGPT-compatible token endpoint auth method (`none`, `private_key_jwt`, `client_secret_post`, or `client_secret_basic`); mTLS-only metadata is not sufficient
 - [ ] For a canonical `*.auth0.com` issuer, the Auth0 Management API origin is derived from that exact issuer origin; custom Auth0 login domains require explicit `AUTH0_MANAGEMENT_BASE_URL` on a canonical `*.auth0.com` tenant host
 - [ ] OAuth discovery advertises a ChatGPT-compatible client identification path: CIMD (`client_id_metadata_document_supported: true`) or DCR (`registration_endpoint`)
 - [ ] Resource-server metadata points to the production MCP resource
@@ -55,7 +55,7 @@ Verify:
 - reviewer file fixture remains bounded to the configured public root;
 - tokens and credentials are never printed;
 - release checks fail closed on redirects or mismatched OAuth resource-metadata challenge URLs;
-- the production probe resolves the advertised authorization server and validates issuer binding, authorization/token endpoints, authorization-code support, PKCE S256, and declared token endpoint auth methods.
+- the production probe resolves the advertised authorization server and validates issuer binding, authorization/token endpoints, authorization-code support, PKCE S256, and at least one ChatGPT-compatible token endpoint auth method (`none`, `private_key_jwt`, `client_secret_post`, or `client_secret_basic`); mTLS-only metadata must fail closed.
 
 ## Reproducible submission bundle
 
