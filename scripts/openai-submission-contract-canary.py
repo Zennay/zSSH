@@ -34,18 +34,18 @@ def expect_failure(fn, contains: str) -> None:
 
 
 plugin = load_json(ROOT / "submission" / "plugin.template.json")
-plugin["extensions"]["com.openai"]["review"]["demo_recording_url"] = "https://review.example/zssh-demo"
-listing = builder.listing_urls("https://mcp.review.example/mcp")
+plugin["extensions"]["com.openai"]["review"]["demo_recording_url"] = "https://zssh.cheapgpt.shop/review/zssh-demo"
+listing = builder.listing_urls("https://zssh.cheapgpt.shop/mcp")
 plugin["extensions"]["com.openai"]["interface"].update(listing)
 builder.validate_plugin(plugin, listing)
 
 mcp = load_json(ROOT / "submission" / "mcp.template.json")
-mcp["mcpServers"]["zssh"]["url"] = "https://mcp.review.example/mcp"
-builder.validate_mcp_config(mcp, "https://mcp.review.example/mcp")
+mcp["mcpServers"]["zssh"]["url"] = "https://zssh.cheapgpt.shop/mcp"
+builder.validate_mcp_config(mcp, "https://zssh.cheapgpt.shop/mcp")
 
 expect_failure(
     lambda: builder.https_url(
-        "https://mcp.review.example/mcp?tenant=stale",
+        "https://zssh.cheapgpt.shop/mcp?tenant=stale",
         "MCP URL",
         allow_query=False,
         allow_fragment=False,
@@ -54,17 +54,37 @@ expect_failure(
 )
 expect_failure(
     lambda: builder.https_url(
-        "https://mcp.review.example/mcp#fragment",
+        "https://zssh.cheapgpt.shop/mcp#fragment",
         "MCP URL",
         allow_query=False,
         allow_fragment=False,
     ),
     "must not contain a URL fragment",
 )
+expect_failure(
+    lambda: builder.https_url(
+        "https://mcp.review.example/mcp",
+        "MCP URL",
+        allow_query=False,
+        allow_fragment=False,
+        require_public_hostname=True,
+    ),
+    "must use a public DNS hostname",
+)
+expect_failure(
+    lambda: builder.https_url(
+        "https://127.0.0.1/mcp",
+        "MCP URL",
+        allow_query=False,
+        allow_fragment=False,
+        require_public_hostname=True,
+    ),
+    "must use a public DNS hostname",
+)
 
 fragmented_demo = copy.deepcopy(plugin)
 fragmented_demo["extensions"]["com.openai"]["review"]["demo_recording_url"] = (
-    "https://review.example/zssh-demo#chapter"
+    "https://zssh.cheapgpt.shop/review/zssh-demo#chapter"
 )
 expect_failure(
     lambda: builder.validate_plugin(fragmented_demo, listing),
@@ -98,7 +118,7 @@ expect_failure(
 )
 
 cross_origin_listing = copy.deepcopy(plugin)
-cross_origin_listing["extensions"]["com.openai"]["interface"]["supportURL"] = "https://support.example.net/zssh"
+cross_origin_listing["extensions"]["com.openai"]["interface"]["supportURL"] = "https://support.cheapgpt.shop/zssh"
 expect_failure(
     lambda: builder.validate_plugin(cross_origin_listing, listing),
     "canonical same-origin public review URL",
@@ -107,10 +127,10 @@ expect_failure(
 extra_server = copy.deepcopy(mcp)
 extra_server["mcpServers"]["other"] = {
     "type": "streamable-http",
-    "url": "https://other.example/mcp",
+    "url": "https://other.cheapgpt.shop/mcp",
 }
 expect_failure(
-    lambda: builder.validate_mcp_config(extra_server, "https://mcp.review.example/mcp"),
+    lambda: builder.validate_mcp_config(extra_server, "https://zssh.cheapgpt.shop/mcp"),
     "exactly one MCP server named zssh",
 )
 
