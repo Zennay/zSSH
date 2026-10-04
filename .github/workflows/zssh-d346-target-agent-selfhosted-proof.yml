@@ -32,7 +32,7 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
-          npm ci --ignore-scripts --no-audit --no-fund
+          npm install --ignore-scripts --no-audit --no-fund
           npm test
           node --test test/agent-pairing-control.test.mjs test/agent-client.test.mjs test/agent-identity.test.mjs test/deploy.test.mjs
           bash -n deploy/install-target-agent.sh
