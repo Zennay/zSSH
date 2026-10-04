@@ -54,7 +54,7 @@ The workflow runs in the protected `openai-production` environment. Its producti
 
 ## Workflow dependency integrity
 
-Because this lane can mutate production DNS, its reusable GitHub Actions are pinned to immutable commit SHAs rather than mutable major-version tags. The current pins correspond to the reviewed v4 releases of `actions/checkout`, `actions/setup-node`, and `actions/upload-artifact`; a regression test rejects a return to `@vN` refs in the production DNS workflow. Future action upgrades therefore require an explicit zSSH code review and a fresh protected-main validation cycle.
+Because this lane can mutate production DNS, its reusable GitHub Actions are pinned to immutable commit SHAs rather than mutable major-version tags. The current reviewed pins are the Node 24-compatible v7 releases used by the production workflow: `actions/checkout` v7.0.1 (`3d3c42e5aac5ba805825da76410c181273ba90b1`), `actions/setup-node` v7.0.0 (`820762786026740c76f36085b0efc47a31fe5020`), and `actions/upload-artifact` v7.0.1 (`043fb46d1a93c77aae656e7c1c64a875d1fc6a0a`). A regression test rejects a return to mutable `@vN` refs, and a runbook-alignment assertion keeps this operator documentation synchronized with the reviewed action generation. Future action upgrades therefore require an explicit zSSH code review and a fresh protected-main validation cycle.
 
 ## Required protected configuration
 
