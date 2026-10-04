@@ -68,3 +68,24 @@ The token is an external credential and is intentionally not stored in the repos
 - The deterministic non-secret zSSH release variables are independent of this provider gate. zCloud run `37182568488` successfully seeded and read back `ZSSH_PLUGIN_MCP_URL`, `ZSSH_REVIEW_FILE`, and `ZSSH_REVIEW_WRITE_FILE` in the zSSH `openai-production` environment.
 - A separate zCloud self-hosted capability probe now checks whether `vps-bb300bba` already has a reusable Cloudflare API or Wrangler session. That probe is read-only: it performs token verification / zone lookup GETs and `wrangler whoami`, emits only boolean capability evidence, and never publishes DNS or copies a provider credential into zSSH.
 - The provider gate is now reduced to one preferred external secret: a zone-scoped Cloudflare token with `Zone Read` + DNS write. A manually supplied zone ID is no longer required for the recommended path. DNS publication still remains an external credential gate until that token is provided.
+
+
+## Operator cutover checklist — canonical manual path
+
+Use this sequence once the external Cloudflare credential has been created. It is intentionally secret-safe: no token value belongs in commits, issues, artifacts, logs, or Notion.
+
+1. In Cloudflare, create a dedicated API token scoped only to the `cheapgpt.shop` zone with `Zone Read` and DNS write permission. Do not use the Global API Key.
+2. In the GitHub `openai-production` environment, store that value only as the protected secret `CLOUDFLARE_API_TOKEN`. Leave `CLOUDFLARE_ZONE_ID` unset on the preferred path; it exists only for the legacy DNS-write-only token mode.
+3. Dispatch **zSSH production DNS publish** from canonical `main` and enter the exact confirmation phrase `PUBLISH_ZSSH_PRODUCTION_DNS`.
+4. Treat the run as green only when all of these stages succeed in order:
+   - merged-PR provenance and current protected-main verification;
+   - non-mutating Cloudflare plan;
+   - exact DNS-only A-record publication;
+   - Cloudflare re-read returning the idempotent `noop` state;
+   - external DNS observation advancing beyond the `dns` stage.
+5. Retain the workflow artifact. It should contain the plan, mutation result, post-write verification, and public-origin observation JSON. These are non-secret evidence and must not contain the API token or zone ID.
+6. If the workflow fails before the publish step, correct the protected configuration and dispatch again; no DNS mutation should have occurred.
+7. If publication succeeds but the bounded external convergence check times out, rerun the same canonical workflow rather than making an ad-hoc DNS change. The reconciler is intentionally idempotent and will prove the already-correct Cloudflare state before checking public resolution again.
+8. After DNS is externally resolvable, continue the M5 sequence with isolated public-gateway/Caddy activation and the GitHub-hosted external ingress preflight. Do not skip directly to OAuth or portal evidence while the public MCP origin is still unproven.
+
+The managed GitHub issue `#159` remains the machine-updated source for the active M5 gate. When the protected readiness audit advances it away from `dns_publication`, this checklist has served its purpose and the next gate becomes authoritative.
