@@ -99,7 +99,9 @@ export async function resolveCloudflareZoneId({
     "Cloudflare zone lookup",
   );
   const zones = (Array.isArray(listed.result) ? listed.result : []).filter(
-    zone => normalizeDnsName(zone?.name) === checkedZoneName,
+    zone =>
+      normalizeDnsName(zone?.name) === checkedZoneName &&
+      String(zone?.status || "").toLowerCase() === "active",
   );
   if (zones.length !== 1) {
     fail(`Cloudflare zone lookup must return exactly one active ${checkedZoneName} zone`);
