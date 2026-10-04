@@ -290,21 +290,10 @@ export async function reconcileCloudflareDns({
     }
 
     if (!expectedStateSha256) {
-      if (!apply) {
-        return {
-          ok: true,
-          action: "would_update_requires_precondition",
-          hostname,
-          ipv4: checkedIpv4,
-          ttl: desired.ttl,
-          proxied: false,
-          ...preconditionEvidence,
-          zone_source: zone.source,
-        };
+      if (apply) {
+        fail("existing A record update requires ZSSH_DNS_EXPECTED_CURRENT_STATE_SHA256 from the reviewed dry-run plan");
       }
-      fail("existing A record update requires ZSSH_DNS_EXPECTED_CURRENT_STATE_SHA256 from the reviewed dry-run plan");
-    }
-    if (previousStateSha256 !== expectedStateSha256) {
+    } else if (previousStateSha256 !== expectedStateSha256) {
       fail("existing A record state changed since the reviewed DNS plan; refusing mutation");
     }
   }
@@ -321,6 +310,7 @@ export async function reconcileCloudflareDns({
         previous_ipv4: previousIpv4,
         previous_ttl: previousTtl,
         previous_proxied: previousProxied,
+        previous_state_sha256: previousStateSha256,
       } : {}),
       zone_source: zone.source,
     };

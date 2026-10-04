@@ -85,13 +85,25 @@ jobs:
         run: |
           set -Eeuo pipefail
           node scripts/publish-cloudflare-dns.mjs | tee "$EVIDENCE_PATH"
-          CURRENT_STATE_SHA256="$(node --input-type=module - "$EVIDENCE_PATH" <<'NODE'
-          import { readFileSync } from "node:fs";
+          node --input-type=module - "$EVIDENCE_PATH" "$GITHUB_OUTPUT" <<'NODE'
+          import { appendFileSync, readFileSync } from "node:fs";
           const evidence = JSON.parse(readFileSync(process.argv[2], "utf8"));
-          process.stdout.write(String(evidence.previous_state_sha256 || ""));
+          const outputPath = process.argv[3];
+          const action = String(evidence.action || "");
+          if (action === "would_update_requires_precondition") {
+            throw new Error(
+              "Existing A record requires reviewed ZSSH_DNS_EXPECTED_CURRENT_IPV4; refusing to enter the mutation-capable step",
+            );
+          }
+          if (!new Set(["noop", "would_create", "would_update"]).has(action)) {
+            throw new Error(`Unexpected Cloudflare DNS plan action: ${action || "missing"}`);
+          }
+          const fingerprint = String(evidence.previous_state_sha256 || "");
+          if (action === "would_update" && !/^[a-f0-9]{64}$/.test(fingerprint)) {
+            throw new Error("Existing A-record update plan is missing its reviewed state fingerprint");
+          }
+          appendFileSync(outputPath, `current_state_sha256=${fingerprint}\n`);
           NODE
-          )"
-          printf 'current_state_sha256=%s\n' "$CURRENT_STATE_SHA256" >> "$GITHUB_OUTPUT"
       - name: Publish exact DNS-only A record
         env:
           ZSSH_DNS_APPLY: "1"
