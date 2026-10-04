@@ -1,0 +1,109 @@
+name: Recover RaiseAI Watch runner for PR31
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/raiseai-pr31-runner-recovery-20261004.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: zssh-raiseai-pr31-runner-recovery-20261004
+  cancel-in-progress: false
+
+jobs:
+  recover:
+    runs-on: self-hosted
+    timeout-minutes: 8
+    env:
+      RAISE_REPO: Zennay/RaiseAI
+      PR_NUMBER: '31'
+      RAISE_SERVICE: actions.runner.Zennay-RaiseAI.vps-bb300bba.service
+
+    steps:
+      - name: Resolve exact current PR31 Watch gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(hostname)" = "vps-bb300bba"
+          gh auth status >/dev/null 2>&1
+          test "$(gh api repos/$RAISE_REPO/pulls/$PR_NUMBER --jq .state)" = "open"
+          PR_HEAD_SHA="$(gh api repos/$RAISE_REPO/pulls/$PR_NUMBER --jq .head.sha)"
+          test -n "$PR_HEAD_SHA"
+          WATCH_RUN_ID="$(
+            gh api "repos/$RAISE_REPO/actions/runs?event=pull_request&head_sha=$PR_HEAD_SHA&per_page=100"               --jq '[.workflow_runs[] | select(.name=="Raise Watch app CI")] | sort_by(.created_at) | last | .id // empty'
+          )"
+          test -n "$WATCH_RUN_ID"
+          test "$(gh api repos/$RAISE_REPO/actions/runs/$WATCH_RUN_ID --jq .head_sha)" = "$PR_HEAD_SHA"
+          test "$(gh api repos/$RAISE_REPO/actions/runs/$WATCH_RUN_ID --jq .name)" = "Raise Watch app CI"
+          echo "PR_HEAD_SHA=$PR_HEAD_SHA" >> "$GITHUB_ENV"
+          echo "WATCH_RUN_ID=$WATCH_RUN_ID" >> "$GITHUB_ENV"
+          echo "Resolved PR31 head=$PR_HEAD_SHA run=$WATCH_RUN_ID"
+
+      - name: Recover only an idle RaiseAI listener
+        shell: bash
+        run: |
+          set -euo pipefail
+          pre_state="$(systemctl is-active "$RAISE_SERVICE" || true)"
+          pre_pid="$(systemctl show "$RAISE_SERVICE" -p MainPID --value || true)"
+          control_group="$(systemctl show "$RAISE_SERVICE" -p ControlGroup --value || true)"
+          worker_before=0
+
+          if [ -n "$control_group" ] && [ "$control_group" != "/" ]; then
+            for proc in /proc/[0-9]*; do
+              test -r "$proc/cgroup" || continue
+              grep -Fq "$control_group" "$proc/cgroup" || continue
+              test -r "$proc/cmdline" || continue
+              cmdline="$(tr '\0' ' ' < "$proc/cmdline" 2>/dev/null || true)"
+              if [[ "$cmdline" == *"Runner.Worker"* ]]; then
+                worker_before=1
+                break
+              fi
+            done
+          fi
+
+          run_status="$(gh api repos/$RAISE_REPO/actions/runs/$WATCH_RUN_ID --jq .status)"
+          action=none
+          if [ "$worker_before" -eq 1 ]; then
+            action=preserve-active-worker
+          elif [ "$run_status" != "queued" ]; then
+            action=preserve-gate-already-scheduled
+          else
+            sudo -n systemctl reset-failed "$RAISE_SERVICE" || true
+            sudo -n systemctl restart "$RAISE_SERVICE"
+            action=restart-idle-or-unhealthy-listener
+          fi
+
+          post_state=""
+          post_pid=""
+          for _ in $(seq 1 30); do
+            post_state="$(systemctl is-active "$RAISE_SERVICE" || true)"
+            post_pid="$(systemctl show "$RAISE_SERVICE" -p MainPID --value || true)"
+            if [ "$post_state" = "active" ] && [[ "$post_pid" =~ ^[1-9][0-9]*$ ]]; then
+              break
+            fi
+            sleep 2
+          done
+          test "$post_state" = "active"
+          [[ "$post_pid" =~ ^[1-9][0-9]*$ ]]
+          echo "RaiseAI recovery action=$action pre=$pre_state/$pre_pid post=$post_state/$post_pid"
+
+      - name: Prove exact Watch run starts scheduling
+        shell: bash
+        run: |
+          set -euo pipefail
+          status=""
+          conclusion=""
+          for _ in $(seq 1 48); do
+            status="$(gh api repos/$RAISE_REPO/actions/runs/$WATCH_RUN_ID --jq .status)"
+            conclusion="$(gh api repos/$RAISE_REPO/actions/runs/$WATCH_RUN_ID --jq '.conclusion // ""')"
+            echo "PR31 Watch status=$status conclusion=$conclusion"
+            if [ "$status" = "in_progress" ] || [ "$status" = "completed" ]; then
+              break
+            fi
+            sleep 5
+          done
+          [ "$status" = "in_progress" ] || [ "$status" = "completed" ]
