@@ -173,6 +173,96 @@ export async function verifyMainProtection({
   };
 }
 
+
+export async function verifyMainProtectionNegativeProof({
+  repository,
+  token = "",
+  branch = "main",
+  issueNumber = 100,
+  canarySha = "284dadd80a7e46fc9203ed5e5caa9a5709e3f24b",
+  apiUrl = "https://api.github.com",
+  fetchImpl = fetch,
+}) {
+  if (!/^[^/]+\/[^/]+$/.test(String(repository || ""))) {
+    throw new Error("GITHUB_REPOSITORY must be owner/name");
+  }
+  if (!/^[0-9a-f]{40}$/.test(String(canarySha || ""))) {
+    throw new Error("canarySha must be a 40-character Git SHA");
+  }
+
+  const root = apiUrl.replace(/\/$/, "");
+  const headers = {
+    Accept: "application/vnd.github+json",
+    "X-GitHub-Api-Version": API_VERSION,
+    "User-Agent": "zssh-main-protection-negative-proof-verifier",
+  };
+  if (token) headers.Authorization = "Bearer " + token;
+
+  async function get(path, label) {
+    const response = await fetchImpl(root + "/repos/" + repository + "/" + path, { headers });
+    if (!response.ok) {
+      throw new Error(label + " lookup failed with HTTP " + response.status);
+    }
+    return response.json();
+  }
+
+  const issue = await get("issues/" + issueNumber, "governance issue");
+  if (issue?.state !== "closed" || issue?.state_reason !== "completed") {
+    throw new Error("governance issue #" + issueNumber + " must be closed as completed");
+  }
+
+  const comments = await get("issues/" + issueNumber + "/comments?per_page=100", "governance evidence comments");
+  const evidenceText = Array.isArray(comments)
+    ? comments.map(comment => String(comment?.body || "")).join("\n")
+    : "";
+  for (const marker of [
+    canarySha,
+    "HTTP 422",
+    "Changes must be made through a pull request",
+  ]) {
+    if (!evidenceText.includes(marker)) {
+      throw new Error("governance evidence is missing required marker: " + marker);
+    }
+  }
+
+  const canary = await get("git/commits/" + canarySha, "negative-proof canary");
+  const parentSha = canary?.parents?.[0]?.sha;
+  if (!/^[0-9a-f]{40}$/.test(String(parentSha || ""))) {
+    throw new Error("negative-proof canary must have a usable parent");
+  }
+  const parent = await get("git/commits/" + parentSha, "negative-proof parent");
+  if (!canary?.tree?.sha || canary.tree.sha !== parent?.tree?.sha) {
+    throw new Error("negative-proof canary must be same-tree as its parent");
+  }
+
+  const branchMetadata = await get("branches/" + encodeURIComponent(branch), "current protected branch");
+  const currentMainSha = branchMetadata?.commit?.sha;
+  if (!/^[0-9a-f]{40}$/.test(String(currentMainSha || ""))) {
+    throw new Error("current main SHA is unavailable");
+  }
+  if (branchMetadata?.protected !== true) {
+    throw new Error("branch " + branch + " is not reported as protected by GitHub");
+  }
+
+  const comparison = await get("compare/" + parentSha + "..." + currentMainSha, "negative-proof ancestry");
+  if (!["ahead", "identical"].includes(comparison?.status)) {
+    throw new Error("negative-proof parent is not an ancestor of current " + branch);
+  }
+
+  return {
+    schema_version: 1,
+    ok: true,
+    repository,
+    branch,
+    issue_number: issueNumber,
+    canary_sha: canarySha,
+    proof_parent_sha: parentSha,
+    current_main_sha: currentMainSha,
+    lineage_status: comparison.status,
+    direct_write_rejection_http_status: 422,
+  };
+}
+
 async function main() {
   const args = new Set(process.argv.slice(2));
   const common = {
@@ -181,6 +271,12 @@ async function main() {
     branch: process.env.ZSSH_PROTECTED_BRANCH || "main",
     apiUrl: process.env.GITHUB_API_URL || "https://api.github.com",
   };
+
+  if (args.has("--require-negative-proof")) {
+    const result = await verifyMainProtectionNegativeProof(common);
+    console.log("ZSSH_MAIN_PROTECTION_NEGATIVE_PROOF_VERIFIED", JSON.stringify(result));
+    return;
+  }
 
   if (args.has("--public-status")) {
     const result = await inspectBranchProtectionFlag(common);
