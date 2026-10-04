@@ -58,6 +58,11 @@ const DNS_RESOLVED_PUBLIC_ORIGIN_STAGES = new Set([
   "ready",
 ]);
 
+const PUBLIC_INGRESS_READY_STAGES = new Set([
+  "oauth_metadata",
+  "ready",
+]);
+
 function value(env, name) {
   return String(env[name] || "").trim();
 }
@@ -387,6 +392,15 @@ export function buildProductionReadinessAudit(env = process.env) {
       laneStatus(env, name, names),
     ])
   );
+  const publicOriginStage = value(env, "ZSSH_PUBLIC_ORIGIN_STAGE");
+  lanes.public_ingress = {
+    ready: PUBLIC_INGRESS_READY_STAGES.has(publicOriginStage),
+    configured: {
+      ZSSH_PUBLIC_ORIGIN_STAGE: configured(env, "ZSSH_PUBLIC_ORIGIN_STAGE"),
+    },
+    missing: [],
+    invalid: [],
+  };
   const releasePresence = publicReleaseConfigPresence(env);
   const releaseConfig = finalReleaseValidation(env, releasePresence);
 
@@ -419,6 +433,16 @@ export function buildProductionReadinessAudit(env = process.env) {
           : "Provision a protected user-owned Cloudflare API token from My Profile > API Tokens, scoped only to cheapgpt.shop with Zone Read + DNS Write, then run zSSH production DNS publish. The current preflight verifies /user/tokens/verify, so do not use an Account API token. CLOUDFLARE_ZONE_ID remains an optional legacy override for DNS-write-only tokens.",
       missing: lanes.dns_publication.missing,
       invalid: lanes.dns_publication.invalid,
+    });
+  }
+  if (lanes.dns_publication.ready && !lanes.public_ingress.ready) {
+    nextActions.push({
+      lane: "public_ingress",
+      gate_kind: "internal_deployment",
+      requires_external_input: false,
+      action: `Public DNS is resolved but the zSSH public origin is stalled at stage ${publicOriginStage || "unknown"}. Run the canonical zCloud VPS rollout for zssh-public.service plus transactional Caddy promotion, then rerun the GitHub-hosted external ingress preflight.`,
+      missing: [],
+      invalid: [],
     });
   }
   if (!lanes.auth0_preflight.ready) {
@@ -486,6 +510,7 @@ export function buildProductionReadinessAudit(env = process.env) {
     ready: {
       repository_governance: lanes.repository_governance.ready,
       dns_publication: lanes.dns_publication.ready,
+      public_ingress: lanes.public_ingress.ready,
       auth0_preflight: lanes.auth0_preflight.ready,
       reviewer_fixture: lanes.reviewer_fixture.ready,
       portal_and_host_attestations: lanes.portal_and_host_attestations.ready,

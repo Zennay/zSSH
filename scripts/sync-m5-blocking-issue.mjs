@@ -7,6 +7,10 @@ const GATE_RUNBOOKS = Object.freeze({
     label: "Cloudflare production DNS publication",
     path: "docs/research/cloudflare-dns-publication-2026-10-04.md",
   },
+  public_ingress: {
+    label: "Public gateway and Caddy ingress rollout",
+    path: "docs/research/public-caddy-promotion-2026-10-04.md",
+  },
   auth0_preflight: {
     label: "Auth0 production OAuth qualification",
     path: "docs/research/auth0-production-oauth-2026-10-04.md",

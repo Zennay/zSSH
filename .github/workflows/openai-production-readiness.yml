@@ -181,6 +181,7 @@ jobs:
             "",
             `- Main protection: ${result.ready.repository_governance ? "verified" : "not ready"}`,
             `- DNS publication inputs: ${result.ready.dns_publication ? "ready" : "not ready"}`,
+            `- Public ingress: ${result.ready.public_ingress ? "ready" : "needs rollout"}`,
             `- Auth0 preflight inputs: ${result.ready.auth0_preflight ? "ready" : "not ready"}`,
             `- Reviewer fixture inputs: ${result.ready.reviewer_fixture ? "ready" : "not ready"}`,
             `- Portal/host attestations: ${result.ready.portal_and_host_attestations ? "ready" : "pending"}`,
