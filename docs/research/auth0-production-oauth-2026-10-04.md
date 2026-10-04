@@ -61,3 +61,15 @@ Auth0 documents that when a custom domain is used for authentication, authorizat
 **Decision:** the zSSH Auth0 production preflight now fails closed unless `authorization_endpoint`, `token_endpoint`, `registration_endpoint`, and `jwks_uri` all use the exact origin of `ZSSH_OAUTH_ISSUER`. This prevents a syntactically valid but mixed-origin discovery document from passing production readiness and keeps authorization, code exchange, DCR, and signing-key discovery bound to the same Auth0 issuer selected by protected-resource metadata.
 
 This is an Auth0-specific production invariant. The generic OAuth metadata validator remains provider-neutral.
+
+
+## Repeatable reviewed activation — 2026-10-04
+
+The protected Auth0 qualification workflow is path-triggered by `.github/openai-production-auth0-trigger`. To keep that reviewed activation reusable after the first production qualification, the marker now mirrors the DNS activation contract:
+
+1. line 1 must remain exactly `QUALIFY_ZSSH_PRODUCTION_AUTH0`;
+2. the marker may contain at most one optional second line;
+3. when present, line 2 must be `activation-id=<8-80 safe characters>`, using only letters, digits, `.`, `_`, `:`, or `-`;
+4. any extra line or malformed activation ID fails before the Auth0 Management API credential is exposed to the validation step.
+
+A later production requalification is therefore performed by changing only the reviewed `activation-id` through a pull request and merging it to protected `main`. The activation marker is non-secret; credentials must never be written into it.
