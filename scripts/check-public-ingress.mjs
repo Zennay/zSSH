@@ -37,15 +37,14 @@ function isPublicIpv4(address) {
 
 function isPublicIpv6(address) {
   const value = address.toLowerCase();
-  if (value === "::" || value === "::1") return false;
+  // Fail closed on the IPv4-compatible/mapped low IPv6 space. IANA marks
+  // ::/128, ::1/128 and ::ffff:0:0/96 as not globally reachable, while
+  // RFC 4291 deprecates IPv4-compatible IPv6 addresses.
+  if (value.startsWith("::")) return false;
   if (/^(?:fc|fd)[0-9a-f]{2}:/.test(value)) return false;
   if (/^fe[89ab][0-9a-f]:/.test(value)) return false;
   if (/^ff[0-9a-f]{2}:/.test(value)) return false;
   if (/^2001:db8(?::|$)/.test(value)) return false;
-  if (value.startsWith("::ffff:")) {
-    const mapped = value.slice("::ffff:".length);
-    if (net.isIP(mapped) === 4) return isPublicIpv4(mapped);
-  }
   return true;
 }
 
