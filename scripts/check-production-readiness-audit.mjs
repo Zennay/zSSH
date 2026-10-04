@@ -378,6 +378,18 @@ export function buildProductionReadinessAudit(env = process.env) {
     });
   }
 
+  const internalActionGates = nextActions
+    .filter(item => !item.requires_external_input)
+    .map(item => item.lane);
+  const externalInputGates = nextActions
+    .filter(item => item.requires_external_input)
+    .map(item => item.lane);
+  const executionState = nextActions.length === 0
+    ? "ready"
+    : internalActionGates.length > 0
+      ? "internal_action_available"
+      : "external_input_only";
+
   return {
     schema_version: 2,
     phase: "M5",
@@ -392,9 +404,9 @@ export function buildProductionReadinessAudit(env = process.env) {
     },
     lanes,
     final_release_config: releaseConfig,
-    external_input_gates: nextActions
-      .filter(item => item.requires_external_input)
-      .map(item => item.lane),
+    execution_state: executionState,
+    internal_action_gates: internalActionGates,
+    external_input_gates: externalInputGates,
     next_actions: nextActions,
   };
 }

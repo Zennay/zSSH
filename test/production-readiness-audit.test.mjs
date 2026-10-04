@@ -58,6 +58,8 @@ test("classifies an empty production environment into actionable M5 lanes", () =
   const result = buildProductionReadinessAudit({});
   assert.equal(result.schema_version, 2);
   assert.equal(result.phase, "M5");
+  assert.equal(result.execution_state, "internal_action_available");
+  assert.deepEqual(result.internal_action_gates, ["repository_governance"]);
   assert.equal(result.ready.repository_governance, false);
   assert.equal(result.ready.dns_publication, false);
   assert.equal(result.ready.auth0_preflight, false);
@@ -82,6 +84,28 @@ test("classifies an empty production environment into actionable M5 lanes", () =
     "auth0_preflight",
     "reviewer_fixture",
     "portal_and_host_attestations",
+  ]);
+});
+
+test("reports external-input-only when no repository-owned action remains", () => {
+  const result = buildProductionReadinessAudit({
+    ...complete,
+    CLOUDFLARE_ZONE_ID: "",
+    CLOUDFLARE_API_TOKEN: "",
+    ZSSH_OAUTH_ISSUER: "",
+    AUTH0_MANAGEMENT_BASE_URL: "",
+    AUTH0_MANAGEMENT_API_TOKEN: "",
+    ZSSH_PLUGIN_DEMO_RECORDING_URL: "",
+    ZSSH_REVIEW_ACCESS_TOKEN: "",
+    ZSSH_REVIEW_LOGIN_URL: "",
+  });
+
+  assert.equal(result.execution_state, "external_input_only");
+  assert.deepEqual(result.internal_action_gates, []);
+  assert.deepEqual(result.external_input_gates, [
+    "dns_publication",
+    "auth0_preflight",
+    "reviewer_fixture",
   ]);
 });
 
@@ -192,6 +216,9 @@ test("never serializes protected values", () => {
   }
   assert.equal(result.ready.final_release_config, true);
   assert.deepEqual(result.final_release_config.invalid, []);
+  assert.equal(result.execution_state, "ready");
+  assert.deepEqual(result.internal_action_gates, []);
+  assert.deepEqual(result.external_input_gates, []);
 });
 
 test("protected readiness workflow runs automatically only for merged PRs and keeps manual dispatch", () => {
@@ -299,6 +326,9 @@ test("operator docs do not require the retired mutable governance attestation", 
 
 
 test("readiness workflow summary exposes gate classification for autonomous consumers", () => {
+  assert.ok(readinessWorkflow.includes("Execution state: ${result.execution_state}"));
+  assert.ok(readinessWorkflow.includes("Internal action gates: ${result.internal_action_gates.join(\", \") || \"none\"}"));
+  assert.ok(readinessWorkflow.includes("External input gates: ${result.external_input_gates.join(\", \") || \"none\"}"));
   assert.ok(readinessWorkflow.includes("Gate kind: ${item.gate_kind}"));
   assert.ok(readinessWorkflow.includes('Requires external input: ${item.requires_external_input ? "yes" : "no"}'));
 });
