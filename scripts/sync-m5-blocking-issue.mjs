@@ -99,9 +99,9 @@ export function renderM5BlockingIssue({ readiness, canonicalSha, repository = "Z
   const sha = String(canonicalSha || "").trim().toLowerCase();
   if (!/^[a-f0-9]{40}$/.test(sha)) fail("canonicalSha must be a 40-character Git SHA");
   const repo = String(repository || "Zennay/zSSH").trim();
-  if (!/^[^/\\s]+\\/[^/\\s]+$/.test(repo)) fail("repository must be owner/name");
+  if (!/^[^/\s]+\/[^/\s]+$/.test(repo)) fail("repository must be owner/name");
   const runId = String(workflowRunId || "").trim();
-  if (runId && !/^\\d+$/.test(runId)) fail("workflowRunId must be a positive GitHub Actions run ID");
+  if (runId && !/^\d+$/.test(runId)) fail("workflowRunId must be a positive GitHub Actions run ID");
   const readinessRunLine = runId
     ? `- Readiness run: [\`${runId}\`](https://github.com/${repo}/actions/runs/${runId})`
     : null;
