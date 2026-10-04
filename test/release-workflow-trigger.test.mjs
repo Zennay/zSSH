@@ -132,7 +132,7 @@ test("final production release reruns and binds the external ingress preflight",
 });
 
 
-test("reviewed Auth0 activation is bound to protected canonical main", () => {
+test("reviewed Auth0 activation is bound to exact current protected main", () => {
   assert.match(
     auth0Workflow,
     /push:\n    branches: \[main\][\s\S]*\.github\/openai-production-auth0-trigger/,
@@ -141,10 +141,13 @@ test("reviewed Auth0 activation is bound to protected canonical main", () => {
     auth0Workflow,
     /test "\$\(cat \.github\/openai-production-auth0-trigger\)" = "QUALIFY_ZSSH_PRODUCTION_AUTH0"/,
   );
-  assert.match(auth0Workflow, /node scripts\/check-main-provenance\.mjs/);
   assert.match(
     auth0Workflow,
-    /node scripts\/check-main-protection\.mjs --public-status --require-protected/,
+    /Require reviewed protected-main Auth0 activation[\s\S]*node scripts\/check-main-provenance\.mjs/,
+  );
+  assert.match(
+    auth0Workflow,
+    /Require reviewed protected-main Auth0 activation[\s\S]*check-main-protection\.mjs --public-status --require-protected --require-current-sha/,
   );
   assert.match(auth0Workflow, /environment: openai-production/);
 });

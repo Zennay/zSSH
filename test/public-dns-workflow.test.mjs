@@ -29,11 +29,17 @@ test("post-publication origin evidence is retained with Cloudflare DNS evidence"
 });
 
 
-test("reviewed marker can trigger the exact production DNS publish after main is protected", () => {
+test("reviewed marker can trigger the exact production DNS publish only from current protected main", () => {
   assert.match(workflow, /push:\n    branches: \[main\][\s\S]*\.github\/openai-production-dns-trigger/);
   assert.match(workflow, /test "\$\(cat \.github\/openai-production-dns-trigger\)" = "PUBLISH_ZSSH_PRODUCTION_DNS"/);
-  assert.match(workflow, /node scripts\/check-main-provenance\.mjs/);
-  assert.match(workflow, /check-main-protection\.mjs --public-status --require-protected/);
+  assert.match(
+    workflow,
+    /Require reviewed protected-main DNS activation[\s\S]*node scripts\/check-main-provenance\.mjs/,
+  );
+  assert.match(
+    workflow,
+    /Require reviewed protected-main DNS activation[\s\S]*check-main-protection\.mjs --public-status --require-protected --require-current-sha/,
+  );
   assert.match(workflow, /CLOUDFLARE_ZONE_NAME: cheapgpt\.shop/);
   assert.match(workflow, /ZSSH_PUBLIC_BASE_URL: https:\/\/zssh\.cheapgpt\.shop/);
   assert.match(workflow, /ZSSH_PUBLIC_IPV4: 198\.244\.191\.182/);
