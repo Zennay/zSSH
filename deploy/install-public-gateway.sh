@@ -173,7 +173,7 @@ fi
 
 ENV_BACKUP=""
 if [[ -f "$ENV_FILE" ]]; then
-  ENV_BACKUP="$CONFIG/.public-gateway.env.backup.$"
+  ENV_BACKUP="$CONFIG/.public-gateway.env.backup.$$"
   cp "$ENV_FILE" "$ENV_BACKUP"
   chmod 600 "$ENV_BACKUP"
 fi
@@ -222,7 +222,7 @@ if [[ -L "$CURRENT" ]]; then
   PREVIOUS="$(readlink -f "$CURRENT" || true)"
 fi
 
-TMP_LINK="$BASE/.current.$"
+TMP_LINK="$BASE/.current.$$"
 ln -s "$RELEASE" "$TMP_LINK"
 mv -Tf "$TMP_LINK" "$CURRENT"
 
@@ -237,7 +237,7 @@ rollback_public_gateway() {
     rm -f "$ENV_FILE"
   fi
   if [[ -n "$PREVIOUS" && -d "$PREVIOUS" ]]; then
-    local rollback_link="$BASE/.rollback.$"
+    local rollback_link="$BASE/.rollback.$$"
     ln -s "$PREVIOUS" "$rollback_link"
     mv -Tf "$rollback_link" "$CURRENT"
     systemctl --user daemon-reload || true
