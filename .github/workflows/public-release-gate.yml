@@ -31,6 +31,7 @@ on:
       - "scripts/check-tool-scan-binding.mjs"
       - "scripts/check-main-provenance.mjs"
       - "scripts/check-public-ingress.mjs"
+      - "scripts/observe-public-origin-readiness.mjs"
       - "scripts/publish-cloudflare-dns.mjs"
       - "scripts/render-public-caddy.mjs"
       - "scripts/build-openai-plugin.py"
@@ -46,6 +47,7 @@ on:
       - "test/main-provenance.test.mjs"
       - "test/public-caddy-renderer.test.mjs"
       - "test/public-ingress-preflight.test.mjs"
+      - "test/public-origin-observation.test.mjs"
       - "test/cloudflare-dns-publish.test.mjs"
       - "test/release-workflow-trigger.test.mjs"
       - "submission/**"
@@ -81,6 +83,7 @@ on:
       - "scripts/check-tool-scan-binding.mjs"
       - "scripts/check-main-provenance.mjs"
       - "scripts/check-public-ingress.mjs"
+      - "scripts/observe-public-origin-readiness.mjs"
       - "scripts/publish-cloudflare-dns.mjs"
       - "scripts/render-public-caddy.mjs"
       - "scripts/build-openai-plugin.py"
@@ -96,6 +99,7 @@ on:
       - "test/main-provenance.test.mjs"
       - "test/public-caddy-renderer.test.mjs"
       - "test/public-ingress-preflight.test.mjs"
+      - "test/public-origin-observation.test.mjs"
       - "test/cloudflare-dns-publish.test.mjs"
       - "test/release-workflow-trigger.test.mjs"
       - "submission/**"
@@ -124,7 +128,7 @@ jobs:
       - name: Self-test release configuration guard
         run: node scripts/check-public-release-config.mjs --self-test
       - name: Exercise release and portal binding contracts
-        run: node --test test/release-contract.test.mjs test/auth0-production-readiness.test.mjs test/production-readiness-audit.test.mjs test/domain-verification-binding.test.mjs test/host-surface-review-binding.test.mjs test/tool-scan-binding.test.mjs test/annotation-justifications.test.mjs test/public-caddy-renderer.test.mjs test/public-caddy-installer.test.mjs test/public-ingress-preflight.test.mjs test/cloudflare-dns-publish.test.mjs test/release-workflow-trigger.test.mjs
+        run: node --test test/release-contract.test.mjs test/auth0-production-readiness.test.mjs test/production-readiness-audit.test.mjs test/domain-verification-binding.test.mjs test/host-surface-review-binding.test.mjs test/tool-scan-binding.test.mjs test/annotation-justifications.test.mjs test/public-caddy-renderer.test.mjs test/public-caddy-installer.test.mjs test/public-ingress-preflight.test.mjs test/public-origin-observation.test.mjs test/cloudflare-dns-publish.test.mjs test/release-workflow-trigger.test.mjs
       - name: Validate release scripts
         run: |
           node --check release-contract.mjs
@@ -137,6 +141,7 @@ jobs:
           node --check scripts/check-tool-scan-binding.mjs
           node --check scripts/check-main-provenance.mjs
           node --check scripts/check-public-ingress.mjs
+          node --check scripts/observe-public-origin-readiness.mjs
           node --check scripts/publish-cloudflare-dns.mjs
           node --check scripts/render-public-caddy.mjs
           bash -n deploy/install-public-caddy.sh
