@@ -129,7 +129,9 @@ NODE
 
 if [[ ! -d "$RELEASE" ]]; then
   mkdir -p "$STAGE"
-  cp -a "$SOURCE_ROOT/." "$STAGE/"
+  # Export only the exact tracked commit. Never copy the mutable worktree:
+  # it may contain untracked .env files, local credentials, or other secrets.
+  git -C "$SOURCE_ROOT" archive --format=tar "$REPO_SHA" | tar -x -C "$STAGE"
   rm -rf "$STAGE/node_modules" "$STAGE/data"
   "$NPM_BIN" install --prefix "$STAGE" --omit=dev --ignore-scripts --no-audit --no-fund
   "$NPM_BIN" test --prefix "$STAGE"
