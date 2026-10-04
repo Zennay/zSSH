@@ -2,7 +2,9 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   reconcileCloudflareDns,
+  resolveCloudflareZoneId,
   validateCloudflareZoneId,
+  validateCloudflareZoneName,
   validatePublicIpv4,
 } from "../scripts/publish-cloudflare-dns.mjs";
 
@@ -30,11 +32,61 @@ function baseArgs(fetchImpl, overrides = {}) {
 
 test("validates scoped Cloudflare zone IDs and public IPv4 targets", () => {
   assert.equal(validateCloudflareZoneId(zoneId), zoneId);
+  assert.equal(validateCloudflareZoneName("CHEAPGPT.SHOP."), "cheapgpt.shop");
   assert.equal(validatePublicIpv4("198.244.191.182"), "198.244.191.182");
   assert.throws(() => validateCloudflareZoneId("cheapgpt.shop"), /CLOUDFLARE_ZONE_ID/);
   for (const value of ["127.0.0.1", "10.0.0.1", "192.168.1.4", "198.51.100.7", "::1"]) {
     assert.throws(() => validatePublicIpv4(value), /ZSSH_PUBLIC_IPV4/);
   }
+});
+
+test("discovers the exact active zone when CLOUDFLARE_ZONE_ID is omitted", async () => {
+  const calls = [];
+  const result = await reconcileCloudflareDns(baseArgs(async (url, init) => {
+    calls.push({ url: String(url), init });
+    if (calls.length === 1) {
+      assert.match(calls[0].url, /\/client\/v4\/zones\?/);
+      assert.match(calls[0].url, /name=cheapgpt.shop/);
+      return response([{ id: zoneId, name: "cheapgpt.shop", status: "active" }]);
+    }
+    return response([]);
+  }, { zoneId: "", zoneName: "cheapgpt.shop" }));
+  assert.equal(result.action, "would_create");
+  assert.equal(result.zone_source, "discovered");
+  assert.equal(calls.length, 2);
+  assert.equal(calls[0].init.method, "GET");
+  assert.equal(calls[1].init.method, "GET");
+});
+
+test("zone autodiscovery fails closed on missing, duplicate, or unrelated zones", async () => {
+  for (const zones of [
+    [],
+    [{ id: zoneId, name: "cheapgpt.shop", status: "pending" }],
+    [
+      { id: zoneId, name: "cheapgpt.shop", status: "active" },
+      { id: "11111111111111111111111111111111", name: "cheapgpt.shop", status: "active" },
+    ],
+  ]) {
+    await assert.rejects(
+      resolveCloudflareZoneId({
+        zoneName: "cheapgpt.shop",
+        apiToken: "test-token-not-secret",
+        hostname: "zssh.cheapgpt.shop",
+        fetchImpl: async () => response(zones),
+      }),
+      /exactly one active cheapgpt\.shop zone/,
+    );
+  }
+
+  await assert.rejects(
+    resolveCloudflareZoneId({
+      zoneName: "other.example",
+      apiToken: "test-token-not-secret",
+      hostname: "zssh.cheapgpt.shop",
+      fetchImpl: async () => response([]),
+    }),
+    /must belong/,
+  );
 });
 
 test("dry-run reports a create without mutating Cloudflare", async () => {
@@ -107,4 +159,25 @@ test("refuses CNAME/NS conflicts and multi-A RRsets", async () => {
       /refusing/,
     );
   }
+});
+
+
+test("autodiscovered zone ID is reused for update writes", async () => {
+  const calls = [];
+  const listed = [
+    { id: recordId, type: "A", name: "zssh.cheapgpt.shop", content: "203.0.113.10", proxied: true },
+  ];
+  const result = await reconcileCloudflareDns(baseArgs(async (url, init) => {
+    calls.push({ url: String(url), init });
+    if (calls.length === 1) {
+      return response([{ id: zoneId, name: "cheapgpt.shop", status: "active" }]);
+    }
+    if (calls.length === 2) return response(listed);
+    return response({ id: recordId, type: "A", name: "zssh.cheapgpt.shop", content: "198.244.191.182", proxied: false });
+  }, { zoneId: "", zoneName: "cheapgpt.shop", apply: true }));
+  assert.equal(result.action, "updated");
+  assert.equal(result.zone_source, "discovered");
+  assert.equal(calls.length, 3);
+  assert.equal(calls[2].init.method, "PATCH");
+  assert.match(calls[2].url, new RegExp(`/zones/${zoneId}/dns_records/${recordId}$`));
 });
