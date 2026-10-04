@@ -44,6 +44,7 @@ on:
       - "scripts/check-public-release-config.mjs"
       - "scripts/check-auth0-production.mjs"
       - "scripts/check-production-readiness-audit.mjs"
+      - "scripts/sync-m5-blocking-issue.mjs"
       - "scripts/check-domain-verification-binding.mjs"
       - "scripts/check-host-surface-review-binding.mjs"
       - "scripts/check-tool-scan-binding.mjs"
@@ -132,6 +133,7 @@ on:
       - "scripts/check-public-release-config.mjs"
       - "scripts/check-auth0-production.mjs"
       - "scripts/check-production-readiness-audit.mjs"
+      - "scripts/sync-m5-blocking-issue.mjs"
       - "scripts/check-domain-verification-binding.mjs"
       - "scripts/check-host-surface-review-binding.mjs"
       - "scripts/check-tool-scan-binding.mjs"
@@ -211,6 +213,7 @@ jobs:
           node --check scripts/check-public-release-config.mjs
           node --check scripts/check-auth0-production.mjs
           node --check scripts/check-production-readiness-audit.mjs
+          node --check scripts/sync-m5-blocking-issue.mjs
           node --check scripts/check-domain-verification-binding.mjs
           node --check scripts/check-host-surface-review-binding.mjs
           node --check scripts/check-tool-scan-binding.mjs
