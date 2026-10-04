@@ -23,7 +23,7 @@ function receipt(overrides = {}) {
       lane: "dns_publication",
       gate_kind: "provider_credentials",
       requires_external_input: true,
-      action: "Provision the scoped provider credential, then run the guarded DNS publisher.",
+      action: "Provision a protected user-owned Cloudflare API token from My Profile > API Tokens, scoped only to cheapgpt.shop with Zone Read + DNS Write, then run zSSH production DNS publish. The current preflight verifies /user/tokens/verify, so do not use an Account API token.",
       missing: ["CLOUDFLARE_API_TOKEN"],
       invalid: [],
     },
@@ -47,6 +47,10 @@ test("renders only secret-safe blocking metadata", () => {
 
   assert.equal(result.title, "M5 active gate: dns_publication");
   assert.match(result.body, /CLOUDFLARE_API_TOKEN/);
+  assert.match(result.body, /user-owned Cloudflare API token/i);
+  assert.match(result.body, /My Profile > API Tokens/);
+  assert.match(result.body, /\/user\/tokens\/verify/);
+  assert.match(result.body, /do not use an Account API token/i);
   assert.match(result.body, /auth0_preflight/);
   assert.ok(
     result.body.includes(
