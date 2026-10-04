@@ -6,7 +6,7 @@ on:
       - ".github/workflows/zssh-d346-target-agent-selfhosted-proof.yml"
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   prove:
@@ -24,6 +24,8 @@ jobs:
         run: |
           set -Eeuo pipefail
           test "$(git rev-parse HEAD)" = "d346051d64953dcf260cfeb78214249026e17dc1"
+          test "$(hostname)" = "vps-bb300bba"
+          test "$(id -u)" -ne 0
           echo "runner=$RUNNER_NAME"
           echo "hostname=$(hostname)"
           echo "sha=$(git rev-parse HEAD)"
@@ -59,3 +61,38 @@ jobs:
           test -f "$stage/deploy/install-target-agent.sh"
           rm -rf "$proof_home" "$stage" .env
           echo "ZSSH_D346_SELFHOSTED_PROOF_GREEN"
+
+      - name: Persist secret-free proof receipt
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          receipt="$RUNNER_TEMP/zssh-d346-proof-$GITHUB_RUN_ID.json"
+          python3 - <<'PY' > "$receipt"
+          import json, os
+          print(json.dumps({
+              "project":"zssh",
+              "pull_request":54,
+              "target_sha":"d346051d64953dcf260cfeb78214249026e17dc1",
+              "result":"success",
+              "runner_host":"vps-bb300bba",
+              "runner_name":os.environ.get("RUNNER_NAME",""),
+              "workflow_run_id":os.environ["GITHUB_RUN_ID"],
+              "workflow_run_attempt":os.environ["GITHUB_RUN_ATTEMPT"],
+              "proof":[
+                  "exact-merged-sha",
+                  "expected-vps-host",
+                  "non-root-runner",
+                  "full-node-test-suite",
+                  "focused-agent-pairing-client-identity-deploy-tests",
+                  "target-local-key-mode-0600",
+                  "private-key-not-printed",
+                  "tracked-only-release-export"
+              ]
+          }, sort_keys=True))
+          PY
+          encoded="$(base64 -w0 "$receipt")"
+          path="runtime-evidence/zssh-d346-target-agent-proof-$GITHUB_RUN_ID.json"
+          gh api --method PUT "repos/Zennay/zSSH/contents/$path"             -f message="Record zSSH d346 self-hosted proof $GITHUB_RUN_ID"             -f content="$encoded" >/dev/null
+          echo "ZSSH_D346_RECEIPT_PATH=$path"
