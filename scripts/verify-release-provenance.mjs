@@ -6,9 +6,13 @@ function fail(message) {
   throw new Error(`release provenance verification failed: ${message}`);
 }
 
-const [sourceRoot, repoSha, releaseDir] = process.argv.slice(2);
+const [sourceRoot, repoSha, releaseDir, ...options] = process.argv.slice(2);
 if (!sourceRoot || !repoSha || !releaseDir) {
-  fail("usage: <source-root> <40-char-commit-sha> <release-dir>");
+  fail("usage: <source-root> <40-char-commit-sha> <release-dir> [--allow-node-modules]");
+}
+const allowNodeModules = options.length === 1 && options[0] === "--allow-node-modules";
+if (options.length > 0 && !allowNodeModules) {
+  fail("only --allow-node-modules is supported as an optional argument");
 }
 if (!/^[0-9a-f]{40}$/.test(repoSha)) {
   fail("commit SHA must be a full 40-character lowercase hex SHA");
@@ -100,6 +104,18 @@ for (const record of records) {
 
 if (checked === 0) fail("commit tree contains no tracked blobs");
 
+if (
+  allowNodeModules &&
+  (
+    expectedDirectories.has("node_modules") ||
+    [...expectedFiles].some(relativePath =>
+      relativePath === "node_modules" || relativePath.startsWith("node_modules/")
+    )
+  )
+) {
+  fail("cannot allow runtime node_modules when the commit tracks node_modules");
+}
+
 function verifyNoUnexpectedEntries(directory, relativeDirectory = "") {
   for (const entry of readdirSync(directory, { withFileTypes: true })) {
     const relativePath = relativeDirectory
@@ -108,6 +124,9 @@ function verifyNoUnexpectedEntries(directory, relativeDirectory = "") {
     const absolutePath = path.join(directory, entry.name);
 
     if (entry.isDirectory()) {
+      if (allowNodeModules && relativePath === "node_modules") {
+        continue;
+      }
       if (!expectedDirectories.has(relativePath)) {
         fail(`unexpected release path: ${relativePath}`);
       }
