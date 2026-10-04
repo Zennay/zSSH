@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import process from "node:process";
 import { pathToFileURL } from "node:url";
-import { fetchAuthorizationServerMetadata } from "../release-contract.mjs";
+import { fetchAuthorizationServerMetadata, isNonPublicHostname } from "../release-contract.mjs";
 
 const REQUIRED_SCOPES = Object.freeze(["zssh:read", "zssh:write"]);
 
@@ -25,7 +25,7 @@ function requirePublicHttpsUrl(raw, name) {
   if (url.protocol !== "https:" || url.username || url.password) {
     fail(`${name} must be an HTTPS URL without embedded credentials`);
   }
-  if (!url.hostname.includes(".") || ["localhost", "127.0.0.1"].includes(url.hostname)) {
+  if (!url.hostname.includes(".") || isNonPublicHostname(url.hostname)) {
     fail(`${name} must use a public hostname`);
   }
   return url;
@@ -156,7 +156,6 @@ export async function checkAuth0ProductionReadiness({
   const tenant = validateAuth0TenantSettings(settings);
 
   const resourcesUrl = new URL("resource-servers", apiBase);
-  resourcesUrl.searchParams.set("identifier", resourceUrl.origin);
   resourcesUrl.searchParams.set("per_page", "100");
   const resources = validateAuth0ResourceServers(
     await fetchJson(resourcesUrl, token, "Auth0 resource servers", fetchImpl),
