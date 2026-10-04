@@ -101,3 +101,25 @@ test("verifier rejects untracked content added to an existing release directory"
     /unexpected release path: \.unexpected\.env/,
   );
 });
+
+test("verifier permits the regenerated top-level node_modules tree", t => {
+  const { root, release } = materializeRelease();
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+
+  const generated = path.join(release, "node_modules", "example");
+  mkdirSync(generated, { recursive: true });
+  writeFileSync(path.join(generated, "index.js"), "export {};\n");
+
+  assert.doesNotThrow(() => verify(release));
+});
+
+test("verifier does not permit node_modules as a symlink", t => {
+  const { root, release } = materializeRelease();
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+
+  symlinkSync("package.json", path.join(release, "node_modules"));
+  assert.throws(
+    () => verify(release),
+    /unexpected release path: node_modules/,
+  );
+});
