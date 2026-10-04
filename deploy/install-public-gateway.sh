@@ -214,7 +214,7 @@ umask 077
 } > "$ENV_FILE"
 chmod 600 "$ENV_FILE"
 
-sed "s|@NODE_BIN@|$NODE_BIN|g" "$SOURCE_ROOT/deploy/zssh-public.service.in" > "$UNIT"
+sed "s|@NODE_BIN@|$NODE_BIN|g" "$RELEASE/deploy/zssh-public.service.in" > "$UNIT"
 chmod 600 "$UNIT"
 
 PREVIOUS=""
