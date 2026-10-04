@@ -6,6 +6,7 @@ This checklist tracks the production path from the current review-ready MCP prof
 
 ## Pre-release
 
+- [ ] GitHub `GET /repos/Zennay/zSSH/branches/main` reports `protected: true`; the automated readiness/release probe enforces this live prerequisite
 - [ ] `main` rejects direct writes for normal user/automation paths, requires pull-request-based changes plus the zSSH CI/repository-hygiene check, and a controlled direct-push attempt has been rejected; only then set `ZSSH_MAIN_PROTECTION_VERIFIED=1`
 - [ ] Stable public HTTPS MCP endpoint configured
 - [ ] Published `/privacy` page discloses data categories, purposes, recipients, retention, and user controls for the actual production data flow
@@ -32,7 +33,7 @@ Before attempting provider writes or the final production probe, run the manual 
 
 Production submission is dispatched only from canonical `main`. Before the production environment is entered, the release gate verifies through GitHub's commit→pull-request association that the exact `GITHUB_SHA` is the merge commit of a closed, merged PR. Direct commits to `main` therefore cannot become production submission candidates. The separate `Canonical main provenance` workflow also checks every push to `main`.
 
-That post-write provenance check is defense in depth, not a substitute for preventive repository policy. `ZSSH_MAIN_PROTECTION_VERIFIED=1` may only be set after branch protection or an active branch ruleset requires PR-based changes, requires the zSSH CI/repository-hygiene check, does not leave a normal direct-push bypass path, and a controlled negative test has confirmed a direct write to `main` is rejected.
+That post-write provenance check is defense in depth, not a substitute for preventive repository policy. The release workflow additionally queries GitHub's branch metadata and refuses production dispatch unless `main` is live-reported as protected. `ZSSH_MAIN_PROTECTION_VERIFIED=1` may only be set after that protection requires PR-based changes, requires the zSSH CI/repository-hygiene check, does not leave a normal direct-push bypass path, and a controlled negative test has confirmed a direct write to `main` is rejected.
 
 Do not use commit-message-triggered production probes. Use the `workflow_dispatch` action on the exact reviewed `main` revision.
 
