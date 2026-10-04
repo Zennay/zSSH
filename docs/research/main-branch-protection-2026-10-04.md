@@ -120,3 +120,9 @@ Only after that proof succeeds can the workflow enter the protected `repository-
 
 This makes repository protection self-healing once the protected admin credential exists: a canonical merged change can apply/re-apply the expected policy without a separate UI dispatch. If the environment or credential is absent, the mutation job fails closed and no weaker fallback is used. The workflow still has no `contents: write`, does not use `git push`, and does not mark `ZSSH_MAIN_PROTECTION_VERIFIED=1` without the separate rejected-direct-write evidence required by issue #100.
 
+## Canonical merged-event activation proof
+
+PR #120 made the guarded main-protection workflow's merged-PR trigger canonical. Because a workflow cannot be assumed to trigger itself from an event definition that only becomes part of the default branch during that same merge, the next canonical merged PR is used as the first deterministic activation event.
+
+This documentation-only evidence change is intentionally small: its merge should run the normal zSSH CI/release gates and then exercise the already-canonical `pull_request: closed` governance path. Success is measured independently through GitHub's live `main.protected` metadata and, where available, the resulting workflow run. If the protected repository-admin credential is absent, the lane must fail closed and `main` must remain unprotected.
+
