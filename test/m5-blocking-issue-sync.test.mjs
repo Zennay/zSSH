@@ -83,6 +83,32 @@ test("renders only secret-safe blocking metadata", () => {
   assert.match(result.body, new RegExp(sha));
 });
 
+
+test("renders immutable readiness workflow provenance when a run ID is supplied", () => {
+  const runId = "37299999999";
+  const result = renderM5BlockingIssue({
+    readiness: receipt(),
+    canonicalSha: sha,
+    workflowRunId: runId,
+  });
+
+  assert.match(
+    result.body,
+    new RegExp(`Readiness run:.*https://github\\.com/Zennay/zSSH/actions/runs/${runId}`),
+  );
+});
+
+test("rejects malformed readiness workflow run IDs", () => {
+  assert.throws(
+    () => renderM5BlockingIssue({
+      readiness: receipt(),
+      canonicalSha: sha,
+      workflowRunId: "not-a-run",
+    }),
+    /workflowRunId must be a positive GitHub Actions run ID/,
+  );
+});
+
 test("links later external M5 gates to immutable canonical runbooks", () => {
   const cases = [
     ["public_ingress", "docs/research/public-caddy-promotion-2026-10-04.md"],
@@ -194,6 +220,7 @@ test("sync uses the token only as an Authorization header", async () => {
     token,
     readiness: receipt(),
     canonicalSha: sha,
+    workflowRunId: "37299999999",
     fetchImpl: async (url, init) => {
       request = { url: String(url), init };
       return {
@@ -211,6 +238,8 @@ test("sync uses the token only as an Authorization header", async () => {
   assert.doesNotMatch(request.init.body, new RegExp(token));
   assert.match(request.init.body, /M5 active gate: dns_publication/);
   assert.match(request.init.body, /Cloudflare production DNS publication/);
+  assert.match(request.init.body, /actions\\/runs\\/37299999999/);
+  assert.equal(result.workflow_run_id, "37299999999");
 });
 
 test("protected readiness audit passes Cloudflare account ID into the M5 classifier", () => {
