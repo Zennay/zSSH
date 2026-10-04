@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
+import { isIP } from "node:net";
 
 function fail(message) {
   throw new Error(message);
@@ -44,7 +45,8 @@ function validatePublicHttpsUrl(raw, {
   if (url.username || url.password) fail(`${name} must not contain URL credentials`);
   if (!allowQuery && (url.search || url.hash)) fail(`${name} must not contain query parameters or fragments`);
   if (url.hash) fail(`${name} must not contain a fragment`);
-  if (requirePublicHostname && isNonPublicHostname(url.hostname)) {
+  const normalizedHostname = url.hostname.replace(/^\[|\]$/g, "");
+  if (requirePublicHostname && (isIP(normalizedHostname) !== 0 || isNonPublicHostname(normalizedHostname))) {
     fail(`${name} must use a public hostname`);
   }
   return url;
