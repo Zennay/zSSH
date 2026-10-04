@@ -1,0 +1,38 @@
+name: Close redundant zSSH PRs
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: zssh-redundant-pr-sweep
+  cancel-in-progress: false
+
+jobs:
+  sweep:
+    name: Close same-repo PRs with no effective diff
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22.23.3
+      - name: Verify reviewed Node/npm toolchain
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test "$(node --version)" = "v22.23.3"
+          test "$(npm --version)" = "10.9.9"
+      - name: Close redundant same-repo pull requests
+        env:
+          ZSSH_GITHUB_TOKEN: ${{ github.token }}
+          ZSSH_REPOSITORY: ${{ github.repository }}
+          ZSSH_BASE_BRANCH: main
+        run: node scripts/close-redundant-prs.mjs
