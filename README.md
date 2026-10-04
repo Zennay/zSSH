@@ -60,7 +60,7 @@ Requires Node 20+.
 ```bash
 git clone https://github.com/Zennay/zSSH.git
 cd zSSH
-npm install
+npm ci
 cp .env.example .env
 # export values from .env in your preferred way
 npm test

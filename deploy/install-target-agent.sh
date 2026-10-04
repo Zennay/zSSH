@@ -133,7 +133,7 @@ if [[ ! -d "$RELEASE" ]]; then
   # it may contain untracked .env files, local credentials, or other secrets.
   git -C "$SOURCE_ROOT" archive --format=tar "$REPO_SHA" | tar -x -C "$STAGE"
   rm -rf "$STAGE/node_modules" "$STAGE/data"
-  "$NPM_BIN" install --prefix "$STAGE" --omit=dev --ignore-scripts --no-audit --no-fund
+  "$NPM_BIN" ci --prefix "$STAGE" --omit=dev --ignore-scripts --no-audit --no-fund
   "$NPM_BIN" test --prefix "$STAGE"
   mv "$STAGE" "$RELEASE"
 fi
