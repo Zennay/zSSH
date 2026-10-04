@@ -124,12 +124,26 @@ test("unexpected successful direct write fails critically rather than producing 
   );
 });
 
-test("workflow gates the proof behind canonical main, public protection, and repository-governance secrets", () => {
+test("workflow gates the proof and scopes governance secrets to the proof step", () => {
   assert.match(workflow, /test "\$GITHUB_REF" = "refs\/heads\/main"/);
   assert.match(workflow, /check-main-provenance\.mjs/);
   assert.match(workflow, /--public-status --require-protected --require-current-sha/);
   assert.match(workflow, /environment: repository-governance/);
-  assert.match(workflow, /ZSSH_MAIN_PROTECTION_CANARY_TOKEN: \$\{\{ secrets\.ZSSH_MAIN_PROTECTION_CANARY_TOKEN \}\}/);
+
+  const proofJob = workflow.split("  negative-proof:")[1];
+  assert.ok(proofJob, "missing negative-proof job");
+  const jobHeader = proofJob.split("    steps:")[0];
+  assert.doesNotMatch(jobHeader, /ZSSH_REPO_ADMIN_TOKEN/);
+  assert.doesNotMatch(jobHeader, /ZSSH_MAIN_PROTECTION_CANARY_TOKEN/);
+  assert.doesNotMatch(jobHeader, /ZSSH_MAIN_PROTECTION_PROOF_CONFIRM/);
+
+  const proofTail = workflow.split("      - name: Attempt controlled direct write and require policy rejection")[1];
+  assert.ok(proofTail, "missing controlled proof step");
+  const proofStep = proofTail.split("\n      - name:")[0];
+  assert.match(proofStep, /ZSSH_REPO_ADMIN_TOKEN: \$\{\{ secrets\.ZSSH_REPO_ADMIN_TOKEN \}\}/);
+  assert.match(proofStep, /ZSSH_MAIN_PROTECTION_CANARY_TOKEN: \$\{\{ secrets\.ZSSH_MAIN_PROTECTION_CANARY_TOKEN \}\}/);
+  assert.match(proofStep, /ZSSH_MAIN_PROTECTION_PROOF_CONFIRM: \$\{\{ inputs\.confirmation \}\}/);
+
   assert.doesNotMatch(workflow, /contents: write/);
   assert.doesNotMatch(workflow, /self-hosted/);
 });
