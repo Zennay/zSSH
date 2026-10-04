@@ -7,6 +7,10 @@ const lockPath = new URL("../package-lock.json", import.meta.url);
 const pkg = JSON.parse(readFileSync(packagePath, "utf8"));
 const lock = JSON.parse(readFileSync(lockPath, "utf8"));
 
+test("release package metadata pins the reviewed npm toolchain", () => {
+  assert.equal(pkg.packageManager, "npm@10.9.9");
+});
+
 test("production runtime dependencies use exact semver versions", () => {
   const dependencies = Object.entries(pkg.dependencies || {});
   assert.ok(dependencies.length > 0, "expected at least one production runtime dependency");
@@ -58,6 +62,8 @@ test("release-critical installs use the committed lockfile via npm ci", () => {
   ];
   for (const relative of workflowPaths) {
     const content = readFileSync(new URL(relative, import.meta.url), "utf8");
+    assert.match(content, /test "\$\(node --version\)" = "v22\.23\.3"/);
+    assert.match(content, /test "\$\(npm --version\)" = "10\.9\.9"/);
     assert.match(content, /npm ci --ignore-scripts --no-audit --no-fund/);
     assert.doesNotMatch(content, /npm install --ignore-scripts --no-audit --no-fund/);
   }
