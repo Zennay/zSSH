@@ -1,0 +1,76 @@
+name: Recover zCloud runner via unique zSSH lane
+
+on:
+  push:
+    branches:
+      - ops/zcloud-runner-recovery-unique-20261004
+    paths:
+      - ".github/workflows/zcloud-runner-recovery-unique-20261004.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: zcloud-runner-recovery-unique-20261004
+  cancel-in-progress: true
+
+jobs:
+  recover:
+    runs-on: self-hosted
+    timeout-minutes: 6
+    env:
+      ZCLOUD_RUNNER_SERVICE: actions.runner.Zennay-zCloud.zcloud-vps-1.service
+    steps:
+      - name: Recover only idle zCloud Actions listener
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(hostname)" = "vps-bb300bba"
+          test "$(id -un)" = "ubuntu"
+          if [[ "${RUNNER_NAME:-}" == "zcloud-vps-1" ]]; then
+            echo "Refusing zCloud runner self-recovery" >&2
+            exit 1
+          fi
+
+          sudo -n flock -w 45 /run/zcloud-runner-recovery.lock bash -s <<'RECOVER'
+          set -euo pipefail
+          service="actions.runner.Zennay-zCloud.zcloud-vps-1.service"
+          pre_state="$(systemctl is-active "$service" || true)"
+          pre_pid="$(systemctl show "$service" -p MainPID --value || true)"
+          cgroup="$(systemctl show "$service" -p ControlGroup --value || true)"
+          worker_before=0
+          if [[ -n "$cgroup" && -r "/sys/fs/cgroup${cgroup}/cgroup.procs" ]]; then
+            while read -r pid; do
+              [[ -r "/proc/$pid/cmdline" ]] || continue
+              cmd="$(tr '\0' ' ' < "/proc/$pid/cmdline")"
+              if [[ "$cmd" == *"Runner.Worker"* ]]; then
+                worker_before=1
+                break
+              fi
+            done < "/sys/fs/cgroup${cgroup}/cgroup.procs"
+          fi
+          echo "ZCLOUD_RUNNER_PRE state=$pre_state pid=$pre_pid worker=$worker_before cgroup=$cgroup"
+
+          if [[ "$worker_before" -eq 1 ]]; then
+            action=preserve-active-worker
+          else
+            systemctl reset-failed "$service" || true
+            systemctl restart "$service"
+            action=restart-idle-listener
+          fi
+
+          for _ in $(seq 1 30); do
+            state="$(systemctl is-active "$service" || true)"
+            pid="$(systemctl show "$service" -p MainPID --value || true)"
+            if [[ "$state" == "active" && "$pid" =~ ^[1-9][0-9]*$ && -r "/proc/$pid/cmdline" ]]; then
+              cmd="$(tr '\0' ' ' < "/proc/$pid/cmdline")"
+              if [[ "$cmd" == *"Runner.Listener"* || "$cmd" == *"runsvc.sh"* || "$worker_before" -eq 1 ]]; then
+                echo "ZCLOUD_RUNNER_RECOVERY action=$action state=$state pid=$pid"
+                exit 0
+              fi
+            fi
+            sleep 2
+          done
+          echo "zCloud listener failed bounded recovery" >&2
+          exit 1
+          RECOVER
