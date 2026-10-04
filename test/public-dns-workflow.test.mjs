@@ -222,7 +222,7 @@ test("operator DNS cutover runbook stays aligned with the guarded workflow contr
     /GitHub \`openai-production\` environment[\s\S]*protected secret \`CLOUDFLARE_API_TOKEN\`/,
   );
   assert.match(runbook, /My Profile > API Tokens/);
-  assert.match(runbook, /user-owned API token/i);
+  assert.match(runbook, /user-owned tokens/i);
   assert.match(runbook, /Zone > DNS > Edit[\s\S]*Zone > Zone > Read/);
   assert.match(runbook, /CLOUDFLARE_ACCOUNT_ID/);
   assert.match(runbook, /\/accounts\/\{account_id\}\/tokens\/verify/);
