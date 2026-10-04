@@ -47,3 +47,11 @@ test("reviewed marker can trigger the exact production DNS publish after main is
 test("manual DNS publication still requires explicit confirmation", () => {
   assert.match(workflow, /if: github\.event_name == 'workflow_dispatch'[\s\S]*PUBLISH_ZSSH_PRODUCTION_DNS/);
 });
+
+test("manual production DNS dispatch cannot override the canonical hostname or IPv4", () => {
+  const dispatchBlock = workflow.match(/  workflow_dispatch:[\s\S]*?\n\npermissions:/)?.[0] || "";
+  assert.doesNotMatch(dispatchBlock, /public_base_url:/);
+  assert.doesNotMatch(dispatchBlock, /ipv4:/);
+  assert.match(workflow, /ZSSH_PUBLIC_BASE_URL: https:\/\/zssh\.cheapgpt\.shop/);
+  assert.match(workflow, /ZSSH_PUBLIC_IPV4: 198\.244\.191\.182/);
+});
