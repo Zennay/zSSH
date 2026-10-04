@@ -113,6 +113,7 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           ZSSH_DNS_EXPECTED_CURRENT_IPV4: ${{ vars.ZSSH_DNS_EXPECTED_CURRENT_IPV4 }}
           ZSSH_DNS_EXPECTED_CURRENT_STATE_SHA256: ${{ steps.dns_plan.outputs.current_state_sha256 }}
+          ZSSH_DNS_EXPECTED_PLAN_ACTION: ${{ steps.dns_plan.outputs.plan_action }}
         shell: bash
         run: |
           set -Eeuo pipefail
