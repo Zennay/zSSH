@@ -445,11 +445,11 @@ test("never serializes protected values", () => {
 test("protected readiness workflow follows canonical main pushes and keeps manual dispatch", () => {
   assert.match(
     readinessWorkflow,
-    /on:\n  workflow_dispatch:\n  push:\n    branches:\n      - main/,
+    /on:\n  workflow_dispatch:\n  workflow_run:\n    workflows:\n      - zSSH production DNS publish\n    types:\n      - completed\n  push:\n    branches:\n      - main/,
   );
   assert.match(
     readinessWorkflow,
-    /provenance:\n    name: Canonical main provenance\n    if: github\.event_name == 'workflow_dispatch' \|\| github\.event_name == 'push'/,
+    /provenance:\n    name: Canonical main provenance\n    if: github\.event_name != 'workflow_run' \|\| \(github\.event\.workflow_run\.conclusion == 'success' && github\.event\.workflow_run\.head_branch == 'main'\)/,
   );
   assert.doesNotMatch(readinessWorkflow, /Bind merged PR event to canonical main SHA/);
   assert.match(
