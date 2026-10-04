@@ -14,8 +14,12 @@ const forbiddenNames = [
 
 const forbiddenContent = [
   {
-    pattern: /\b(?:Zennay\/)?(?:Ftmo|zCloud|HaxLab|RaiseAI)\b/i,
-    reason: "workflow content must remain scoped to zSSH rather than operating another portfolio project",
+    pattern: /\b(?:repos\/Zennay\/|github\.com\/Zennay\/)(?:Ftmo|zCloud|HaxLab|RaiseAI)\b/i,
+    reason: "workflow content must not operate another portfolio repository",
+  },
+  {
+    pattern: /\b(?:FTMO|HAXLAB|RAISEAI)_[A-Z0-9_]+\b/,
+    reason: "workflow content contains another project's operational environment contract",
   },
   {
     pattern: /\bcontents\s*:\s*write\b/i,
