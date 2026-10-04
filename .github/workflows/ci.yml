@@ -36,6 +36,7 @@ jobs:
         run: |
           node --check server.mjs
           node --check agent-transport.mjs
+          node --check agent-pairing-control.mjs
           node --check agent-runtime.mjs
           node --check agent.mjs
           node --check public-site.mjs
@@ -133,6 +134,9 @@ jobs:
 
       - name: Exercise OAuth target pairing and revocation
         run: node pairing-canary.mjs
+
+      - name: Exercise signed target-local pairing control
+        run: node agent-pairing-canary.mjs
 
       - name: Validate OpenAI submission contract canary
         run: python3 scripts/openai-submission-contract-canary.py
