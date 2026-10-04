@@ -88,6 +88,12 @@ export function assessMainProtection(
   };
 }
 
+export function resolveExpectedCurrentSha(env = process.env) {
+  const explicit = String(env?.ZSSH_EXPECTED_CURRENT_SHA || "").trim();
+  if (explicit) return explicit;
+  return String(env?.GITHUB_SHA || "").trim();
+}
+
 export function assertCurrentBranchSha(branchSha, workflowSha) {
   const normalizedBranchSha = String(branchSha || "").trim();
   const normalizedWorkflowSha = String(workflowSha || "").trim();
@@ -339,7 +345,7 @@ async function main() {
       throw new Error(`branch ${result.branch} is not reported as protected by GitHub`);
     }
     if (args.has("--require-current-sha")) {
-      assertCurrentBranchSha(result.commit_sha, process.env.GITHUB_SHA);
+      assertCurrentBranchSha(result.commit_sha, resolveExpectedCurrentSha());
     }
     return;
   }
