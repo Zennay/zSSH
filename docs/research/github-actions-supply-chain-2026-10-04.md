@@ -4,7 +4,9 @@
 
 - GitHub Secure use reference: https://docs.github.com/en/actions/reference/security/secure-use
 - GitHub repository Actions settings: https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/enabling-features-for-your-repository/managing-github-actions-settings-for-a-repository
-- actions/checkout v7.0.1 release: https://github.com/actions/checkout/releases/tag/v7.0.1\n- actions/setup-node v7.0.0 release: https://github.com/actions/setup-node/releases/tag/v7.0.0\n- actions/upload-artifact v7.0.1 release: https://github.com/actions/upload-artifact/releases/tag/v7.0.1
+- actions/checkout v7.0.1 release: https://github.com/actions/checkout/releases/tag/v7.0.1
+- actions/setup-node v7.0.0 release: https://github.com/actions/setup-node/releases/tag/v7.0.0
+- actions/upload-artifact v7.0.1 release: https://github.com/actions/upload-artifact/releases/tag/v7.0.1
 
 GitHub documents full-length commit-SHA pinning as the immutable way to reference an action and exposes a repository policy that can require full-length SHA pins.
 
