@@ -236,7 +236,7 @@ test("protected readiness audit grants issue write only to the audit job and syn
 test("protected readiness audit follows canonical main and successful gate completions", () => {
   assert.match(
     workflow,
-    /on:\n  workflow_dispatch:\n  workflow_run:\n    workflows:\n      - zSSH production DNS publish\n      - zSSH public ingress external preflight\n      - Auth0 production readiness\n    types:\n      - completed\n  push:\n    branches:\n      - main/,
+    /on:\n  workflow_dispatch:\n  schedule:\n    - cron: "17 \\* \\* \\* \\*"\n  workflow_run:\n    workflows:\n      - zSSH production DNS publish\n      - zSSH public ingress external preflight\n      - Auth0 production readiness\n    types:\n      - completed\n  push:\n    branches:\n      - main/,
   );
   assert.doesNotMatch(workflow, /pull_request:\n    types:\n      - closed/);
   assert.match(
