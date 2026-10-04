@@ -20,6 +20,10 @@ test("public address guard rejects private, documentation, benchmark, and link-l
     "fd00::1",
     "fe80::1",
     "2001:db8::1",
+    "::ffff:127.0.0.1",
+    "::ffff:7f00:1",
+    "::ffff:c0a8:101",
+    "::8.8.8.8",
   ]) {
     assert.equal(isPublicRoutableAddress(address), false, address);
   }
@@ -89,6 +93,16 @@ test("external ingress preflight fails closed when DNS resolves to a non-public 
   await assert.rejects(
     () => checkPublicIngress("https://mcp.zssh.dev/mcp", {
       lookupImpl: async () => [{ address: "192.168.1.20", family: 4 }],
+      fetchImpl: async () => { throw new Error("fetch must not run"); },
+    }),
+    /publicly routable/,
+  );
+});
+
+test("external ingress preflight rejects IPv4-mapped IPv6 DNS answers before fetch", async () => {
+  await assert.rejects(
+    () => checkPublicIngress("https://mcp.zssh.dev/mcp", {
+      lookupImpl: async () => [{ address: "::ffff:7f00:1", family: 6 }],
       fetchImpl: async () => { throw new Error("fetch must not run"); },
     }),
     /publicly routable/,
