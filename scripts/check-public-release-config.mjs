@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import net from "node:net";
 import path from "node:path";
 import process from "node:process";
 import { validatePublicMcpUrl } from "../release-contract.mjs";
@@ -9,6 +10,8 @@ const REQUIRED_RELEASE_CONFIG = [
   "ZSSH_PLUGIN_MCP_URL",
   "ZSSH_PLUGIN_DEMO_RECORDING_URL",
   "ZSSH_REVIEW_ACCESS_TOKEN",
+  "ZSSH_REVIEW_LOGIN_URL",
+  "ZSSH_REVIEW_CREDENTIALS_VERIFIED",
   "OPENAI_APPS_CHALLENGE_TOKEN",
   "ZSSH_REVIEW_FILE",
   "ZSSH_REVIEW_WRITE_FILE",
@@ -49,6 +52,20 @@ function requireHttpsUrl(env, name) {
   return url;
 }
 
+function requirePublicHttpsUrl(env, name) {
+  const url = requireHttpsUrl(env, name);
+  const hostname = url.hostname.replace(/^\[|\]$/g, "").toLowerCase();
+  if (
+    net.isIP(hostname) ||
+    hostname === "localhost" ||
+    hostname.endsWith(".local") ||
+    !hostname.includes(".")
+  ) {
+    fail(`${name} must use a public DNS hostname reachable by OpenAI reviewers`);
+  }
+  return url;
+}
+
 export function validatePublicReleaseConfig(env = process.env) {
   const mcpUrl = validatePublicMcpUrl(
     requireValue(env, "ZSSH_PLUGIN_MCP_URL"),
@@ -56,6 +73,11 @@ export function validatePublicReleaseConfig(env = process.env) {
   );
   const demoRecordingUrl = requireHttpsUrl(env, "ZSSH_PLUGIN_DEMO_RECORDING_URL");
   const accessToken = requireValue(env, "ZSSH_REVIEW_ACCESS_TOKEN", { minLength: 20 });
+  const reviewLoginUrl = requirePublicHttpsUrl(env, "ZSSH_REVIEW_LOGIN_URL");
+  const reviewCredentialsVerified = requireValue(env, "ZSSH_REVIEW_CREDENTIALS_VERIFIED");
+  if (reviewCredentialsVerified !== "1") {
+    fail("ZSSH_REVIEW_CREDENTIALS_VERIFIED must be exactly 1 after the dedicated reviewer login has been tested without MFA, email/SMS confirmation, magic links, or private-network access");
+  }
   const challengeToken = requireValue(env, "OPENAI_APPS_CHALLENGE_TOKEN", { minLength: 16 });
   const reviewFile = requireValue(env, "ZSSH_REVIEW_FILE");
   const writeFile = requireValue(env, "ZSSH_REVIEW_WRITE_FILE");
@@ -72,6 +94,9 @@ export function validatePublicReleaseConfig(env = process.env) {
     endpoint_origin: mcpUrl.origin,
     endpoint_path: mcpUrl.pathname,
     demo_recording_origin: demoRecordingUrl.origin,
+    review_login_origin: reviewLoginUrl.origin,
+    review_login_path: reviewLoginUrl.pathname,
+    review_credentials_verified: true,
     review_file_name: path.basename(reviewFile),
     write_file_name: path.basename(writeFile),
     access_token_present: accessToken.length > 0,
@@ -97,6 +122,8 @@ export function runSelfTest() {
     ZSSH_PLUGIN_MCP_URL: "https://mcp.zssh.dev/mcp",
     ZSSH_PLUGIN_DEMO_RECORDING_URL: "https://review.example/zssh-demo",
     ZSSH_REVIEW_ACCESS_TOKEN: "review-token-0123456789abcdef",
+    ZSSH_REVIEW_LOGIN_URL: "https://auth.zssh.dev/login",
+    ZSSH_REVIEW_CREDENTIALS_VERIFIED: "1",
     OPENAI_APPS_CHALLENGE_TOKEN: "challenge-0123456789abcdef",
     ZSSH_REVIEW_FILE: "/srv/zssh-review/sample.txt",
     ZSSH_REVIEW_WRITE_FILE: "/srv/zssh-review/output.txt"
@@ -118,6 +145,8 @@ export function runSelfTest() {
   assertThrows(() => validatePublicReleaseConfig({ ...good, ZSSH_PLUGIN_DEMO_RECORDING_URL: "http://review.example/demo" }), /HTTPS URL/);
   assertThrows(() => validatePublicReleaseConfig({ ...good, ZSSH_REVIEW_WRITE_FILE: good.ZSSH_REVIEW_FILE }), /different files/);
   assertThrows(() => validatePublicReleaseConfig({ ...good, ZSSH_REVIEW_ACCESS_TOKEN: "short" }), /at least 20/);
+  assertThrows(() => validatePublicReleaseConfig({ ...good, ZSSH_REVIEW_LOGIN_URL: "https://127.0.0.1/login" }), /public DNS hostname/);
+  assertThrows(() => validatePublicReleaseConfig({ ...good, ZSSH_REVIEW_CREDENTIALS_VERIFIED: "0" }), /must be exactly 1/);
 
   console.log("PUBLIC_RELEASE_PREFLIGHT_SELF_TEST_GREEN");
 }
