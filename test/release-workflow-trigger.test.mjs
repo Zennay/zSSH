@@ -44,6 +44,15 @@ test("release-critical pull_request and push path filters stay in parity", () =>
     "post-merge push must rerun the release gate for every release-critical path guarded on pull requests",
   );
 
+  assert.ok(
+    pullRequestPaths.includes(".github/workflows/**"),
+    "pull_request release gate must cover every active GitHub Actions workflow",
+  );
+  assert.ok(
+    pushPaths.includes(".github/workflows/**"),
+    "push release gate must cover every active GitHub Actions workflow",
+  );
+
   for (const provenancePath of [
     "scripts/check-main-provenance.mjs",
     "scripts/check-main-protection.mjs",
@@ -166,4 +175,23 @@ test("manual Auth0 production preflight is bound to exact current protected main
     auth0Workflow,
     /Require canonical protected-main manual Auth0 preflight[\s\S]*check-main-protection\.mjs --public-status --require-protected --require-current-sha/,
   );
+});
+
+
+test("Auth0 management credential is unavailable before canonical provenance", () => {
+  const jobHeader = auth0Workflow.split("    steps:")[0];
+  assert.doesNotMatch(jobHeader, /AUTH0_MANAGEMENT_API_TOKEN/);
+
+  const validationTail = auth0Workflow.split("      - name: Validate Auth0 tenant, API and DCR grant")[1];
+  assert.ok(validationTail, "missing Auth0 provider validation step");
+  const validationStep = validationTail.split("\n      - name:")[0];
+  assert.match(
+    validationStep,
+    /AUTH0_MANAGEMENT_API_TOKEN: \$\{\{ secrets\.AUTH0_MANAGEMENT_API_TOKEN \}\}/,
+  );
+
+  const reviewedTail = auth0Workflow.split("      - name: Require reviewed protected-main Auth0 activation")[1];
+  assert.ok(reviewedTail, "missing reviewed Auth0 provenance step");
+  const reviewedStep = reviewedTail.split("\n      - name:")[0];
+  assert.doesNotMatch(reviewedStep, /AUTH0_MANAGEMENT_API_TOKEN/);
 });
