@@ -233,6 +233,8 @@ rollback_public_gateway() {
   echo "zSSH public gateway validation failed; restoring previous state" >&2
   if [[ -n "$ENV_BACKUP" && -f "$ENV_BACKUP" ]]; then
     mv -f "$ENV_BACKUP" "$ENV_FILE"
+  else
+    rm -f "$ENV_FILE"
   fi
   if [[ -n "$PREVIOUS" && -d "$PREVIOUS" ]]; then
     local rollback_link="$BASE/.rollback.$"
