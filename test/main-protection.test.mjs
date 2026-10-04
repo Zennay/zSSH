@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   assessMainProtection,
+  inspectBranchProtectionFlag,
+  summarizeBranchMetadata,
   verifyMainProtection,
 } from "../scripts/check-main-protection.mjs";
 
@@ -96,5 +98,70 @@ test("reports an unprotected branch as a hard failure", async () => {
         fetchImpl: async () => response(404, {}),
       }),
     /main is not protected/,
+  );
+});
+
+
+test("summarizes public branch metadata without claiming admin policy details", () => {
+  assert.deepEqual(
+    summarizeBranchMetadata({
+      protected: false,
+      protection: {
+        enabled: false,
+        required_status_checks: {
+          contexts: [],
+          checks: [],
+        },
+      },
+    }),
+    {
+      protected: false,
+      protection_enabled: false,
+      required_status_check_contexts: [],
+    },
+  );
+});
+
+test("reads the ordinary branch endpoint with the Actions token", async () => {
+  const calls = [];
+  const result = await inspectBranchProtectionFlag({
+    repository: "Zennay/zSSH",
+    token: "actions-token",
+    fetchImpl: async (url, options) => {
+      calls.push({ url, options });
+      return response(200, {
+        name: "main",
+        protected: true,
+        protection: {
+          enabled: true,
+          required_status_checks: {
+            contexts: ["test"],
+            checks: [],
+          },
+        },
+      });
+    },
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.protected, true);
+  assert.equal(result.source, "branch-metadata");
+  assert.deepEqual(result.required_status_check_contexts, ["test"]);
+  assert.equal(JSON.stringify(result).includes("actions-token"), false);
+  assert.equal(
+    calls[0].url,
+    "https://api.github.com/repos/Zennay/zSSH/branches/main",
+  );
+});
+
+test("public branch status fails closed when metadata is unavailable", async () => {
+  await assert.rejects(
+    () =>
+      inspectBranchProtectionFlag({
+        repository: "Zennay/zSSH",
+        token: "token",
+        fetchImpl: async () => response(403, {}),
+      }),
+    /HTTP 403/,
   );
 });

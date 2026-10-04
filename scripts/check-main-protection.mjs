@@ -60,6 +60,65 @@ export function assessMainProtection(
   };
 }
 
+export function summarizeBranchMetadata(branch) {
+  const contexts = [
+    ...(Array.isArray(branch?.protection?.required_status_checks?.contexts)
+      ? branch.protection.required_status_checks.contexts
+      : []),
+    ...(Array.isArray(branch?.protection?.required_status_checks?.checks)
+      ? branch.protection.required_status_checks.checks.map(check => check?.context).filter(Boolean)
+      : []),
+  ];
+
+  return {
+    protected: branch?.protected === true,
+    protection_enabled: branch?.protection?.enabled === true,
+    required_status_check_contexts: [...new Set(contexts.map(String))].sort(),
+  };
+}
+
+export async function inspectBranchProtectionFlag({
+  repository,
+  token = "",
+  branch = "main",
+  apiUrl = "https://api.github.com",
+  fetchImpl = fetch,
+}) {
+  if (!/^[^/]+\/[^/]+$/.test(String(repository || ""))) {
+    throw new Error("GITHUB_REPOSITORY must be owner/name");
+  }
+  if (!branch) {
+    throw new Error("branch must be non-empty");
+  }
+
+  const headers = {
+    Accept: "application/vnd.github+json",
+    "X-GitHub-Api-Version": API_VERSION,
+    "User-Agent": "zssh-main-protection-status",
+  };
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  const response = await fetchImpl(
+    `${apiUrl.replace(/\/$/, "")}/repos/${repository}/branches/${encodeURIComponent(branch)}`,
+    { headers },
+  );
+  if (!response.ok) {
+    throw new Error(
+      `GitHub branch metadata lookup failed with HTTP ${response.status}`,
+    );
+  }
+
+  const metadata = await response.json();
+  return {
+    schema_version: 1,
+    ok: metadata?.protected === true,
+    repository,
+    branch,
+    source: "branch-metadata",
+    ...summarizeBranchMetadata(metadata),
+  };
+}
+
 export async function verifyMainProtection({
   repository,
   token,
@@ -115,12 +174,26 @@ export async function verifyMainProtection({
 }
 
 async function main() {
-  const result = await verifyMainProtection({
+  const args = new Set(process.argv.slice(2));
+  const common = {
     repository: process.env.GITHUB_REPOSITORY,
-    token: process.env.GITHUB_TOKEN || process.env.GH_TOKEN,
+    token: process.env.GITHUB_TOKEN || process.env.GH_TOKEN || "",
     branch: process.env.ZSSH_PROTECTED_BRANCH || "main",
-    requiredStatusCheck: process.env.ZSSH_REQUIRED_STATUS_CHECK || "test",
     apiUrl: process.env.GITHUB_API_URL || "https://api.github.com",
+  };
+
+  if (args.has("--public-status")) {
+    const result = await inspectBranchProtectionFlag(common);
+    console.log("ZSSH_MAIN_PROTECTION_STATUS", JSON.stringify(result));
+    if (args.has("--require-protected") && !result.protected) {
+      throw new Error(`branch ${result.branch} is not reported as protected by GitHub`);
+    }
+    return;
+  }
+
+  const result = await verifyMainProtection({
+    ...common,
+    requiredStatusCheck: process.env.ZSSH_REQUIRED_STATUS_CHECK || "test",
   });
   console.log("ZSSH_MAIN_PROTECTION_GREEN", JSON.stringify(result));
 }

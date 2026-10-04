@@ -44,7 +44,9 @@ test("release-critical pull_request and push path filters stay in parity", () =>
 
   for (const provenancePath of [
     "scripts/check-main-provenance.mjs",
+    "scripts/check-main-protection.mjs",
     "test/main-provenance.test.mjs",
+    "test/main-protection.test.mjs",
     "test/release-workflow-trigger.test.mjs",
   ]) {
     assert.ok(pushPaths.includes(provenancePath), `push trigger must include ${provenancePath}`);
@@ -83,6 +85,14 @@ test("release-critical pull_request and push path filters stay in parity", () =>
     assert.ok(pullRequestPaths.includes(runtimePath), `pull_request trigger must include release-critical runtime path ${runtimePath}`);
     assert.ok(pushPaths.includes(runtimePath), `push trigger must include release-critical runtime path ${runtimePath}`);
   }
+});
+
+
+test("final production release requires GitHub to report main protected", () => {
+  assert.match(
+    workflow,
+    /provenance:[\s\S]*Require GitHub to report main protected[\s\S]*check-main-protection\.mjs --public-status --require-protected[\s\S]*production:/,
+  );
 });
 
 

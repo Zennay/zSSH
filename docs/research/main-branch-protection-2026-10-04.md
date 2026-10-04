@@ -14,6 +14,8 @@ GitHub issue #100 tracks preventive repository enforcement.
 - https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches/managing-a-branch-protection-rule
 - https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/creating-rulesets-for-a-repository
 - https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/available-rules-for-rulesets
+- https://docs.github.com/en/rest/branches/branches
+- https://docs.github.com/en/rest/branches/branch-protection?apiVersion=2022-11-28
 
 Current GitHub behavior relevant to zSSH:
 - branch protection can require pull requests and required status checks before changes reach a protected branch;
@@ -23,9 +25,9 @@ Current GitHub behavior relevant to zSSH:
 
 ## Live repository observation
 
-The repository rulesets collection currently returns an empty list. The connected GitHub integration cannot read the classic branch-protection endpoint because it lacks repository-administration access, so an empty ruleset collection must **not** be interpreted as proof that classic branch protection is absent or present.
+The repository rulesets collection currently returns an empty list. The connected GitHub integration cannot read the detailed classic branch-protection endpoint because that endpoint requires repository-administration read permission.
 
-The release gate therefore does not fabricate automatic proof from incomplete API visibility.
+GitHub's ordinary `GET /repos/{owner}/{repo}/branches/{branch}` response also exposes a `protected` boolean indicating whether branch protection or a ruleset applies. On 2026-10-04, the live `main` response for zSSH returned `protected: false`, `protection.enabled: false`, and no required status checks at canonical commit `31817ee893f7a2df0f30fe583f08a49b91c572bb`. That removes the earlier ambiguity: preventive protection is currently absent.
 
 ## Engineering decision
 
@@ -62,3 +64,12 @@ The verifier reads the live `main` protection state and only returns green when 
 The command does not serialize the token into evidence. A 404, inaccessible protection endpoint, missing required rule, missing required check, disabled admin enforcement, or configured bypass actor fails closed.
 
 This verifier intentionally does **not** replace the acceptance criterion for a controlled rejected-direct-push test. After the setting is applied, capture both the green verifier output and the rejected write proof before setting `ZSSH_MAIN_PROTECTION_VERIFIED=1`.
+
+
+## Metadata-only release binding
+
+The deep `repo:main-protection:verify` command remains the authoritative check for PR requirements, required `test` status, administrator enforcement, and explicit bypass actors; it needs branch-protection read permission.
+
+For ordinary GitHub Actions, `repo:main-protection:status` now uses the non-admin branch metadata endpoint. This mode does not pretend to prove the detailed policy. It proves only the necessary prerequisite that GitHub currently reports `main` as protected.
+
+The protected M5 readiness workflow feeds that live boolean into the repository-governance lane. The final production workflow executes the same metadata check with `--require-protected` before entering the `openai-production` environment. Therefore a stale manual `ZSSH_MAIN_PROTECTION_VERIFIED=1` cannot make a release candidate pass while GitHub currently reports `main` unprotected.

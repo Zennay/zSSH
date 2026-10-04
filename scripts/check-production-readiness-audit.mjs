@@ -16,6 +16,7 @@ import { validateCloudflareZoneId } from "./publish-cloudflare-dns.mjs";
 const PROVIDER_LANES = {
   repository_governance: [
     "ZSSH_MAIN_PROTECTION_VERIFIED",
+    "ZSSH_MAIN_BRANCH_PROTECTED",
   ],
   dns_publication: [
     "CLOUDFLARE_ZONE_ID",
@@ -247,6 +248,7 @@ function validatePortalLane(env) {
 const LANE_VALIDATORS = {
   repository_governance: env => compactIssues([
     validateExactFlag(env, "ZSSH_MAIN_PROTECTION_VERIFIED"),
+    validateExactFlag(env, "ZSSH_MAIN_BRANCH_PROTECTED"),
   ]),
   dns_publication: validateDnsLane,
   auth0_preflight: validateAuth0Lane,
@@ -314,7 +316,7 @@ export function buildProductionReadinessAudit(env = process.env) {
   if (!lanes.repository_governance.ready) {
     nextActions.push({
       lane: "repository_governance",
-      action: "Protect main against direct writes, require PR-based changes plus the zSSH CI/repository-hygiene check, run a controlled rejected-direct-push proof, then set ZSSH_MAIN_PROTECTION_VERIFIED=1.",
+      action: "GitHub must report main as protected, then require PR-based changes plus the zSSH CI/repository-hygiene check, run a controlled rejected-direct-push proof, and only then set ZSSH_MAIN_PROTECTION_VERIFIED=1.",
       missing: lanes.repository_governance.missing,
       invalid: lanes.repository_governance.invalid,
     });
