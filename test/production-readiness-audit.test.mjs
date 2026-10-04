@@ -28,6 +28,7 @@ import { buildProductionReadinessAudit } from "../scripts/check-production-readi
 const complete = {
   CLOUDFLARE_ZONE_ID: "0123456789abcdef0123456789abcdef",
   CLOUDFLARE_API_TOKEN: "placeholder-cf-value",
+  ZSSH_PUBLIC_ORIGIN_STAGE: "ready",
   ZSSH_PLUGIN_MCP_URL: "https://zssh.cheapgpt.shop/mcp",
   ZSSH_PLUGIN_DEMO_RECORDING_URL: "https://review.zssh.dev/zssh-demo",
   ZSSH_REVIEW_ACCESS_TOKEN: "placeholder-review-value",
@@ -97,6 +98,33 @@ test("treats Cloudflare zone ID as an optional legacy override", () => {
   assert.deepEqual(result.lanes.dns_publication.missing, []);
 });
 
+test("keeps DNS as an internal execution gate when credentials exist but public DNS has not converged", () => {
+  const result = buildProductionReadinessAudit({
+    ...complete,
+    ZSSH_PUBLIC_ORIGIN_STAGE: "dns",
+  });
+
+  assert.equal(result.ready.dns_publication, false);
+  assert.deepEqual(result.lanes.dns_publication.missing, []);
+  assert.equal(result.blocking_gate, "dns_publication");
+  assert.equal(result.blocking_action?.gate_kind, "provider_execution");
+  assert.equal(result.blocking_action?.requires_external_input, false);
+  assert.match(result.blocking_action?.action || "", /Run the guarded zSSH production DNS publisher/);
+  assert.deepEqual(result.internal_action_gates, ["dns_publication"]);
+});
+
+test("keeps completed DNS green after the one-time Cloudflare credential is removed", () => {
+  const result = buildProductionReadinessAudit({
+    ...complete,
+    CLOUDFLARE_API_TOKEN: "",
+    ZSSH_PUBLIC_ORIGIN_STAGE: "mcp_auth",
+  });
+
+  assert.equal(result.ready.dns_publication, true);
+  assert.deepEqual(result.lanes.dns_publication.missing, []);
+  assert.notEqual(result.blocking_gate, "dns_publication");
+});
+
 test("derives Auth0 management origin for canonical tenant issuers", () => {
   const result = buildProductionReadinessAudit({
     ...complete,
@@ -127,6 +155,7 @@ test("reports external-input-only when no repository-owned action remains", () =
     ...complete,
     CLOUDFLARE_ZONE_ID: "",
     CLOUDFLARE_API_TOKEN: "",
+    ZSSH_PUBLIC_ORIGIN_STAGE: "dns",
     ZSSH_OAUTH_ISSUER: "",
     AUTH0_MANAGEMENT_BASE_URL: "",
     AUTH0_MANAGEMENT_API_TOKEN: "",
@@ -315,7 +344,7 @@ test("protected readiness workflow proves merged-PR provenance before entering o
   );
   assert.match(
     readinessWorkflow,
-    /audit:\n    name: Classify protected M5 inputs\n    needs: provenance[\s\S]*?    runs-on: ubuntu-latest\n    timeout-minutes: 5\n    environment: openai-production/,
+    /audit:\n    name: Classify protected M5 inputs\n    needs: \[provenance, public_origin\][\s\S]*?    runs-on: ubuntu-latest\n    timeout-minutes: 5\n    environment: openai-production/,
   );
 
   assert.match(
@@ -380,6 +409,14 @@ test("operator docs do not require the retired mutable governance attestation", 
   assert.ok(reviewDoc.includes("Repository governance is derived live from protected main + immutable issue #100 negative-proof evidence."));
 });
 
+
+test("readiness workflow carries live public-origin stage into DNS gate classification", () => {
+  assert.ok(readinessWorkflow.includes("stage: ${{ steps.observe.outputs.stage }}"));
+  assert.ok(readinessWorkflow.includes("id: observe"));
+  assert.ok(readinessWorkflow.includes('echo "stage=$STAGE" >> "$GITHUB_OUTPUT"'));
+  assert.ok(readinessWorkflow.includes("needs: [provenance, public_origin]"));
+  assert.ok(readinessWorkflow.includes("ZSSH_PUBLIC_ORIGIN_STAGE: ${{ needs.public_origin.outputs.stage }}"));
+});
 
 test("readiness workflow summary exposes gate classification for autonomous consumers", () => {
   assert.ok(readinessWorkflow.includes("Execution state: ${result.execution_state}"));
