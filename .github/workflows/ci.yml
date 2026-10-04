@@ -31,6 +31,7 @@ jobs:
           bash -n deploy/bootstrap-linux.sh
           bash -n deploy/install-scoped-sudo.sh
           bash -n deploy/install-target-agent.sh
+          bash -n deploy/prepare-reviewer-target.sh
           bash -n deploy/configure-tunnel.sh
           bash -n ops/diagnose-vps.sh
           bash -n ops/diagnose.sh
