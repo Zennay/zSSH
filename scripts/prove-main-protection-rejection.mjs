@@ -62,13 +62,15 @@ export async function proveMainProtectionRejectsDirectWrite({
   if (branch !== EXPECTED_BRANCH) {
     throw new Error(`refusing branch ${branch}; expected ${EXPECTED_BRANCH}`);
   }
-  if (!adminToken || adminToken.length < 20) {
-    throw new Error("ZSSH_REPO_ADMIN_TOKEN is required for deep protection verification");
+
+  const hasAdminToken = Boolean(adminToken);
+  if (hasAdminToken && adminToken.length < 20) {
+    throw new Error("ZSSH_REPO_ADMIN_TOKEN is malformed when supplied");
   }
   if (!canaryToken || canaryToken.length < 20) {
     throw new Error("ZSSH_MAIN_PROTECTION_CANARY_TOKEN is required and must have normal contents write access");
   }
-  if (adminToken === canaryToken) {
+  if (hasAdminToken && adminToken === canaryToken) {
     throw new Error("canary token must be distinct from the repository-admin token");
   }
   if (confirmation !== CONFIRMATION) {
@@ -76,13 +78,17 @@ export async function proveMainProtectionRejectsDirectWrite({
   }
 
   const api = "https://api.github.com/repos/Zennay/zSSH";
-  const protection = await githubJson(`${api}/branches/main/protection`, {
-    token: adminToken,
-    fetchImpl,
-  });
-  const assessment = assessAppliedMainProtection(protection);
-  if (!assessment.ok) {
-    throw new Error(`main protection is not canonical: ${assessment.issues.join("; ")}`);
+  let deepProtectionVerified = false;
+  if (hasAdminToken) {
+    const protection = await githubJson(`${api}/branches/main/protection`, {
+      token: adminToken,
+      fetchImpl,
+    });
+    const assessment = assessAppliedMainProtection(protection);
+    if (!assessment.ok) {
+      throw new Error(`main protection is not canonical: ${assessment.issues.join("; ")}`);
+    }
+    deepProtectionVerified = true;
   }
 
   const branchMetadata = await githubJson(`${api}/branches/main`, {
@@ -159,7 +165,7 @@ export async function proveMainProtectionRejectsDirectWrite({
     canary_commit_sha: canarySha,
     canary_token_admin: false,
     canary_token_push: true,
-    deep_protection_verified: true,
+    deep_protection_verified: deepProtectionVerified,
     public_protected_flag: true,
     direct_write_rejected: true,
     rejection_status: response.status,
