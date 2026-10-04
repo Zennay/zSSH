@@ -89,3 +89,24 @@ test("production DNS workflow pins all reusable actions to immutable commit SHAs
   );
   assert.doesNotMatch(workflow, /uses:\s+[^\s]+@v\d+(?:\s|$)/);
 });
+
+
+test("Cloudflare provider credential is unavailable before canonical provenance", () => {
+  const jobHeader = workflow.split("    steps:")[0];
+  assert.doesNotMatch(jobHeader, /CLOUDFLARE_API_TOKEN/);
+
+  for (const stepName of [
+    "Validate desired Cloudflare DNS change without mutation",
+    "Publish exact DNS-only A record",
+    "Re-read Cloudflare API and prove idempotent desired state",
+  ]) {
+    const tail = workflow.split(`      - name: ${stepName}`)[1];
+    assert.ok(tail, `missing provider step ${stepName}`);
+    const step = tail.split("\n      - name:")[0];
+    assert.match(
+      step,
+      /CLOUDFLARE_API_TOKEN: \$\{\{ secrets\.CLOUDFLARE_API_TOKEN \}\}/,
+      `${stepName} must receive the Cloudflare token explicitly`,
+    );
+  }
+});
