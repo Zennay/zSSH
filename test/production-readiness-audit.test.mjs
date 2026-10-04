@@ -227,6 +227,23 @@ test("rejects malformed configured values instead of reporting a false-ready lan
   );
 });
 
+test("rejects demo recording URL fragments before the final production probe", () => {
+  const result = buildProductionReadinessAudit({
+    ...complete,
+    ZSSH_PLUGIN_DEMO_RECORDING_URL: "https://review.zssh.dev/zssh-demo#chapter",
+  });
+
+  assert.equal(result.ready.reviewer_fixture, false);
+  assert.ok(
+    result.lanes.reviewer_fixture.invalid.some(
+      item =>
+        item.name === "ZSSH_PLUGIN_DEMO_RECORDING_URL" &&
+        item.reason.includes("fragment"),
+    ),
+  );
+  assert.equal(result.ready.final_release_config, false);
+});
+
 test("reports provider lanes independently from later portal attestations", () => {
   const env = {
     ...complete,
