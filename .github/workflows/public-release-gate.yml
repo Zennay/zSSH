@@ -202,6 +202,13 @@ jobs:
         run: |
           set -Eeuo pipefail
           node scripts/check-auth0-production.mjs | tee "$AUTH0_REPORT_PATH"
+      - name: Prove external production ingress
+        shell: bash
+        env:
+          INGRESS_REPORT_PATH: ${{ runner.temp }}/zssh-public-ingress-preflight.json
+        run: |
+          set -Eeuo pipefail
+          node scripts/check-public-ingress.mjs "$ZSSH_PLUGIN_MCP_URL" | tee "$INGRESS_REPORT_PATH"
       - name: Upload preflight evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -210,6 +217,7 @@ jobs:
           path: |
             ${{ runner.temp }}/zssh-openai-preflight.json
             ${{ runner.temp }}/zssh-auth0-production-readiness.json
+            ${{ runner.temp }}/zssh-public-ingress-preflight.json
           if-no-files-found: error
           retention-days: 30
       - name: Bind Verify Domain evidence to exact production origin
@@ -243,6 +251,7 @@ jobs:
           PROBE_REPORT_PATH: ${{ runner.temp }}/zssh-openai-production-probe.json
           BUNDLE_REPORT_PATH: ${{ runner.temp }}/zssh-openai-bundle.json
           AUTH0_REPORT_PATH: ${{ runner.temp }}/zssh-auth0-production-readiness.json
+          INGRESS_REPORT_PATH: ${{ runner.temp }}/zssh-public-ingress-preflight.json
         run: |
           set -Eeuo pipefail
           node --input-type=module <<'NODE'
@@ -256,6 +265,17 @@ jobs:
           const probe = JSON.parse(readFileSync(process.env.PROBE_REPORT_PATH, "utf8"));
           const bundle = JSON.parse(readFileSync(process.env.BUNDLE_REPORT_PATH, "utf8"));
           const auth0 = JSON.parse(readFileSync(process.env.AUTH0_REPORT_PATH, "utf8"));
+          const ingress = JSON.parse(readFileSync(process.env.INGRESS_REPORT_PATH, "utf8"));
+          if (
+            ingress.ok !== true ||
+            ingress.mcp_url !== endpoint.href ||
+            ingress.endpoint_origin !== endpoint.origin ||
+            ingress.https_health_validated !== true ||
+            ingress.unauthenticated_mcp_401_validated !== true ||
+            ingress.protected_resource_metadata_validated !== true
+          ) {
+            throw new Error("external production ingress evidence is not green for the exact submitted MCP URL");
+          }
           if (auth0.ok !== true || auth0.provider !== "auth0") {
             throw new Error("Auth0 production readiness evidence is not green");
           }
@@ -317,6 +337,9 @@ jobs:
             workflow_run_attempt: process.env.GITHUB_RUN_ATTEMPT,
             endpoint_origin: endpoint.origin,
             endpoint_path: endpoint.pathname,
+            public_ingress_validated: true,
+            public_ingress_dns_address_count: ingress.dns_address_count,
+            public_ingress_dns_families: ingress.dns_families,
             review_login_origin: reviewLogin.origin,
             review_login_path: reviewLogin.pathname,
             review_login_verified_url: process.env.ZSSH_REVIEW_LOGIN_VERIFIED_URL,
@@ -367,6 +390,7 @@ jobs:
             ${{ runner.temp }}/zssh-openai-release-evidence.json
             ${{ runner.temp }}/zssh-openai-preflight.json
             ${{ runner.temp }}/zssh-auth0-production-readiness.json
+            ${{ runner.temp }}/zssh-public-ingress-preflight.json
             dist/zssh-openai-plugin.zip
           if-no-files-found: error
           retention-days: 30
