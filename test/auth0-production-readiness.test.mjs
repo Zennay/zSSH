@@ -94,7 +94,7 @@ test("Auth0 discovery endpoints stay on the selected issuer origin", () => {
 
   for (const field of ["authorization_endpoint", "token_endpoint", "registration_endpoint"]) {
     const mixed = structuredClone(good);
-    mixed.validated[field] = "https://other.example.com/" + field;
+    mixed.validated[field] = "https://other.eu.auth0.com/" + field;
     assert.throws(
       () => validateAuth0IssuerEndpoints(mixed, issuer),
       new RegExp(`Auth0 ${field} must use the ZSSH_OAUTH_ISSUER origin`),
@@ -102,7 +102,7 @@ test("Auth0 discovery endpoints stay on the selected issuer origin", () => {
   }
 
   const foreignJwks = structuredClone(good);
-  foreignJwks.metadata.jwks_uri = "https://other.example.com/.well-known/jwks.json";
+  foreignJwks.metadata.jwks_uri = "https://other.eu.auth0.com/.well-known/jwks.json";
   assert.throws(
     () => validateAuth0IssuerEndpoints(foreignJwks, issuer),
     /Auth0 jwks_uri must use the ZSSH_OAUTH_ISSUER origin/,
