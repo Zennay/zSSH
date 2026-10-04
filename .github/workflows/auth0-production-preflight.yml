@@ -1,10 +1,15 @@
 name: Auth0 production readiness
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/openai-production-auth0-trigger"
   workflow_dispatch:
 
 permissions:
   contents: read
+  pull-requests: read
 
 concurrency:
   group: zssh-auth0-production-readiness
@@ -26,6 +31,16 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
+      - name: Require reviewed protected-main Auth0 activation
+        if: github.event_name == 'push'
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -Eeuo pipefail
+          test "$(cat .github/openai-production-auth0-trigger)" = "QUALIFY_ZSSH_PRODUCTION_AUTH0"
+          node scripts/check-main-provenance.mjs
+          node scripts/check-main-protection.mjs --public-status --require-protected
       - name: Validate Auth0 tenant, API and DCR grant
         shell: bash
         env:
