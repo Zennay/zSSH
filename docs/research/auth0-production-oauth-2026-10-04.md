@@ -34,6 +34,14 @@ For a canonical Auth0 tenant issuer such as `https://tenant.eu.auth0.com/`, zSSH
 
 For a custom Auth0 login domain, derivation is intentionally disabled. `AUTH0_MANAGEMENT_BASE_URL` must then be supplied explicitly and must use a canonical `*.auth0.com` tenant hostname. This prevents the protected Management API token from being sent to an arbitrary custom-domain origin.
 
+That hostname check alone is not enough to prove that the public custom issuer and the canonical Management API hostname belong to the same Auth0 tenant. For custom issuers, the production preflight therefore also reads `GET /api/v2/custom-domains` through the canonical Management API and requires the exact issuer hostname to appear exactly once with `status=ready` and `verification.status=verified`. A token for another identically configured Auth0 tenant can no longer satisfy the production check.
+
+Auth0 documents `GET /api/v2/custom-domains` as the Management API source for a tenant's configured custom domains and exposes the domain plus provisioning/verification state in that response:
+- https://support.auth0.com/center/s/article/troubleshoot-auth0-custom-domains-issues
+- https://auth0.com/blog/custom-domains-complete-guide/
+
+The protected Management API token used with a custom issuer must therefore be authorized to list that tenant's custom domains in addition to the existing tenant-settings, resource-server and client-grant reads.
+
 ## Evidence and secret boundary
 
 `scripts/check-auth0-production.mjs` reads the Auth0 Management API with a protected token and emits only non-secret configuration evidence, including whether the management origin was derived. It never prints or persists the management token, reviewer password, OAuth access token, or user data.

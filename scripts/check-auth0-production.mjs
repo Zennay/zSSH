@@ -31,8 +31,12 @@ function requirePublicHttpsUrl(raw, name) {
   return url;
 }
 
+function normalizeHostname(hostname) {
+  return String(hostname || "").toLowerCase().replace(/\.$/, "");
+}
+
 function isCanonicalAuth0TenantHostname(hostname) {
-  const normalized = String(hostname || "").toLowerCase().replace(/\.$/, "");
+  const normalized = normalizeHostname(hostname);
   return normalized !== "auth0.com" && normalized.endsWith(".auth0.com");
 }
 
@@ -58,6 +62,35 @@ export function resolveAuth0ManagementBaseUrl(issuer, managementBaseUrl) {
     fail("AUTH0_MANAGEMENT_BASE_URL must match the canonical Auth0 issuer origin");
   }
   return managementBase;
+}
+
+export function validateAuth0CustomDomain(payload, issuer) {
+  const issuerUrl = requirePublicHttpsUrl(issuer, "ZSSH_OAUTH_ISSUER");
+  if (isCanonicalAuth0TenantHostname(issuerUrl.hostname)) return null;
+
+  const expectedDomain = normalizeHostname(issuerUrl.hostname);
+  const matches = asArray(payload, "custom_domains").filter(
+    item => normalizeHostname(item?.domain) === expectedDomain,
+  );
+  if (matches.length !== 1) {
+    fail("Auth0 Management API tenant must own exactly one matching custom domain for ZSSH_OAUTH_ISSUER");
+  }
+
+  const domain = matches[0];
+  if (domain.status !== "ready") {
+    fail("Auth0 custom issuer domain must be ready");
+  }
+  if (domain.verification?.status !== "verified") {
+    fail("Auth0 custom issuer domain must be verified");
+  }
+
+  return {
+    domain: expectedDomain,
+    status: "ready",
+    verification_status: "verified",
+    primary: domain.primary === true,
+    type: String(domain.type || ""),
+  };
 }
 
 export function validateAuth0TenantSettings(settings) {
@@ -184,6 +217,14 @@ export async function checkAuth0ProductionReadiness({
   const settings = await fetchJson(new URL("tenants/settings", apiBase), token, "Auth0 tenant settings", fetchImpl);
   const tenant = validateAuth0TenantSettings(settings);
 
+  let customDomain = null;
+  if (!isCanonicalAuth0TenantHostname(issuerUrl.hostname)) {
+    customDomain = validateAuth0CustomDomain(
+      await fetchJson(new URL("custom-domains", apiBase), token, "Auth0 custom domains", fetchImpl),
+      issuerUrl.href,
+    );
+  }
+
   const resourcesUrl = new URL("resource-servers", apiBase);
   resourcesUrl.searchParams.set("per_page", "100");
   const resources = validateAuth0ResourceServers(
@@ -214,6 +255,7 @@ export async function checkAuth0ProductionReadiness({
     authorization_code: discovered.validated.authorization_code === true,
     client_registration_methods: discovered.validated.client_registration_methods,
     tenant,
+    custom_domain: customDomain,
     resource_server: resources,
     default_user_grant: grant,
   };

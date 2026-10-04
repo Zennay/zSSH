@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   checkAuth0ProductionReadiness,
   resolveAuth0ManagementBaseUrl,
+  validateAuth0CustomDomain,
   validateAuth0DefaultUserGrant,
   validateAuth0ResourceServers,
   validateAuth0TenantSettings,
@@ -33,6 +34,43 @@ test("Auth0 management origin derives only from canonical tenant issuers", () =>
     ),
     /canonical \*\.auth0\.com tenant domain/,
   );
+});
+
+test("Auth0 custom issuer is bound to one ready verified domain on the management tenant", () => {
+  const good = [{
+    custom_domain_id: "cd_123",
+    domain: "login.cheapgpt.shop",
+    primary: true,
+    status: "ready",
+    type: "auth0_managed_certs",
+    verification: { status: "verified" },
+  }];
+  assert.deepEqual(
+    validateAuth0CustomDomain(good, "https://login.cheapgpt.shop/"),
+    {
+      domain: "login.cheapgpt.shop",
+      status: "ready",
+      verification_status: "verified",
+      primary: true,
+      type: "auth0_managed_certs",
+    },
+  );
+  assert.throws(
+    () => validateAuth0CustomDomain([{ ...good[0], domain: "other.example.com" }], "https://login.cheapgpt.shop/"),
+    /must own exactly one matching custom domain/,
+  );
+  assert.throws(
+    () => validateAuth0CustomDomain([{ ...good[0], status: "pending" }], "https://login.cheapgpt.shop/"),
+    /must be ready/,
+  );
+  assert.throws(
+    () => validateAuth0CustomDomain(
+      [{ ...good[0], verification: { status: "pending" } }],
+      "https://login.cheapgpt.shop/",
+    ),
+    /must be verified/,
+  );
+  assert.equal(validateAuth0CustomDomain([], "https://tenant.eu.auth0.com/"), null);
 });
 
 test("Auth0 tenant settings enforce MCP production compatibility", () => {
@@ -176,7 +214,89 @@ test("Auth0 end-to-end preflight binds discovery to tenant settings and least-pr
   assert.equal(result.auth0_management_origin_derived, true);
   assert.deepEqual(result.client_registration_methods, ["dcr"]);
   assert.equal(result.tenant.resource_parameter_profile, "compatibility");
+  assert.equal(result.custom_domain, null);
   assert.deepEqual(result.default_user_grant.scopes, ["zssh:read", "zssh:write"]);
   assert.equal(calls.filter(call => call.authorization).length, 3);
   assert.ok(calls.filter(call => call.authorization).every(call => call.authorization.startsWith("Bearer management-token-")));
+});
+
+
+test("Auth0 custom-domain preflight proves the issuer belongs to the management tenant", async () => {
+  const issuer = "https://login.cheapgpt.shop/";
+  const managementOrigin = "https://tenant.eu.auth0.com";
+  const metadata = {
+    issuer,
+    authorization_endpoint: issuer + "authorize",
+    token_endpoint: issuer + "oauth/token",
+    registration_endpoint: issuer + "oidc/register",
+    jwks_uri: issuer + ".well-known/jwks.json",
+    authorization_response_iss_parameter_supported: true,
+    response_types_supported: ["code"],
+    code_challenge_methods_supported: ["S256"],
+    token_endpoint_auth_methods_supported: ["none"],
+  };
+  const calls = [];
+  const fetchImpl = async (input, init = {}) => {
+    const url = new URL(String(input));
+    calls.push({ url: url.href, authorization: init.headers?.authorization || null });
+    if (url.origin === "https://login.cheapgpt.shop" && url.pathname === "/.well-known/oauth-authorization-server") {
+      return new Response(JSON.stringify(metadata), { status: 200, headers: { "content-type": "application/json" } });
+    }
+    if (url.pathname === "/api/v2/tenants/settings") {
+      return new Response(JSON.stringify({
+        flags: { enable_dynamic_client_registration: true },
+        dynamic_client_registration_security_mode: "strict",
+        resource_parameter_profile: "compatibility",
+        authorization_response_iss_parameter_supported: true,
+        client_id_metadata_document_supported: false,
+      }), { status: 200, headers: { "content-type": "application/json" } });
+    }
+    if (url.pathname === "/api/v2/custom-domains") {
+      return new Response(JSON.stringify([{
+        custom_domain_id: "cd_123",
+        domain: "login.cheapgpt.shop",
+        primary: true,
+        status: "ready",
+        type: "auth0_managed_certs",
+        verification: { status: "verified" },
+      }]), { status: 200, headers: { "content-type": "application/json" } });
+    }
+    if (url.pathname === "/api/v2/resource-servers") {
+      return new Response(JSON.stringify([{
+        id: "api_123",
+        identifier: resource,
+        signing_alg: "RS256",
+        scopes: [{ value: "zssh:read" }, { value: "zssh:write" }],
+      }]), { status: 200, headers: { "content-type": "application/json" } });
+    }
+    if (url.pathname === "/api/v2/client-grants") {
+      return new Response(JSON.stringify([{
+        id: "grant_123",
+        audience: resource,
+        default_for: "third_party_clients",
+        subject_type: "user",
+        scope: ["zssh:read", "zssh:write"],
+        allow_all_scopes: false,
+      }]), { status: 200, headers: { "content-type": "application/json" } });
+    }
+    return new Response("", { status: 404 });
+  };
+
+  const result = await checkAuth0ProductionReadiness({
+    issuer,
+    managementBaseUrl: managementOrigin,
+    managementToken: "management-token-0123456789abcdef",
+    resource,
+    fetchImpl,
+  });
+
+  assert.deepEqual(result.custom_domain, {
+    domain: "login.cheapgpt.shop",
+    status: "ready",
+    verification_status: "verified",
+    primary: true,
+    type: "auth0_managed_certs",
+  });
+  assert.ok(calls.some(call => call.url === managementOrigin + "/api/v2/custom-domains"));
+  assert.equal(calls.filter(call => call.authorization).length, 4);
 });
