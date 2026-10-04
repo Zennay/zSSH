@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import {
   DEFAULT_PRODUCTION_MCP_URL,
   classifyPublicIngressFailure,
@@ -53,4 +54,18 @@ test("failure classifier keeps malformed endpoint contracts distinct from provid
     "url_contract",
   );
   assert.equal(classifyPublicIngressFailure("unexpected failure"), "unknown");
+});
+
+
+test("production readiness runs the public-origin observer without entering the protected environment", () => {
+  const workflow = readFileSync(
+    new URL("../.github/workflows/openai-production-readiness.yml", import.meta.url),
+    "utf8",
+  );
+  const observerBlock = workflow.match(/  public_origin:[\s\S]*?\n  audit:/)?.[0] || "";
+  assert.match(observerBlock, /name: Observe public production origin/);
+  assert.match(observerBlock, /needs: provenance/);
+  assert.match(observerBlock, /node scripts\/observe-public-origin-readiness\.mjs https:\/\/zssh\.cheapgpt\.shop\/mcp/);
+  assert.match(observerBlock, /zssh-public-origin-observation-\$\{\{ github\.run_id \}\}/);
+  assert.doesNotMatch(observerBlock, /environment:\s*openai-production/);
 });
