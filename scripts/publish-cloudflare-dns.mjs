@@ -27,6 +27,41 @@ function normalizeDnsName(value) {
   return String(value || "").trim().replace(/\.$/, "").toLowerCase();
 }
 
+export function validateCloudflareZoneName(value) {
+  const zoneName = normalizeDnsName(value);
+  const label = "[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?";
+  const pattern = new RegExp(`^(?:${label}\\.)+${label}import net from "node:net";
+import { pathToFileURL } from "node:url";
+import { isPublicRoutableAddress } from "./check-public-ingress.mjs";
+import { validatePublicBaseUrl } from "./render-public-caddy.mjs";
+
+const CLOUDFLARE_API_ORIGIN = "https://api.cloudflare.com";
+
+function fail(message) {
+  throw new Error(message);
+}
+
+export function validateCloudflareZoneId(value) {
+  const zoneId = String(value || "").trim();
+  if (!/^[a-f0-9]{32}$/i.test(zoneId)) fail("CLOUDFLARE_ZONE_ID must be a 32-character hexadecimal zone ID");
+  return zoneId;
+}
+
+export function validatePublicIpv4(value) {
+  const ipv4 = String(value || "").trim();
+  if (net.isIP(ipv4) !== 4 || !isPublicRoutableAddress(ipv4)) {
+    fail("ZSSH_PUBLIC_IPV4 must be a publicly routable IPv4 address");
+  }
+  return ipv4;
+}
+
+, "i");
+  if (!pattern.test(zoneName) || zoneName.length > 253) {
+    fail("CLOUDFLARE_ZONE_NAME must be a valid DNS zone name");
+  }
+  return zoneName;
+}
+
 function cloudflareErrorSummary(body) {
   const errors = Array.isArray(body?.errors) ? body.errors : [];
   return errors.slice(0, 3).map(error => {
@@ -51,22 +86,76 @@ async function cloudflareJson(fetchImpl, url, init, label) {
   return body;
 }
 
+export async function resolveCloudflareZoneId({
+  zoneId,
+  zoneName,
+  apiToken,
+  hostname,
+  fetchImpl = fetch,
+} = {}) {
+  const configuredZoneId = String(zoneId || "").trim();
+  if (configuredZoneId) {
+    return { zoneId: validateCloudflareZoneId(configuredZoneId), source: "configured" };
+  }
+
+  const token = String(apiToken || "").trim();
+  if (!token) fail("CLOUDFLARE_API_TOKEN is required");
+  const checkedZoneName = validateCloudflareZoneName(zoneName);
+  const checkedHostname = normalizeDnsName(hostname);
+  if (
+    checkedHostname !== checkedZoneName &&
+    !checkedHostname.endsWith(`.${checkedZoneName}`)
+  ) {
+    fail("public hostname must belong to CLOUDFLARE_ZONE_NAME");
+  }
+
+  const zonesUrl = new URL("/client/v4/zones", CLOUDFLARE_API_ORIGIN);
+  zonesUrl.searchParams.set("name", checkedZoneName);
+  zonesUrl.searchParams.set("status", "active");
+  zonesUrl.searchParams.set("per_page", "50");
+  const headers = {
+    accept: "application/json",
+    authorization: `Bearer ${token}`,
+  };
+  const listed = await cloudflareJson(
+    fetchImpl,
+    zonesUrl,
+    { method: "GET", headers },
+    "Cloudflare zone lookup",
+  );
+  const zones = (Array.isArray(listed.result) ? listed.result : []).filter(
+    zone => normalizeDnsName(zone?.name) === checkedZoneName,
+  );
+  if (zones.length !== 1) {
+    fail(`Cloudflare zone lookup must return exactly one active ${checkedZoneName} zone`);
+  }
+
+  return { zoneId: validateCloudflareZoneId(zones[0]?.id), source: "discovered" };
+}
+
 export async function reconcileCloudflareDns({
   zoneId,
+  zoneName = "cheapgpt.shop",
   apiToken,
   publicBaseUrl,
   ipv4,
   apply = false,
   fetchImpl = fetch,
 } = {}) {
-  const checkedZoneId = validateCloudflareZoneId(zoneId);
   const token = String(apiToken || "").trim();
   if (!token) fail("CLOUDFLARE_API_TOKEN is required");
   const origin = validatePublicBaseUrl(publicBaseUrl);
   const hostname = normalizeDnsName(origin.hostname);
   const checkedIpv4 = validatePublicIpv4(ipv4);
+  const zone = await resolveCloudflareZoneId({
+    zoneId,
+    zoneName,
+    apiToken: token,
+    hostname,
+    fetchImpl,
+  });
 
-  const collectionUrl = new URL(`/client/v4/zones/${checkedZoneId}/dns_records`, CLOUDFLARE_API_ORIGIN);
+  const collectionUrl = new URL(`/client/v4/zones/${zone.zoneId}/dns_records`, CLOUDFLARE_API_ORIGIN);
   collectionUrl.searchParams.set("name", hostname);
   collectionUrl.searchParams.set("per_page", "100");
   const headers = {
@@ -91,12 +180,12 @@ export async function reconcileCloudflareDns({
   const existing = aRecords[0] || null;
   const desired = { type: "A", name: hostname, content: checkedIpv4, ttl: 1, proxied: false };
   if (existing && String(existing.content) === checkedIpv4 && existing.proxied === false) {
-    return { ok: true, action: "noop", hostname, ipv4: checkedIpv4, proxied: false };
+    return { ok: true, action: "noop", hostname, ipv4: checkedIpv4, proxied: false, zone_source: zone.source };
   }
 
   const action = existing ? "update" : "create";
   if (!apply) {
-    return { ok: true, action: `would_${action}`, hostname, ipv4: checkedIpv4, proxied: false };
+    return { ok: true, action: `would_${action}`, hostname, ipv4: checkedIpv4, proxied: false, zone_source: zone.source };
   }
 
   const targetUrl = existing
@@ -127,12 +216,14 @@ export async function reconcileCloudflareDns({
     hostname,
     ipv4: checkedIpv4,
     proxied: false,
+    zone_source: zone.source,
   };
 }
 
 export async function main({ env = process.env, stdout = process.stdout } = {}) {
   const result = await reconcileCloudflareDns({
     zoneId: env.CLOUDFLARE_ZONE_ID,
+    zoneName: env.CLOUDFLARE_ZONE_NAME || "cheapgpt.shop",
     apiToken: env.CLOUDFLARE_API_TOKEN,
     publicBaseUrl: env.ZSSH_PUBLIC_BASE_URL,
     ipv4: env.ZSSH_PUBLIC_IPV4,
