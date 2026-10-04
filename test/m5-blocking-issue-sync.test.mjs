@@ -98,6 +98,12 @@ test("renders the no-blocker state without inventing a gate", () => {
   });
   assert.equal(result.title, "M5 release handoff: readiness gates green");
   assert.match(result.body, /Blocking gate: none/);
+  assert.match(result.body, /Canonical final-submission checklist/);
+  assert.ok(
+    result.body.includes(
+      `https://github.com/Zennay/zSSH/blob/${sha}/docs/openai-plugin-release-checklist.md`,
+    ),
+  );
 });
 
 test("rejects mismatched blocking action metadata", () => {
