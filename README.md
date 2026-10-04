@@ -83,7 +83,9 @@ the same proof has passed on the OVH runtime.
 
 For normal M1 inspection, `zssh_run_safe` uses a fixed read-only binary allowlist and `spawn(..., { shell: false })`, so user arguments are passed as argv instead of being interpreted by a shell. The default allowlist is `uptime`, `whoami`, `id`, `uname`, `pwd`, `df`, and `free`; operators may reduce it further with `ZSSH_SAFE_PROGRAMS`.
 
-Production hardening still requires a dedicated service account, scoped sudo/capabilities, stronger approval semantics, rate limiting, agent pairing, and review against current hosted-MCP requirements. The private single-owner deployment intentionally avoids a browser OAuth flow. Hosted clients can use a high-entropy capability URL over HTTPS; clients that support custom headers can instead use `x-zssh-key`.
+The public OAuth profile applies an application-layer fixed-window limit per opaque authenticated zSSH profile (120 MCP requests/minute by default via `ZSSH_PUBLIC_RATE_LIMIT_PER_MINUTE`). The limiter never keys on raw bearer tokens or OAuth subject strings and fails closed for new profiles if its bounded in-memory table is full. A reverse proxy may add stricter network-level limits, but it must not weaken this server-side guard.
+
+Production hardening still requires a dedicated service account, scoped sudo/capabilities, stronger approval semantics, agent pairing, and review against current hosted-MCP requirements. The private single-owner deployment intentionally avoids a browser OAuth flow. Hosted clients can use a high-entropy capability URL over HTTPS; clients that support custom headers can instead use `x-zssh-key`.
 
 ## Private revocable client credentials
 
