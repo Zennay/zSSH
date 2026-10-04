@@ -468,7 +468,7 @@ export function buildProductionReadinessAudit(env = process.env) {
       lane: "auth0_preflight",
       gate_kind: "provider_configuration",
       requires_external_input: true,
-      action: "Provision the production Auth0 issuer and Management API token, then run Auth0 production readiness. For canonical *.auth0.com issuers the management origin is derived automatically; custom Auth0 domains still require an explicit canonical *.auth0.com AUTH0_MANAGEMENT_BASE_URL.",
+      action: "Provision the production Auth0 issuer and Management API token, then trigger Auth0 production qualification through a reviewed change to .github/openai-production-auth0-trigger: keep line 1 exactly QUALIFY_ZSSH_PRODUCTION_AUTH0 and add or rotate line 2 as activation-id=<8-80 safe characters>, then merge to protected main. Never place a credential in the marker. For canonical *.auth0.com issuers the management origin is derived automatically; custom Auth0 domains still require an explicit canonical *.auth0.com AUTH0_MANAGEMENT_BASE_URL.",
       missing: lanes.auth0_preflight.missing,
       invalid: lanes.auth0_preflight.invalid,
     });
