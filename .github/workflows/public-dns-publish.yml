@@ -29,7 +29,6 @@ jobs:
     env:
       CLOUDFLARE_ZONE_ID: ${{ vars.CLOUDFLARE_ZONE_ID }}
       CLOUDFLARE_ZONE_NAME: cheapgpt.shop
-      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       ZSSH_PUBLIC_BASE_URL: https://zssh.cheapgpt.shop
       ZSSH_PUBLIC_IPV4: 198.244.191.182
     steps:
@@ -65,6 +64,7 @@ jobs:
           test "${{ inputs.confirmation }}" = "PUBLISH_ZSSH_PRODUCTION_DNS"
       - name: Validate desired Cloudflare DNS change without mutation
         env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           ZSSH_DNS_APPLY: "0"
           EVIDENCE_PATH: ${{ runner.temp }}/zssh-cloudflare-dns-plan.json
         shell: bash
@@ -73,6 +73,7 @@ jobs:
           node scripts/publish-cloudflare-dns.mjs | tee "$EVIDENCE_PATH"
       - name: Publish exact DNS-only A record
         env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           ZSSH_DNS_APPLY: "1"
           EVIDENCE_PATH: ${{ runner.temp }}/zssh-cloudflare-dns-result.json
         shell: bash
@@ -81,6 +82,7 @@ jobs:
           node scripts/publish-cloudflare-dns.mjs | tee "$EVIDENCE_PATH"
       - name: Re-read Cloudflare API and prove idempotent desired state
         env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           ZSSH_DNS_APPLY: "0"
           EVIDENCE_PATH: ${{ runner.temp }}/zssh-cloudflare-dns-verify.json
         shell: bash
