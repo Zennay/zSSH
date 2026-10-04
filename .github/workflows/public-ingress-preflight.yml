@@ -1,0 +1,42 @@
+name: zSSH public ingress external preflight
+
+on:
+  workflow_dispatch:
+    inputs:
+      mcp_url:
+        description: Exact production zSSH MCP URL, including /mcp
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: zssh-public-ingress-preflight
+  cancel-in-progress: false
+
+jobs:
+  preflight:
+    name: Prove public DNS, TLS, health and MCP auth boundary
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Run external ingress preflight
+        env:
+          ZSSH_PLUGIN_MCP_URL: ${{ inputs.mcp_url }}
+          EVIDENCE_PATH: ${{ runner.temp }}/zssh-public-ingress-preflight.json
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          node scripts/check-public-ingress.mjs "$ZSSH_PLUGIN_MCP_URL" | tee "$EVIDENCE_PATH"
+      - name: Upload non-secret ingress evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: zssh-public-ingress-preflight-${{ github.run_id }}
+          path: ${{ runner.temp }}/zssh-public-ingress-preflight.json
+          if-no-files-found: error
+          retention-days: 30

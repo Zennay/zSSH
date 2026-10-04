@@ -20,6 +20,7 @@ export function isNonPublicHostname(hostname) {
   if (!host || host === "localhost" || host === "::1" || host === "0.0.0.0") return true;
   if (isPrivateIpv4(host)) return true;
   if (/^(?:fc|fd)[0-9a-f]{2}:/i.test(host) || /^fe[89ab][0-9a-f]:/i.test(host)) return true;
+  if (["example.com", "example.net", "example.org"].some(domain => host === domain || host.endsWith("." + domain))) return true;
   return [".local", ".localhost", ".test", ".example", ".invalid"].some(suffix => host.endsWith(suffix));
 }
 

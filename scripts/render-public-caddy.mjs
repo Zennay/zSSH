@@ -42,8 +42,8 @@ export function validatePublicBaseUrl(value) {
   if (hostname === "localhost" || RESERVED_SUFFIXES.some(suffix => hostname.endsWith(suffix))) {
     fail("ZSSH_PUBLIC_BASE_URL must not use a local or reserved hostname");
   }
-  if (hostname === "example.com" || hostname.endsWith(".example.com")) {
-    fail("ZSSH_PUBLIC_BASE_URL must not use the documentation-only example.com domain");
+  if (["example.com", "example.net", "example.org"].some(domain => hostname === domain || hostname.endsWith("." + domain))) {
+    fail("ZSSH_PUBLIC_BASE_URL must not use a documentation-only example domain");
   }
 
   return new URL("https://" + hostname + "/");
