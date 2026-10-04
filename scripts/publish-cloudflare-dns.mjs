@@ -138,13 +138,6 @@ export async function resolveCloudflareZoneId({
   hostname,
   fetchImpl = fetch,
 } = {}) {
-  const configuredZoneId = String(zoneId || "").trim();
-  if (configuredZoneId) {
-    return { zoneId: validateCloudflareZoneId(configuredZoneId), source: "configured" };
-  }
-
-  const token = String(apiToken || "").trim();
-  if (!token) fail("CLOUDFLARE_API_TOKEN is required");
   const checkedZoneName = validateCloudflareZoneName(zoneName);
   const checkedHostname = normalizeDnsName(hostname);
   if (
@@ -153,6 +146,14 @@ export async function resolveCloudflareZoneId({
   ) {
     fail("public hostname must belong to CLOUDFLARE_ZONE_NAME");
   }
+
+  const configuredZoneId = String(zoneId || "").trim();
+  if (configuredZoneId) {
+    return { zoneId: validateCloudflareZoneId(configuredZoneId), source: "configured" };
+  }
+
+  const token = String(apiToken || "").trim();
+  if (!token) fail("CLOUDFLARE_API_TOKEN is required");
 
   const zonesUrl = new URL("/client/v4/zones", CLOUDFLARE_API_ORIGIN);
   zonesUrl.searchParams.set("name", checkedZoneName);
