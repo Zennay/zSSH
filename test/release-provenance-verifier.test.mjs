@@ -9,6 +9,7 @@ import {
   symlinkSync,
   unlinkSync,
   appendFileSync,
+  writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -87,5 +88,16 @@ test("verifier rejects executable-bit drift", t => {
   assert.throws(
     () => verify(release),
     /tracked executable mode drifted: deploy\/install-live\.sh/,
+  );
+});
+
+test("verifier rejects untracked content added to an existing release directory", t => {
+  const { root, release } = materializeRelease();
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+
+  writeFileSync(path.join(release, ".unexpected.env"), "SECRET=must-not-survive\n");
+  assert.throws(
+    () => verify(release),
+    /unexpected release path: \.unexpected\.env/,
   );
 });
