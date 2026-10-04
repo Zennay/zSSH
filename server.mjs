@@ -1156,13 +1156,7 @@ function unauthorizedResponse(res, error) {
 
 function applyPublicRateLimit(res, authInfo) {
   if (PLUGIN_PROFILE !== "public" || PUBLIC_AUTH_MODE !== "oauth") return true;
-  let profileId;
-  try {
-    profileId = profileIdFromAuth(authInfo, OAUTH_CONFIG?.resource || "");
-  } catch {
-    return false;
-  }
-
+  const profileId = profileIdFromAuth(authInfo, OAUTH_CONFIG?.resource || "");
   const decision = PUBLIC_RATE_LIMITER.consume(profileId);
   res.setHeader("X-RateLimit-Limit", String(decision.limit));
   res.setHeader("X-RateLimit-Remaining", String(decision.remaining));
@@ -1318,7 +1312,11 @@ export function start() {
     // the authenticated opaque zSSH profile, never by the raw bearer token.
     if (PLUGIN_PROFILE === "public" && PUBLIC_AUTH_MODE === "oauth") {
       if (!requestAuth) return unauthorizedResponse(res, new Error("OAuth authentication required"));
-      if (!applyPublicRateLimit(res, requestAuth)) return;
+      try {
+        if (!applyPublicRateLimit(res, requestAuth)) return;
+      } catch (err) {
+        return unauthorizedResponse(res, err);
+      }
     }
 
     if (!["POST", "GET", "DELETE"].includes(req.method || "")) return res.writeHead(405).end("Method Not Allowed");
