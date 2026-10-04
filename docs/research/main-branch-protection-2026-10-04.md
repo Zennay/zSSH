@@ -62,3 +62,22 @@ The verifier reads the live `main` protection state and only returns green when 
 The command does not serialize the token into evidence. A 404, inaccessible protection endpoint, missing required rule, missing required check, disabled admin enforcement, or configured bypass actor fails closed.
 
 This verifier intentionally does **not** replace the acceptance criterion for a controlled rejected-direct-push test. After the setting is applied, capture both the green verifier output and the rejected write proof before setting `ZSSH_MAIN_PROTECTION_VERIFIED=1`.
+
+
+## Repository-owned application lane
+
+The repository now also has a guarded mutation path for applying the canonical policy instead of leaving issue #100 as a UI-only operation.
+
+The manual `zSSH main protection` workflow:
+- first proves it was dispatched from canonical `main` and that the current SHA has merged-PR provenance;
+- only then enters the separate protected `repository-governance` environment;
+- reads `ZSSH_REPO_ADMIN_TOKEN` only inside that protected job;
+- requires the literal confirmation `PROTECT_ZSSH_MAIN`;
+- applies the branch-protection policy through GitHub's protected-branch REST API;
+- immediately re-reads the effective policy and fails closed if it differs.
+
+The canonical applied policy requires strict status checks, binds the `test` check to GitHub Actions app id `15368`, requires PR-based changes with zero approving reviewers for the solo-maintainer flow, includes administrators, has no observed PR bypass actors, requires conversation resolution, and disables force pushes and branch deletion.
+
+GitHub's current REST documentation states that updating branch protection requires repository Administration (write). The normal GitHub connector used by ChatGPT does not have that permission, so the workflow deliberately uses a separately configured protected secret rather than broadening routine automation credentials.
+
+The workflow still does not mark `ZSSH_MAIN_PROTECTION_VERIFIED=1` automatically. Issue #100 remains open until a normal non-bypass direct-write path has been proven rejected and that negative evidence is captured.
