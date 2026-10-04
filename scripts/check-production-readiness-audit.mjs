@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import process from "node:process";
+import { pathToFileURL } from "node:url";
 import { publicReleaseConfigPresence } from "./check-public-release-config.mjs";
 
 const PROVIDER_LANES = {
@@ -105,6 +106,6 @@ export function buildProductionReadinessAudit(env = process.env) {
   };
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   console.log(JSON.stringify(buildProductionReadinessAudit(process.env), null, 2));
 }
