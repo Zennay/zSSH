@@ -18,6 +18,20 @@ if (!/^[0-9a-f]{40}$/.test(repoSha)) {
   fail("commit SHA must be a full 40-character lowercase hex SHA");
 }
 
+let releaseObjectType;
+try {
+  releaseObjectType = execFileSync(
+    "git",
+    ["-C", sourceRoot, "cat-file", "-t", repoSha],
+    { encoding: "utf8" },
+  ).trim();
+} catch {
+  fail("release SHA does not resolve to a Git object");
+}
+if (releaseObjectType !== "commit") {
+  fail(`release SHA must resolve to a commit, got ${releaseObjectType || "unknown"}`);
+}
+
 const releaseRoot = path.resolve(releaseDir);
 let releaseRootStat;
 try {
