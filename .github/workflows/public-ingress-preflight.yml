@@ -22,6 +22,7 @@ jobs:
     timeout-minutes: 5
     env:
       ZSSH_PLUGIN_MCP_URL: https://zssh.cheapgpt.shop/mcp
+      ZSSH_EXPECTED_PUBLIC_ADDRESSES: 198.244.191.182
     steps:
       - name: Require successful canonical production DNS source
         if: github.event_name == 'workflow_run'
@@ -68,7 +69,7 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
-          node scripts/check-public-ingress.mjs "$ZSSH_PLUGIN_MCP_URL" | tee "$EVIDENCE_PATH"
+          node scripts/check-public-ingress.mjs "$ZSSH_PLUGIN_MCP_URL" "$ZSSH_EXPECTED_PUBLIC_ADDRESSES" | tee "$EVIDENCE_PATH"
       - name: Upload non-secret ingress evidence
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
