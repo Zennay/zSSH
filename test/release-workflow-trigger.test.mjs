@@ -45,11 +45,29 @@ test("release-critical pull_request and push path filters stay in parity", () =>
   for (const provenancePath of [
     "scripts/check-main-provenance.mjs",
     "scripts/check-main-protection.mjs",
+    "scripts/apply-main-protection.mjs",
     "test/main-provenance.test.mjs",
     "test/main-protection.test.mjs",
+    "test/main-protection-apply.test.mjs",
     "test/release-workflow-trigger.test.mjs",
   ]) {
     assert.ok(pushPaths.includes(provenancePath), `push trigger must include ${provenancePath}`);
+  }
+
+  for (const governancePath of [
+    ".github/workflows/main-protection.yml",
+    "scripts/apply-main-protection.mjs",
+    "test/main-protection-apply.test.mjs",
+    "docs/research/main-branch-protection-2026-10-04.md",
+  ]) {
+    assert.ok(
+      pullRequestPaths.includes(governancePath),
+      `pull_request trigger must include repository-governance path ${governancePath}`,
+    );
+    assert.ok(
+      pushPaths.includes(governancePath),
+      `push trigger must include repository-governance path ${governancePath}`,
+    );
   }
 
   for (const readinessPath of [
