@@ -23,3 +23,12 @@ Primary sources:
 - https://docs.github.com/en/actions/reference/security/secure-use
 
 The source SHA is passed as an intermediate environment variable and compared against live GitHub branch metadata by the existing branch-protection verifier. No provider credential, public tool surface, OAuth scope, or DNS destination changes.
+
+
+## Direct-origin DNS binding — 2026-10-04
+
+The production preflight is now also bound to the reviewed direct VPS address `198.244.191.182`. Public routability alone is not sufficient production evidence: a DNS drift to another globally routable address could otherwise pass the DNS guard and continue into HTTPS/MCP checks.
+
+The reusable checker accepts an optional expected-address set. When that set is present, the externally resolved address set must match it exactly before any HTTP request is made. The production workflow supplies only `198.244.191.182`, so an unexpected A or AAAA answer fails closed. Generic development/test use remains unchanged when no expected-address set is supplied.
+
+This does not publish DNS or change the selected origin. It makes the post-publication evidence prove that the reviewed hostname still resolves to the reviewed direct VPS before accepting TLS, health, MCP-auth or OAuth-metadata evidence.
