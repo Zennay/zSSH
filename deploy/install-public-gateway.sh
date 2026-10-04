@@ -184,6 +184,8 @@ if [[ ! -d "$RELEASE" ]]; then
 fi
 
 verify_release_provenance
+"$NPM_BIN" ci --prefix "$RELEASE" --omit=dev --ignore-scripts --no-audit --no-fund
+verify_release_provenance
 
 ENV_BACKUP=""
 if [[ -f "$ENV_FILE" ]]; then
