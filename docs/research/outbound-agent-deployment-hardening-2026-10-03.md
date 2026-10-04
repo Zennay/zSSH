@@ -45,6 +45,7 @@ The canonical outbound agent already keeps the Ed25519 private key on the target
 Install the target agent as a user-level systemd service, not root:
 
 - immutable release directory pinned to the Git SHA;
+- release contents are exported from that exact tracked Git commit; mutable/untracked worktree files such as `.env` or local credentials are never copied into the release;
 - separate `~/.config/zssh/agent.env` mode 0600;
 - config is parsed as data and never shell-sourced;
 - production gateway must be an HTTPS origin without credentials/query/fragment/path;
