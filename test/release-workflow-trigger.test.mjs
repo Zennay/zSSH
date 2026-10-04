@@ -168,6 +168,15 @@ test("final production release fingerprints and retains the exact dependency loc
 });
 
 
+test("final production release proves and records the reviewed Node/npm toolchain", () => {
+  assert.match(workflow, /Verify reviewed Node\/npm toolchain[\s\S]*test "\$\(node --version\)" = "v22\.23\.3"[\s\S]*test "\$\(npm --version\)" = "10\.9\.9"/);
+  assert.match(workflow, /import \{ execFileSync \} from "node:child_process";/);
+  assert.match(workflow, /const nodeVersion = process\.version\.replace\(\/\^v\/, ""\);/);
+  assert.match(workflow, /execFileSync\("npm", \["--version"\], \{ encoding: "utf8" \}\)\.trim\(\)/);
+  assert.match(workflow, /node_version: nodeVersion/);
+  assert.match(workflow, /npm_version: npmVersion/);
+});
+
 test("final production release scopes protected secrets to only required steps", () => {
   const productionStart = workflow.indexOf("  production:");
   assert.ok(productionStart >= 0, "missing final production job");
