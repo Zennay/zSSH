@@ -4,22 +4,22 @@ This directory contains the source templates for the zSSH Agent Plugins submissi
 
 ## Build
 
-A final submission build deliberately requires three external, production-specific inputs:
+A final submission build deliberately requires two external, production-specific inputs:
 
 - `ZSSH_PLUGIN_MCP_URL`: the stable public HTTPS URL ending in `/mcp`.
 - `ZSSH_PLUGIN_DEMO_RECORDING_URL`: a reviewer-accessible HTTPS walkthrough video.
-- `ZSSH_PLUGIN_ICON`: a square SVG or PNG icon at least 48×48.
+
+The repository already ships the default submission icon at `submission/assets/icon.svg`. Set `ZSSH_PLUGIN_ICON` (or pass `--icon`) only when intentionally overriding that bundled square SVG/PNG asset.
 
 Example:
 
 ```bash
 ZSSH_PLUGIN_MCP_URL=https://mcp.example.com/mcp \
 ZSSH_PLUGIN_DEMO_RECORDING_URL=https://example.com/review/zssh-demo \
-ZSSH_PLUGIN_ICON=./brand/zssh.svg \
 npm run plugin:build
 ```
 
-The builder writes `dist/openai-plugin/plugin.json`, `dist/openai-plugin/mcp.json`, the packaged icon, and `dist/zssh-openai-plugin.zip`.
+The builder writes `dist/openai-plugin/plugin.json`, `dist/openai-plugin/mcp.json`, the packaged icon, and `dist/zssh-openai-plugin.zip`. To override the bundled icon, add for example `ZSSH_PLUGIN_ICON=./brand/zssh.svg` to the build environment.
 
 It fails before producing a ZIP when listing limits, URL requirements, icon dimensions, starter prompts, or the required review-case counts do not pass.
 
