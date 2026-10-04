@@ -37,23 +37,11 @@ export function validateCloudflareZoneName(value) {
   return zoneName;
 }
 
-function redactSensitiveValue(value, sensitiveValues = []) {
-  let output = String(value || "");
-  for (const sensitiveValue of sensitiveValues) {
-    const secret = String(sensitiveValue || "");
-    if (secret) output = output.split(secret).join("[REDACTED]");
-  }
-  return output;
-}
-
-function cloudflareErrorSummary(body, sensitiveValues = []) {
+function cloudflareErrorSummary(body) {
   const errors = Array.isArray(body?.errors) ? body.errors : [];
   return errors.slice(0, 3).map(error => {
     const code = Number.isFinite(Number(error?.code)) ? String(error.code) : "unknown";
-    const message = redactSensitiveValue(
-      String(error?.message || "Cloudflare API error").replace(/[\r\n]+/g, " "),
-      sensitiveValues,
-    ).slice(0, 180);
+    const message = String(error?.message || "Cloudflare API error").replace(/[\r\n]+/g, " ").slice(0, 180);
     return `${code}: ${message}`;
   }).join("; ");
 }
@@ -67,11 +55,7 @@ async function cloudflareJson(fetchImpl, url, init, label) {
     fail(`${label} failed: Cloudflare returned invalid JSON (HTTP ${response.status})`);
   }
   if (!response.ok || body?.success !== true) {
-    const authorization = init?.headers?.authorization || init?.headers?.Authorization || "";
-    const bearerToken = typeof authorization === "string" && authorization.startsWith("Bearer ")
-      ? authorization.slice("Bearer ".length)
-      : "";
-    const summary = cloudflareErrorSummary(body, [bearerToken]);
+    const summary = cloudflareErrorSummary(body);
     fail(`${label} failed: HTTP ${response.status}${summary ? ` (${summary})` : ""}`);
   }
   return body;
@@ -160,9 +144,15 @@ export async function reconcileCloudflareDns({
   const listed = await cloudflareJson(fetchImpl, collectionUrl, { method: "GET", headers }, "DNS record lookup");
   const records = Array.isArray(listed.result) ? listed.result : [];
   const exact = records.filter(record => normalizeDnsName(record?.name) === hostname);
-  const blockers = exact.filter(record => ["AAAA", "CNAME", "NS"].includes(record?.type));
+  const routingConflictTypes = new Set(["AAAA", "CNAME", "HTTPS", "NS", "SVCB"]);
+  const blockers = exact.filter(record =>
+    routingConflictTypes.has(String(record?.type || "").toUpperCase())
+  );
   if (blockers.length > 0) {
-    fail(`DNS name ${hostname} has a conflicting ${blockers[0].type} record; refusing mutation`);
+    const types = [...new Set(
+      blockers.map(record => String(record?.type || "").toUpperCase()),
+    )].sort().join(", ");
+    fail(`DNS name ${hostname} has conflicting routing record type(s): ${types}; refusing mutation`);
   }
 
   const aRecords = exact.filter(record => record?.type === "A");
