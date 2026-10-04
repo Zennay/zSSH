@@ -1,0 +1,107 @@
+name: zSSH PR54 agent-deployment exact-head proof
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/zssh-pr54-agent-deployment-proof.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: zssh-pr54-agent-deployment-proof
+  cancel-in-progress: true
+
+jobs:
+  proof:
+    runs-on: self-hosted
+    timeout-minutes: 20
+    env:
+      TARGET_SHA: d346051d64953dcf260cfeb78214249026e17dc1
+      TARGET_PR: "54"
+    steps:
+      - name: Prove exact merged deployment slice on VPS
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(hostname)" = "vps-bb300bba"
+          test "$(id -u)" -ne 0
+          gh auth status >/dev/null 2>&1
+
+          src="$RUNNER_TEMP/zssh-pr54-proof-$GITHUB_RUN_ID"
+          home="$RUNNER_TEMP/zssh-pr54-home-$GITHUB_RUN_ID"
+          rm -rf "$src" "$home"
+          mkdir -p "$home"
+
+          gh repo clone Zennay/zSSH "$src" -- --filter=blob:none --no-checkout >/dev/null
+          git -C "$src" fetch --no-tags origin "$TARGET_SHA"
+          git -C "$src" checkout --detach "$TARGET_SHA" >/dev/null
+          test "$(git -C "$src" rev-parse HEAD)" = "$TARGET_SHA"
+
+          python3 - <<'PY'
+          import json, os, subprocess
+          pr=json.loads(subprocess.check_output(
+              ["gh","api",f"repos/Zennay/zSSH/pulls/{os.environ['TARGET_PR']}"],
+              text=True,
+          ))
+          assert pr["state"] == "closed"
+          assert pr["merged_at"]
+          assert pr["merge_commit_sha"] == os.environ["TARGET_SHA"]
+          print("ZSSH_PR54_IDENTITY=verified")
+          PY
+
+          cd "$src"
+          npm ci --ignore-scripts --no-audit --no-fund
+          npm test
+
+          node --test test/agent-client.test.mjs test/agent-identity.test.mjs test/deploy.test.mjs
+
+          export HOME="$home"
+          node scripts/create-agent-identity.mjs zt_pr54proof "$home/agent-key.pem" > "$home/identity.out"
+          test -s "$home/agent-key.pem"
+          test "$(stat -c '%a' "$home/agent-key.pem")" = "600"
+          ! grep -q -- "BEGIN PRIVATE KEY" "$home/identity.out"
+          grep -q -- "zt_pr54proof" "$home/identity.out"
+
+          ZSSH_EXPECTED_SHA="$TARGET_SHA"           HOME="$home"           bash -n deploy/install-target-agent.sh
+
+          echo "ZSSH_PR54_AGENT_DEPLOYMENT_PROOF=success"
+
+      - name: Persist durable proof receipt
+        shell: bash
+        run: |
+          set -euo pipefail
+          receipt="$RUNNER_TEMP/zssh-pr54-proof-$GITHUB_RUN_ID.json"
+          python3 - <<'PY' > "$receipt"
+          import json, os
+          print(json.dumps({
+              "project":"zssh",
+              "pull_request":54,
+              "target_sha":os.environ["TARGET_SHA"],
+              "result":"success",
+              "runner_host":"vps-bb300bba",
+              "runner_name":os.environ.get("RUNNER_NAME",""),
+              "workflow_run_id":os.environ["GITHUB_RUN_ID"],
+              "workflow_run_attempt":os.environ["GITHUB_RUN_ATTEMPT"],
+              "proof":[
+                  "exact-merged-sha",
+                  "non-root-runner",
+                  "full-node-test-suite",
+                  "focused-agent-client-identity-deploy-tests",
+                  "target-local-ed25519-key-mode-0600",
+                  "private-key-not-printed",
+                  "installer-shell-parse"
+              ]
+          },sort_keys=True))
+          PY
+          encoded="$(base64 -w0 "$receipt")"
+          path="runtime-evidence/zssh-pr54-agent-deployment-proof-$GITHUB_RUN_ID.json"
+          gh api --method PUT "repos/Zennay/zSSH/contents/$path"             -f message="Record zSSH PR54 VPS proof $GITHUB_RUN_ID"             -f content="$encoded" >/dev/null
+          echo "ZSSH_PR54_RECEIPT_PATH=$path"
+
+      - name: Cleanup
+        if: always()
+        shell: bash
+        run: |
+          rm -rf "$RUNNER_TEMP/zssh-pr54-proof-$GITHUB_RUN_ID" "$RUNNER_TEMP/zssh-pr54-home-$GITHUB_RUN_ID"
