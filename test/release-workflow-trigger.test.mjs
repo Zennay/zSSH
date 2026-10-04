@@ -50,6 +50,15 @@ test("release-critical pull_request and push path filters stay in parity", () =>
     assert.ok(pushPaths.includes(provenancePath), `push trigger must include ${provenancePath}`);
   }
 
+  for (const authProviderPath of [
+    ".github/workflows/auth0-production-preflight.yml",
+    "scripts/check-auth0-production.mjs",
+    "test/auth0-production-readiness.test.mjs",
+  ]) {
+    assert.ok(pullRequestPaths.includes(authProviderPath), `pull_request trigger must include OAuth-provider path ${authProviderPath}`);
+    assert.ok(pushPaths.includes(authProviderPath), `push trigger must include OAuth-provider path ${authProviderPath}`);
+  }
+
   for (const runtimePath of [
     "server.mjs",
     "rate-limit.mjs",
