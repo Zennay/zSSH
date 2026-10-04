@@ -39,7 +39,12 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -Eeuo pipefail
-          test "$(cat .github/openai-production-auth0-trigger)" = "QUALIFY_ZSSH_PRODUCTION_AUTH0"
+          mapfile -t activation_lines < .github/openai-production-auth0-trigger
+          test "${activation_lines[0]:-}" = "QUALIFY_ZSSH_PRODUCTION_AUTH0"
+          test "${#activation_lines[@]}" -le 2
+          if [ "${#activation_lines[@]}" -eq 2 ]; then
+            [[ "${activation_lines[1]}" =~ ^activation-id=[A-Za-z0-9._:-]{8,80}$ ]]
+          fi
           node scripts/check-main-provenance.mjs
           node scripts/check-main-protection.mjs --public-status --require-protected --require-current-sha
       - name: Require canonical protected-main manual Auth0 preflight
