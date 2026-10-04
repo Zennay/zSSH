@@ -316,7 +316,7 @@ export function buildProductionReadinessAudit(env = process.env) {
   if (!lanes.repository_governance.ready) {
     nextActions.push({
       lane: "repository_governance",
-      action: "GitHub must report main as protected, then require PR-based changes plus the zSSH CI/repository-hygiene check, run a controlled rejected-direct-push proof, and only then set ZSSH_MAIN_PROTECTION_VERIFIED=1.",
+      action: "Repository governance must be derived from live GitHub main protection plus the immutable issue #100 rejected-direct-write proof; do not configure a persistent operator-set ZSSH_MAIN_PROTECTION_VERIFIED value.",
       missing: lanes.repository_governance.missing,
       invalid: lanes.repository_governance.invalid,
     });
