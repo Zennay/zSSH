@@ -43,6 +43,34 @@ mcp = load_json(ROOT / "submission" / "mcp.template.json")
 mcp["mcpServers"]["zssh"]["url"] = "https://mcp.review.example/mcp"
 builder.validate_mcp_config(mcp, "https://mcp.review.example/mcp")
 
+expect_failure(
+    lambda: builder.https_url(
+        "https://mcp.review.example/mcp?tenant=stale",
+        "MCP URL",
+        allow_query=False,
+        allow_fragment=False,
+    ),
+    "must not contain query parameters",
+)
+expect_failure(
+    lambda: builder.https_url(
+        "https://mcp.review.example/mcp#fragment",
+        "MCP URL",
+        allow_query=False,
+        allow_fragment=False,
+    ),
+    "must not contain a URL fragment",
+)
+
+fragmented_demo = copy.deepcopy(plugin)
+fragmented_demo["extensions"]["com.openai"]["review"]["demo_recording_url"] = (
+    "https://review.example/zssh-demo#chapter"
+)
+expect_failure(
+    lambda: builder.validate_plugin(fragmented_demo, listing),
+    "must not contain a URL fragment",
+)
+
 unknown_tool = copy.deepcopy(plugin)
 unknown_tool["extensions"]["com.openai"]["review"]["test_cases"]["positive"][0]["tools_triggered"] = "totally_unreviewed_tool"
 expect_failure(lambda: builder.validate_plugin(unknown_tool, listing), "references unreviewed tools")
