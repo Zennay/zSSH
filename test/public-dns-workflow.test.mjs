@@ -4,6 +4,11 @@ import { readFileSync } from "node:fs";
 
 const workflowPath = new URL("../.github/workflows/public-dns-publish.yml", import.meta.url);
 const workflow = readFileSync(workflowPath, "utf8");
+const runbookPath = new URL(
+  "../docs/research/cloudflare-dns-publication-2026-10-04.md",
+  import.meta.url,
+);
+const runbook = readFileSync(runbookPath, "utf8");
 
 test("production DNS publish proves external convergence before reporting success", () => {
   assert.match(
@@ -72,6 +77,30 @@ test("manual production DNS dispatch is bound to the current protected main revi
 
 test("manual DNS publication still requires explicit confirmation", () => {
   assert.match(workflow, /if: github\.event_name == 'workflow_dispatch'[\s\S]*PUBLISH_ZSSH_PRODUCTION_DNS/);
+});
+
+test("operator DNS cutover runbook stays aligned with the guarded workflow contract", () => {
+  const workflowName = workflow.match(/^name:\s*(.+)$/m)?.[1]?.trim();
+  const confirmationPhrase = workflow.match(
+    /description:\s*Type\s+([A-Z0-9_]+)\s+to permit the DNS write/,
+  )?.[1];
+
+  assert.ok(workflowName, "production DNS workflow must expose a name");
+  assert.ok(confirmationPhrase, "manual DNS workflow must expose its confirmation phrase");
+  assert.ok(
+    runbook.includes(`Dispatch **${workflowName}** from canonical \`main\``),
+    "operator runbook must name the real guarded DNS workflow",
+  );
+  assert.ok(
+    runbook.includes(`exact confirmation phrase \`${confirmationPhrase}\``),
+    "operator runbook must carry the real workflow confirmation phrase",
+  );
+  assert.match(
+    runbook,
+    /GitHub \`openai-production\` environment[\s\S]*protected secret \`CLOUDFLARE_API_TOKEN\`/,
+  );
+  assert.match(runbook, /Cloudflare re-read returning the idempotent \`noop\` state/);
+  assert.match(runbook, /external DNS observation advancing beyond the \`dns\` stage/);
 });
 
 test("production DNS workflow pins all reusable actions to immutable commit SHAs", () => {
