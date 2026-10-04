@@ -112,6 +112,31 @@ test("production DNS replacement is bound to an explicit reviewed existing-recor
   assert.match(runbook, /existing A record/);
 });
 
+test("production DNS apply is bound to the exact dry-run record-state fingerprint", () => {
+  const planTail = workflow.split("      - name: Validate desired Cloudflare DNS change without mutation")[1];
+  assert.ok(planTail, "missing non-mutating DNS plan step");
+  const plan = planTail.split("\n      - name:")[0];
+  assert.match(plan, /id: dns_plan/);
+  assert.match(plan, /evidence\.previous_state_sha256 \|\| ""/);
+  assert.match(plan, /current_state_sha256=%s/);
+  assert.match(plan, /"\$GITHUB_OUTPUT"/);
+
+  const applyTail = workflow.split("      - name: Publish exact DNS-only A record")[1];
+  assert.ok(applyTail, "missing DNS apply step");
+  const apply = applyTail.split("\n      - name:")[0];
+  assert.match(
+    apply,
+    /ZSSH_DNS_EXPECTED_CURRENT_STATE_SHA256: \$\{\{ steps\.dns_plan\.outputs\.current_state_sha256 \}\}/,
+  );
+  assert.doesNotMatch(
+    apply,
+    /ZSSH_DNS_EXPECTED_CURRENT_STATE_SHA256: \$\{\{ vars\./,
+  );
+
+  assert.match(runbook, /plan-to-apply/);
+  assert.match(runbook, /state fingerprint/i);
+});
+
 test("operator DNS cutover runbook stays aligned with the guarded workflow contract", () => {
   const workflowName = workflow.match(/^name:\s*(.+)$/m)?.[1]?.trim();
   const confirmationPhrase = workflow.match(

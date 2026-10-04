@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  cloudflareDnsRecordStateSha256,
   reconcileCloudflareDns,
   resolveCloudflareZoneId,
   validateCloudflareZoneId,
@@ -153,12 +154,20 @@ test("apply updates one existing A record but preserves unrelated coexisting rec
     calls.push({ url: String(url), init });
     if (calls.length === 1) return response(listed);
     return response({ id: recordId, type: "A", name: "zssh.cheapgpt.shop", content: "198.244.191.182", ttl: 1, proxied: false });
-  }, { apply: true, expectedCurrentIpv4: "203.0.113.10" }));
+  }, {
+    apply: true,
+    expectedCurrentIpv4: "203.0.113.10",
+    expectedCurrentStateSha256: cloudflareDnsRecordStateSha256(listed[0]),
+  }));
   assert.equal(result.action, "updated");
   assert.equal(result.ttl, 1);
   assert.equal(result.previous_ipv4, "203.0.113.10");
   assert.equal(result.previous_ttl, 300);
   assert.equal(result.previous_proxied, true);
+  assert.equal(
+    result.previous_state_sha256,
+    cloudflareDnsRecordStateSha256(listed[0]),
+  );
   assert.equal(calls[1].init.method, "PATCH");
   assert.match(calls[1].url, new RegExp(recordId + "$"));
 });
@@ -173,23 +182,54 @@ test("dry-run exposes an existing A record but requires an explicit update preco
   assert.equal(result.previous_ipv4, "203.0.113.10");
   assert.equal(result.previous_ttl, 300);
   assert.equal(result.previous_proxied, true);
+  assert.equal(
+    result.previous_state_sha256,
+    cloudflareDnsRecordStateSha256({
+      id: recordId,
+      type: "A",
+      name: "zssh.cheapgpt.shop",
+      content: "203.0.113.10",
+      ttl: 300,
+      proxied: true,
+    }),
+  );
 });
 
-test("apply refuses an existing A record without an exact reviewed current-IP precondition", async () => {
+test("apply refuses an existing A record without exact reviewed human and plan preconditions", async () => {
   const records = [
     { id: recordId, type: "A", name: "zssh.cheapgpt.shop", content: "203.0.113.10", ttl: 300, proxied: true },
   ];
+  const stateSha256 = cloudflareDnsRecordStateSha256(records[0]);
 
   await assert.rejects(
-    reconcileCloudflareDns(baseArgs(async () => response(records), { apply: true })),
+    reconcileCloudflareDns(baseArgs(async () => response(records), {
+      apply: true,
+      expectedCurrentStateSha256: stateSha256,
+    })),
     /requires ZSSH_DNS_EXPECTED_CURRENT_IPV4/,
   );
   await assert.rejects(
     reconcileCloudflareDns(baseArgs(async () => response(records), {
       apply: true,
       expectedCurrentIpv4: "203.0.113.11",
+      expectedCurrentStateSha256: stateSha256,
     })),
     /changed since the reviewed DNS precondition/,
+  );
+  await assert.rejects(
+    reconcileCloudflareDns(baseArgs(async () => response(records), {
+      apply: true,
+      expectedCurrentIpv4: "203.0.113.10",
+    })),
+    /requires ZSSH_DNS_EXPECTED_CURRENT_STATE_SHA256/,
+  );
+  await assert.rejects(
+    reconcileCloudflareDns(baseArgs(async () => response(records), {
+      apply: true,
+      expectedCurrentIpv4: "203.0.113.10",
+      expectedCurrentStateSha256: "f".repeat(64),
+    })),
+    /state changed since the reviewed DNS plan/,
   );
 });
 
@@ -223,6 +263,7 @@ test("TTL drift is not accepted as exact convergence", async () => {
   }, {
     apply: true,
     expectedCurrentIpv4: "198.244.191.182",
+    expectedCurrentStateSha256: cloudflareDnsRecordStateSha256(stale[0]),
   }));
 
   assert.equal(applied.action, "updated");
@@ -230,6 +271,53 @@ test("TTL drift is not accepted as exact convergence", async () => {
   assert.equal(applied.previous_ttl, 300);
   assert.equal(calls[1].init.method, "PATCH");
   assert.equal(JSON.parse(calls[1].init.body).ttl, 1);
+});
+
+test("apply fails closed when TTL or proxy state changes after the reviewed dry-run plan", async () => {
+  const reviewed = {
+    id: recordId,
+    type: "A",
+    name: "zssh.cheapgpt.shop",
+    content: "198.244.191.182",
+    ttl: 300,
+    proxied: false,
+  };
+  const reviewedStateSha256 = cloudflareDnsRecordStateSha256(reviewed);
+
+  for (const changed of [
+    { ...reviewed, ttl: 60 },
+    { ...reviewed, proxied: true },
+    { ...reviewed, id: "11111111111111111111111111111111" },
+  ]) {
+    await assert.rejects(
+      reconcileCloudflareDns(baseArgs(async () => response([changed]), {
+        apply: true,
+        expectedCurrentIpv4: reviewed.content,
+        expectedCurrentStateSha256: reviewedStateSha256,
+      })),
+      /state changed since the reviewed DNS plan/,
+    );
+  }
+});
+
+test("apply fails closed when an A record disappears after the reviewed dry-run plan", async () => {
+  const reviewed = {
+    id: recordId,
+    type: "A",
+    name: "zssh.cheapgpt.shop",
+    content: "203.0.113.10",
+    ttl: 300,
+    proxied: true,
+  };
+
+  await assert.rejects(
+    reconcileCloudflareDns(baseArgs(async () => response([]), {
+      apply: true,
+      expectedCurrentIpv4: reviewed.content,
+      expectedCurrentStateSha256: cloudflareDnsRecordStateSha256(reviewed),
+    })),
+    /disappeared since the reviewed DNS plan/,
+  );
 });
 
 test("exact record is idempotent and does not write", async () => {
@@ -280,6 +368,7 @@ test("autodiscovered zone ID is reused for update writes", async () => {
     zoneName: "cheapgpt.shop",
     apply: true,
     expectedCurrentIpv4: "203.0.113.10",
+    expectedCurrentStateSha256: cloudflareDnsRecordStateSha256(listed[0]),
   }));
   assert.equal(result.action, "updated");
   assert.equal(result.zone_source, "discovered");
