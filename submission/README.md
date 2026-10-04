@@ -48,6 +48,7 @@ The username/password or other reviewer credentials must **not** be committed, p
 - `ZSSH_CHATGPT_MOBILE_REVIEWED=1` only after the production connection card has been exercised successfully in ChatGPT mobile;
 - `ZSSH_CHATGPT_REVIEW_SHA256` set to the fingerprint printed by `node scripts/check-host-surface-review-binding.mjs --compute` for the exact reviewed MCP endpoint, tool contract, and connection-card HTML; any change to those inputs invalidates the desktop/mobile review attestations;
 - `ZSSH_REVIEW_ACCESS_TOKEN` separately as a secret used only by the automated end-to-end MCP probe;
+- `ZSSH_MAIN_PROTECTION_VERIFIED=1` only after `main` requires PR-based changes plus the zSSH CI/repository-hygiene check and a controlled direct-push attempt has been rejected;
 - `ZSSH_OPENAI_DOMAIN_VERIFIED=1` only after OpenAI Verify Domain succeeds;
 - `ZSSH_OPENAI_VERIFIED_MCP_ORIGIN` set to the exact production MCP origin (`scheme://hostname[:port]`) for which that portal verification applies; a changed origin invalidates the attestation;
 - `ZSSH_OPENAI_TOOL_SCAN_VERIFIED=1` only after the current production Scan Tools run succeeds and required findings are resolved.
