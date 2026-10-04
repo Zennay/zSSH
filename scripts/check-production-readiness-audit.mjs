@@ -291,11 +291,12 @@ function validatePortalLane(env) {
         name: "ZSSH_PLUGIN_MCP_URL",
       });
       const verifiedOrigin = new URL(value(env, "ZSSH_OPENAI_VERIFIED_MCP_ORIGIN"));
-      if (verifiedOrigin.origin !== mcpUrl.origin || verifiedOrigin.pathname !== "/") {
+      const expectedOriginHref = `${mcpUrl.origin}/`;
+      if (verifiedOrigin.href !== expectedOriginHref) {
         issues.push(
           validationIssue(
             "ZSSH_OPENAI_VERIFIED_MCP_ORIGIN",
-            "must be the exact origin of ZSSH_PLUGIN_MCP_URL",
+            "must be the exact origin of ZSSH_PLUGIN_MCP_URL without path, query, or fragment",
           ),
         );
       }
