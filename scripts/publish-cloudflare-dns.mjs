@@ -192,18 +192,37 @@ export async function reconcileCloudflareDns({
 
   const existing = aRecords[0] || null;
   const desired = { type: "A", name: hostname, content: checkedIpv4, ttl: 1, proxied: false };
-  if (existing && String(existing.content) === checkedIpv4 && existing.proxied === false) {
-    return { ok: true, action: "noop", hostname, ipv4: checkedIpv4, proxied: false, zone_source: zone.source };
+  const existingTtl = existing ? Number(existing.ttl) : null;
+  if (
+    existing &&
+    String(existing.content) === checkedIpv4 &&
+    existing.proxied === false &&
+    existingTtl === desired.ttl
+  ) {
+    return {
+      ok: true,
+      action: "noop",
+      hostname,
+      ipv4: checkedIpv4,
+      ttl: desired.ttl,
+      proxied: false,
+      zone_source: zone.source,
+    };
   }
 
   const action = existing ? "update" : "create";
   let previousIpv4 = null;
+  let previousTtl = null;
   let previousProxied = null;
   if (existing) {
     previousIpv4 = String(existing.content || "").trim();
+    previousTtl = Number(existing.ttl);
     previousProxied = existing.proxied === true;
     if (net.isIP(previousIpv4) !== 4) {
       fail("existing Cloudflare A record has an invalid IPv4 content value");
+    }
+    if (!Number.isInteger(previousTtl) || previousTtl < 1) {
+      fail("existing Cloudflare A record has an invalid TTL value");
     }
 
     const expected = String(expectedCurrentIpv4 || "").trim();
@@ -214,8 +233,10 @@ export async function reconcileCloudflareDns({
           action: "would_update_requires_precondition",
           hostname,
           ipv4: checkedIpv4,
+          ttl: desired.ttl,
           proxied: false,
           previous_ipv4: previousIpv4,
+          previous_ttl: previousTtl,
           previous_proxied: previousProxied,
           zone_source: zone.source,
         };
@@ -236,8 +257,13 @@ export async function reconcileCloudflareDns({
       action: `would_${action}`,
       hostname,
       ipv4: checkedIpv4,
+      ttl: desired.ttl,
       proxied: false,
-      ...(existing ? { previous_ipv4: previousIpv4, previous_proxied: previousProxied } : {}),
+      ...(existing ? {
+        previous_ipv4: previousIpv4,
+        previous_ttl: previousTtl,
+        previous_proxied: previousProxied,
+      } : {}),
       zone_source: zone.source,
     };
   }
@@ -259,6 +285,7 @@ export async function reconcileCloudflareDns({
     record.type !== "A" ||
     normalizeDnsName(record.name) !== hostname ||
     String(record.content) !== checkedIpv4 ||
+    Number(record.ttl) !== desired.ttl ||
     record.proxied !== false
   ) {
     fail("Cloudflare returned a DNS record that does not match the requested DNS-only A record");
@@ -269,8 +296,13 @@ export async function reconcileCloudflareDns({
     action: action === "create" ? "created" : "updated",
     hostname,
     ipv4: checkedIpv4,
+    ttl: desired.ttl,
     proxied: false,
-    ...(existing ? { previous_ipv4: previousIpv4, previous_proxied: previousProxied } : {}),
+    ...(existing ? {
+      previous_ipv4: previousIpv4,
+      previous_ttl: previousTtl,
+      previous_proxied: previousProxied,
+    } : {}),
     zone_source: zone.source,
   };
 }

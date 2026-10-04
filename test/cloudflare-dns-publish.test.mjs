@@ -129,9 +129,10 @@ test("apply creates the exact DNS-only A record", async () => {
   const result = await reconcileCloudflareDns(baseArgs(async (url, init) => {
     calls.push({ url: String(url), init });
     if (calls.length === 1) return response([]);
-    return response({ id: recordId, type: "A", name: "zssh.cheapgpt.shop", content: "198.244.191.182", proxied: false });
+    return response({ id: recordId, type: "A", name: "zssh.cheapgpt.shop", content: "198.244.191.182", ttl: 1, proxied: false });
   }, { apply: true }));
   assert.equal(result.action, "created");
+  assert.equal(result.ttl, 1);
   assert.equal(calls[1].init.method, "POST");
   assert.deepEqual(JSON.parse(calls[1].init.body), {
     type: "A",
@@ -145,16 +146,18 @@ test("apply creates the exact DNS-only A record", async () => {
 test("apply updates one existing A record but preserves unrelated coexisting records", async () => {
   const calls = [];
   const listed = [
-    { id: recordId, type: "A", name: "zssh.cheapgpt.shop", content: "203.0.113.10", proxied: true },
+    { id: recordId, type: "A", name: "zssh.cheapgpt.shop", content: "203.0.113.10", ttl: 300, proxied: true },
     { id: "11111111111111111111111111111111", type: "TXT", name: "zssh.cheapgpt.shop", content: "verification" },
   ];
   const result = await reconcileCloudflareDns(baseArgs(async (url, init) => {
     calls.push({ url: String(url), init });
     if (calls.length === 1) return response(listed);
-    return response({ id: recordId, type: "A", name: "zssh.cheapgpt.shop", content: "198.244.191.182", proxied: false });
+    return response({ id: recordId, type: "A", name: "zssh.cheapgpt.shop", content: "198.244.191.182", ttl: 1, proxied: false });
   }, { apply: true, expectedCurrentIpv4: "203.0.113.10" }));
   assert.equal(result.action, "updated");
+  assert.equal(result.ttl, 1);
   assert.equal(result.previous_ipv4, "203.0.113.10");
+  assert.equal(result.previous_ttl, 300);
   assert.equal(result.previous_proxied, true);
   assert.equal(calls[1].init.method, "PATCH");
   assert.match(calls[1].url, new RegExp(recordId + "$"));
@@ -162,17 +165,19 @@ test("apply updates one existing A record but preserves unrelated coexisting rec
 
 test("dry-run exposes an existing A record but requires an explicit update precondition", async () => {
   const result = await reconcileCloudflareDns(baseArgs(async () => response([
-    { id: recordId, type: "A", name: "zssh.cheapgpt.shop", content: "203.0.113.10", proxied: true },
+    { id: recordId, type: "A", name: "zssh.cheapgpt.shop", content: "203.0.113.10", ttl: 300, proxied: true },
   ])));
 
   assert.equal(result.action, "would_update_requires_precondition");
+  assert.equal(result.ttl, 1);
   assert.equal(result.previous_ipv4, "203.0.113.10");
+  assert.equal(result.previous_ttl, 300);
   assert.equal(result.previous_proxied, true);
 });
 
 test("apply refuses an existing A record without an exact reviewed current-IP precondition", async () => {
   const records = [
-    { id: recordId, type: "A", name: "zssh.cheapgpt.shop", content: "203.0.113.10", proxied: true },
+    { id: recordId, type: "A", name: "zssh.cheapgpt.shop", content: "203.0.113.10", ttl: 300, proxied: true },
   ];
 
   await assert.rejects(
@@ -188,26 +193,66 @@ test("apply refuses an existing A record without an exact reviewed current-IP pr
   );
 });
 
+test("TTL drift is not accepted as exact convergence", async () => {
+  const stale = [{
+    id: recordId,
+    type: "A",
+    name: "zssh.cheapgpt.shop",
+    content: "198.244.191.182",
+    ttl: 300,
+    proxied: false,
+  }];
+
+  const plan = await reconcileCloudflareDns(baseArgs(async () => response(stale)));
+  assert.equal(plan.action, "would_update_requires_precondition");
+  assert.equal(plan.ttl, 1);
+  assert.equal(plan.previous_ttl, 300);
+
+  const calls = [];
+  const applied = await reconcileCloudflareDns(baseArgs(async (url, init) => {
+    calls.push({ url: String(url), init });
+    if (calls.length === 1) return response(stale);
+    return response({
+      id: recordId,
+      type: "A",
+      name: "zssh.cheapgpt.shop",
+      content: "198.244.191.182",
+      ttl: 1,
+      proxied: false,
+    });
+  }, {
+    apply: true,
+    expectedCurrentIpv4: "198.244.191.182",
+  }));
+
+  assert.equal(applied.action, "updated");
+  assert.equal(applied.ttl, 1);
+  assert.equal(applied.previous_ttl, 300);
+  assert.equal(calls[1].init.method, "PATCH");
+  assert.equal(JSON.parse(calls[1].init.body).ttl, 1);
+});
+
 test("exact record is idempotent and does not write", async () => {
   let calls = 0;
   const result = await reconcileCloudflareDns(baseArgs(async () => {
     calls += 1;
-    return response([{ id: recordId, type: "A", name: "zssh.cheapgpt.shop.", content: "198.244.191.182", proxied: false }]);
+    return response([{ id: recordId, type: "A", name: "zssh.cheapgpt.shop.", content: "198.244.191.182", ttl: 1, proxied: false }]);
   }, { apply: true }));
   assert.equal(result.action, "noop");
+  assert.equal(result.ttl, 1);
   assert.equal(calls, 1);
 });
 
 test("refuses alternate routing records and multi-A RRsets", async () => {
   for (const records of [
-    [{ id: recordId, type: "AAAA", name: "zssh.cheapgpt.shop", content: "2001:4860:4860::8888", proxied: false }],
+    [{ id: recordId, type: "AAAA", name: "zssh.cheapgpt.shop", content: "2001:4860:4860::8888", ttl: 1, proxied: false }],
     [{ id: recordId, type: "CNAME", name: "zssh.cheapgpt.shop", content: "other.example.net" }],
     [{ id: recordId, type: "HTTPS", name: "zssh.cheapgpt.shop", content: "1 alt.example.net alpn=\"h2\"" }],
     [{ id: recordId, type: "NS", name: "zssh.cheapgpt.shop", content: "ns1.example.net" }],
     [{ id: recordId, type: "SVCB", name: "zssh.cheapgpt.shop", content: "1 alt.example.net alpn=\"h2\"" }],
     [
-      { id: recordId, type: "A", name: "zssh.cheapgpt.shop", content: "198.244.191.182", proxied: false },
-      { id: "11111111111111111111111111111111", type: "A", name: "zssh.cheapgpt.shop", content: "1.1.1.1", proxied: false },
+      { id: recordId, type: "A", name: "zssh.cheapgpt.shop", content: "198.244.191.182", ttl: 1, proxied: false },
+      { id: "11111111111111111111111111111111", type: "A", name: "zssh.cheapgpt.shop", content: "1.1.1.1", ttl: 1, proxied: false },
     ],
   ]) {
     await assert.rejects(
@@ -221,7 +266,7 @@ test("refuses alternate routing records and multi-A RRsets", async () => {
 test("autodiscovered zone ID is reused for update writes", async () => {
   const calls = [];
   const listed = [
-    { id: recordId, type: "A", name: "zssh.cheapgpt.shop", content: "203.0.113.10", proxied: true },
+    { id: recordId, type: "A", name: "zssh.cheapgpt.shop", content: "203.0.113.10", ttl: 300, proxied: true },
   ];
   const result = await reconcileCloudflareDns(baseArgs(async (url, init) => {
     calls.push({ url: String(url), init });
@@ -229,7 +274,7 @@ test("autodiscovered zone ID is reused for update writes", async () => {
       return response([{ id: zoneId, name: "cheapgpt.shop", status: "active" }]);
     }
     if (calls.length === 2) return response(listed);
-    return response({ id: recordId, type: "A", name: "zssh.cheapgpt.shop", content: "198.244.191.182", proxied: false });
+    return response({ id: recordId, type: "A", name: "zssh.cheapgpt.shop", content: "198.244.191.182", ttl: 1, proxied: false });
   }, {
     zoneId: "",
     zoneName: "cheapgpt.shop",

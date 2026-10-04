@@ -99,7 +99,12 @@ jobs:
           node --input-type=module - "$EVIDENCE_PATH" <<'NODE'
           import { readFileSync } from "node:fs";
           const evidence = JSON.parse(readFileSync(process.argv[2], "utf8"));
-          if (evidence.ok !== true || evidence.action !== "noop" || evidence.proxied !== false) {
+          if (
+            evidence.ok !== true ||
+            evidence.action !== "noop" ||
+            evidence.ttl !== 1 ||
+            evidence.proxied !== false
+          ) {
             throw new Error("Cloudflare DNS did not converge to the exact DNS-only A-record state");
           }
           console.log("ZSSH_PRODUCTION_DNS_GREEN");
