@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { AgentRequestVerifier } from "../agent-transport.mjs";
@@ -56,6 +56,60 @@ test("target client signs every outbound agent request", async () => {
       "/agent/v1/result",
       "/agent/v1/disconnect",
     ]);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+
+test("target client refuses weak private-key permissions, symlinks, and local target id", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "zssh-agent-key-policy-"));
+  const { privateKey } = crypto.generateKeyPairSync("ed25519");
+  const keyFile = path.join(root, "agent.pem");
+  const linkFile = path.join(root, "agent-link.pem");
+  await writeFile(keyFile, privateKey.export({ type: "pkcs8", format: "pem" }), { mode: 0o644 });
+
+  try {
+    await assert.rejects(
+      () => createAgentClient({
+        env: {
+          NODE_ENV: "test",
+          ZSSH_GATEWAY_URL: "http://127.0.0.1:8788",
+          ZSSH_TARGET_ID: "zt_keypolicy123",
+          ZSSH_AGENT_PRIVATE_KEY_FILE: keyFile,
+        },
+        fetchImpl: async () => new Response("{}", { status: 200 }),
+      }),
+      /group\/world accessible/,
+    );
+
+    await chmod(keyFile, 0o600);
+    await symlink(keyFile, linkFile);
+    await assert.rejects(
+      () => createAgentClient({
+        env: {
+          NODE_ENV: "test",
+          ZSSH_GATEWAY_URL: "http://127.0.0.1:8788",
+          ZSSH_TARGET_ID: "zt_keypolicy123",
+          ZSSH_AGENT_PRIVATE_KEY_FILE: linkFile,
+        },
+        fetchImpl: async () => new Response("{}", { status: 200 }),
+      }),
+      /non-symlink/,
+    );
+
+    await assert.rejects(
+      () => createAgentClient({
+        env: {
+          NODE_ENV: "test",
+          ZSSH_GATEWAY_URL: "http://127.0.0.1:8788",
+          ZSSH_TARGET_ID: "local",
+          ZSSH_AGENT_PRIVATE_KEY_FILE: keyFile,
+        },
+        fetchImpl: async () => new Response("{}", { status: 200 }),
+      }),
+      /explicit opaque zt_/,
+    );
   } finally {
     await rm(root, { recursive: true, force: true });
   }
