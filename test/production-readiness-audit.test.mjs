@@ -529,3 +529,45 @@ test("readiness workflow summary exposes gate classification for autonomous cons
   assert.ok(readinessWorkflow.includes("Gate kind: ${item.gate_kind}"));
   assert.ok(readinessWorkflow.includes('Requires external input: ${item.requires_external_input ? "yes" : "no"}'));
 });
+
+
+test("protected readiness scopes production secrets to the receipt builder step", () => {
+  const auditJob = readinessWorkflow.match(/\n  audit:\n[\s\S]*$/)?.[0] || "";
+  assert.notEqual(auditJob, "");
+
+  const [auditHeader = ""] = auditJob.split("\n    steps:\n");
+  const secretBindings = [
+    "CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}",
+    "ZSSH_REVIEW_ACCESS_TOKEN: ${{ secrets.ZSSH_REVIEW_ACCESS_TOKEN }}",
+    "AUTH0_MANAGEMENT_API_TOKEN: ${{ secrets.AUTH0_MANAGEMENT_API_TOKEN }}",
+    "OPENAI_APPS_CHALLENGE_TOKEN: ${{ secrets.OPENAI_APPS_CHALLENGE_TOKEN }}",
+  ];
+
+  for (const binding of secretBindings) {
+    assert.equal(
+      auditHeader.includes(binding),
+      false,
+      `protected binding must not be inherited by the whole audit job: ${binding}`,
+    );
+  }
+
+  const receiptStep = auditJob.match(
+    /      - name: Build secret-safe readiness receipt[\s\S]*?(?=\n      - name: Summarize next executable lanes)/,
+  )?.[0] || "";
+  assert.notEqual(receiptStep, "");
+  for (const binding of secretBindings) {
+    assert.ok(
+      receiptStep.includes(binding),
+      `receipt builder must receive protected binding explicitly: ${binding}`,
+    );
+  }
+
+  const laterSteps = auditJob.slice(auditJob.indexOf("      - name: Summarize next executable lanes"));
+  for (const binding of secretBindings) {
+    assert.equal(
+      laterSteps.includes(binding),
+      false,
+      `later readiness steps must not regain protected binding: ${binding}`,
+    );
+  }
+});
