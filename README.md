@@ -193,28 +193,39 @@ Gateway setup:
 3. Configure `ZSSH_AGENT_PUBLIC_KEYS_FILE` on the public gateway. In production, agent mode refuses the reserved `local` target ID.
 4. Start the target agent with `ZSSH_GATEWAY_URL`, `ZSSH_TARGET_ID`, `ZSSH_AGENT_PRIVATE_KEY_FILE`, and the same narrow target-side `ZSSH_PUBLIC_ALLOWED_ROOTS`.
 
-Example key generation:
+Provision the identity **on the target** so the private key never has to be created or transported by the gateway:
 
 ```bash
-install -d -m 700 ~/.config/zssh
-openssl genpkey -algorithm ED25519 -out ~/.config/zssh/agent-ed25519.pem
-chmod 600 ~/.config/zssh/agent-ed25519.pem
-openssl pkey -in ~/.config/zssh/agent-ed25519.pem -pubout > ~/.config/zssh/agent-ed25519.pub.pem
+npm run agent:init -- zt_example1234 ~/.config/zssh/agent-ed25519.pem
 ```
+
+The helper writes the target-local Ed25519 private key mode 0600 inside a mode-0700 directory, never prints it, refuses overwrite, and outputs a `gateway_public_key_config` object containing only the public key. Copy that public record into the gateway file configured through `ZSSH_AGENT_PUBLIC_KEYS_FILE`. If the target ID argument is omitted, the helper generates a random opaque `zt_...` ID.
 
 The gateway's agent endpoints use signed POST requests with a target ID, timestamp, nonce, and SHA-256 body binding. Replays and stale timestamps fail closed. A new authenticated agent session replaces only the previous session for the same target. Tool forwarding is bounded to the existing public zSSH surface; raw shell, private Git/systemd operations, and arbitrary target URLs are not exposed through this transport.
 
-Run the target-side agent with:
+Run the target-side agent directly for development, or install the persistent user service:
+
+```bash
+export ZSSH_GATEWAY_URL=https://mcp.example.com
+export ZSSH_TARGET_ID=zt_example1234
+export ZSSH_AGENT_PRIVATE_KEY_FILE="$HOME/.config/zssh/agent-ed25519.pem"
+export ZSSH_PUBLIC_ALLOWED_ROOTS="$HOME/zssh-workspace"
+bash deploy/install-target-agent.sh
+```
+
+The installer refuses root, pins the exact Git revision into an immutable release directory, exports only files tracked by that exact commit, writes `~/.config/zssh/agent.env` mode 0600 without shell-evaluating it, re-validates the HTTPS gateway origin and 0600/non-symlink Ed25519 private key, and enables `zssh-agent.service`. The user service runs with `NoNewPrivileges=true`, private tmp/devices, `ProtectSystem=full`, kernel/control-group protections, `RestrictSUIDSGID`, and a restrictive umask.
+
+For a foreground development run:
 
 ```bash
 ZSSH_GATEWAY_URL=https://mcp.example.com \
-ZSSH_TARGET_ID=zt_replace_with_random_id \
+ZSSH_TARGET_ID=zt_example1234 \
 ZSSH_AGENT_PRIVATE_KEY_FILE="$HOME/.config/zssh/agent-ed25519.pem" \
 ZSSH_PUBLIC_ALLOWED_ROOTS="$HOME/zssh-workspace" \
-node agent.mjs
+npm run agent
 ```
 
-The target makes only outbound connections. The public OAuth profile still requires local pairing before the gateway can route a tool call to a live target session.
+The runtime now rejects symlink private keys, group/world-readable private keys, and the reserved `local` target ID. The target makes only outbound connections. The public OAuth profile still requires local pairing before the gateway can route a tool call to a live target session. See `docs/research/outbound-agent-deployment-hardening-2026-10-03.md`.
 
 
 ## Claude MCP compatibility
