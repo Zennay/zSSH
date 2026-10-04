@@ -23,7 +23,7 @@ function receipt(overrides = {}) {
       lane: "dns_publication",
       gate_kind: "provider_credentials",
       requires_external_input: true,
-      action: "Provision a protected Cloudflare API token scoped only to cheapgpt.shop with Zone Read + DNS Write. For durable CI/CD prefer an account-owned token and set CLOUDFLARE_ACCOUNT_ID; user-owned tokens from My Profile > API Tokens remain supported when CLOUDFLARE_ACCOUNT_ID is unset. The preflight uses /accounts/{account_id}/tokens/verify only for the explicit account path and /user/tokens/verify otherwise. Then run zSSH production DNS publish.",
+      action: "Provision a protected Cloudflare API token scoped only to cheapgpt.shop with Zone Read + DNS Write. For durable CI/CD prefer an account-owned token and set CLOUDFLARE_ACCOUNT_ID; user-owned tokens from My Profile > API Tokens remain supported when CLOUDFLARE_ACCOUNT_ID is unset. The preflight uses /accounts/{account_id}/tokens/verify only for the explicit account path and /user/tokens/verify otherwise. Then trigger the guarded zSSH production DNS publisher through a reviewed change to .github/openai-production-dns-trigger: keep line 1 exactly PUBLISH_ZSSH_PRODUCTION_DNS and add or rotate line 2 as activation-id=<8-80 safe characters>, then merge to protected main. Never place a credential in the marker.",
       missing: ["CLOUDFLARE_API_TOKEN"],
       invalid: [],
     },
@@ -53,6 +53,10 @@ test("renders only secret-safe blocking metadata", () => {
   assert.match(result.body, /My Profile > API Tokens/);
   assert.match(result.body, /\/accounts\/\{account_id\}\/tokens\/verify/);
   assert.match(result.body, /\/user\/tokens\/verify/);
+  assert.match(result.body, /\.github\/openai-production-dns-trigger/);
+  assert.match(result.body, /PUBLISH_ZSSH_PRODUCTION_DNS/);
+  assert.match(result.body, /activation-id=<8-80 safe characters>/);
+  assert.match(result.body, /Never place a credential in the marker/);
   assert.match(result.body, /auth0_preflight/);
   assert.ok(
     result.body.includes(
