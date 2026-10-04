@@ -49,12 +49,24 @@ const PROVIDER_LANES = {
   ],
 };
 
+const DNS_RESOLVED_PUBLIC_ORIGIN_STAGES = new Set([
+  "https_health",
+  "mcp_auth",
+  "oauth_metadata",
+  "transport",
+  "ready",
+]);
+
 function value(env, name) {
   return String(env[name] || "").trim();
 }
 
 function configured(env, name) {
   return value(env, name).length > 0;
+}
+
+function dnsPublicationObserved(env) {
+  return DNS_RESOLVED_PUBLIC_ORIGIN_STAGES.has(value(env, "ZSSH_PUBLIC_ORIGIN_STAGE"));
 }
 
 function validationIssue(name, reason) {
@@ -291,9 +303,19 @@ function laneStatus(env, laneName, names) {
       ? auth0ManagementBaseConfigured(env)
       : configured(env, name),
   ]));
-  const missing = names.filter(name => !present[name]);
   const invalid = LANE_VALIDATORS[laneName]?.(env) || [];
 
+  if (laneName === "dns_publication") {
+    const observed = dnsPublicationObserved(env);
+    return {
+      ready: observed && invalid.length === 0,
+      configured: present,
+      missing: observed || present.CLOUDFLARE_API_TOKEN ? [] : ["CLOUDFLARE_API_TOKEN"],
+      invalid,
+    };
+  }
+
+  const missing = names.filter(name => !present[name]);
   return {
     ready: missing.length === 0 && invalid.length === 0,
     configured: present,
@@ -357,11 +379,21 @@ export function buildProductionReadinessAudit(env = process.env) {
     });
   }
   if (!lanes.dns_publication.ready) {
+    const tokenPresent = configured(env, "CLOUDFLARE_API_TOKEN");
+    const configInvalid = lanes.dns_publication.invalid.length > 0;
     nextActions.push({
       lane: "dns_publication",
-      gate_kind: "provider_credentials",
-      requires_external_input: true,
-      action: "Provision a protected Cloudflare token scoped to cheapgpt.shop with Zone Read + DNS Write, then run zSSH production DNS publish. CLOUDFLARE_ZONE_ID remains an optional legacy override for DNS-write-only tokens.",
+      gate_kind: configInvalid
+        ? "provider_configuration"
+        : tokenPresent
+          ? "provider_execution"
+          : "provider_credentials",
+      requires_external_input: configInvalid || !tokenPresent,
+      action: configInvalid
+        ? "Repair or remove the invalid optional Cloudflare zone override, then rerun protected readiness."
+        : tokenPresent
+          ? `Run the guarded zSSH production DNS publisher; live public-origin evidence is still at stage ${value(env, "ZSSH_PUBLIC_ORIGIN_STAGE") || "unknown"}.`
+          : "Provision a protected Cloudflare token scoped to cheapgpt.shop with Zone Read + DNS Write, then run zSSH production DNS publish. CLOUDFLARE_ZONE_ID remains an optional legacy override for DNS-write-only tokens.",
       missing: lanes.dns_publication.missing,
       invalid: lanes.dns_publication.invalid,
     });
