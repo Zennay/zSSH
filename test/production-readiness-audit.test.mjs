@@ -65,7 +65,6 @@ test("classifies an empty production environment into actionable M5 lanes", () =
   assert.equal(result.ready.auth0_preflight, false);
   assert.equal(result.ready.final_release_config, false);
   assert.deepEqual(result.lanes.dns_publication.missing, [
-    "CLOUDFLARE_ZONE_ID",
     "CLOUDFLARE_API_TOKEN",
   ]);
   assert.deepEqual(result.lanes.dns_publication.invalid, []);
@@ -85,6 +84,15 @@ test("classifies an empty production environment into actionable M5 lanes", () =
     "reviewer_fixture",
     "portal_and_host_attestations",
   ]);
+});
+
+test("treats Cloudflare zone ID as an optional legacy override", () => {
+  const result = buildProductionReadinessAudit({
+    ...complete,
+    CLOUDFLARE_ZONE_ID: "",
+  });
+  assert.equal(result.ready.dns_publication, true);
+  assert.deepEqual(result.lanes.dns_publication.missing, []);
 });
 
 test("reports external-input-only when no repository-owned action remains", () => {
