@@ -7,7 +7,7 @@ This checklist tracks the production path from the current review-ready MCP prof
 ## Pre-release
 
 - [ ] `npm run repo:main-protection:status` reports GitHub `main` as protected; protected readiness and final release enforce this live prerequisite
-- [ ] `main` rejects direct writes for normal user/automation paths, requires pull-request-based changes plus the zSSH CI/repository-hygiene check, and a controlled direct-push attempt has been rejected; only then set `ZSSH_MAIN_PROTECTION_VERIFIED=1`
+- [ ] `main` rejects direct writes for normal user/automation paths, requires pull-request-based changes plus the zSSH CI/repository-hygiene check, and the canonical controlled direct-push canary is rejected; protected release workflows derive the governance attestation live from that immutable GitHub evidence
 - [ ] Stable public HTTPS MCP endpoint configured
 - [ ] Published `/privacy` page discloses data categories, purposes, recipients, retention, and user controls for the actual production data flow
 - [ ] Production OAuth authorization server publishes discovery metadata with authorization-code flow, PKCE S256, and token endpoint auth methods
@@ -33,7 +33,7 @@ Before attempting provider writes or the final production probe, run the manual 
 
 Production submission is dispatched only from canonical `main`. Before the production environment is entered, the release gate verifies through GitHub's commit→pull-request association that the exact `GITHUB_SHA` is the merge commit of a closed, merged PR. Direct commits to `main` therefore cannot become production submission candidates. The separate `Canonical main provenance` workflow also checks every push to `main`.
 
-That post-write provenance check is defense in depth, not a substitute for preventive repository policy. Final production dispatch first requires GitHub branch metadata to report `main` as protected. `ZSSH_MAIN_PROTECTION_VERIFIED=1` may only be set after the deeper admin-readable verifier proves PR-based changes, the required zSSH CI `test` check, administrator enforcement and no explicit bypass actors, and a controlled negative test confirms a direct write to `main` is rejected.
+That post-write provenance check is defense in depth, not a substitute for preventive repository policy. Final production dispatch first requires GitHub branch metadata to report `main` as protected. The protected workflows then verify the canonical rejected-direct-write evidence from issue #100, confirm the same-tree canary lineage into current `main`, and derive `ZSSH_MAIN_PROTECTION_VERIFIED=1` in-process. No persistent operator-set governance attestation is required.
 
 Do not use commit-message-triggered production probes. Use the `workflow_dispatch` action on the exact reviewed `main` revision.
 
@@ -67,7 +67,7 @@ Record:
 - production endpoint version/revision;
 - CI run result for the exact commit;
 - merged PR number and merge timestamp proving canonical main provenance;
-- `main_protection_verified: true`, backed by the controlled rejected-direct-push proof required before setting `ZSSH_MAIN_PROTECTION_VERIFIED=1`;
+- `main_protection_verified: true`, backed by the live immutable issue #100 rejected-direct-write proof and same-tree canary ancestry check;
 - VPS rollout proof from the dedicated `Zennay/zCloud` `zSSH standalone VPS release` workflow, pinned to the exact canonical zSSH commit;
 - SHA-256 fingerprint of the exact public tool metadata returned by the production probe, with `ZSSH_OPENAI_TOOL_SCAN_SHA256` required to match it exactly after the portal scan;
 - SHA-256 of the exact `zssh-openai-plugin.zip` uploaded by the production release gate;
