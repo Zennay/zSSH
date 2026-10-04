@@ -24,6 +24,7 @@ const tree = execFileSync(
 const records = tree.toString("utf8").split("\0").filter(Boolean);
 const expectedFiles = new Set();
 const expectedDirectories = new Set();
+const allowedGeneratedDirectories = new Set(["node_modules"]);
 let checked = 0;
 
 for (const record of records) {
@@ -106,6 +107,14 @@ function verifyNoUnexpectedEntries(directory, relativeDirectory = "") {
       ? `${relativeDirectory}/${entry.name}`
       : entry.name;
     const absolutePath = path.join(directory, entry.name);
+
+    if (
+      !relativeDirectory &&
+      allowedGeneratedDirectories.has(relativePath) &&
+      entry.isDirectory()
+    ) {
+      continue;
+    }
 
     if (entry.isDirectory()) {
       if (!expectedDirectories.has(relativePath)) {
