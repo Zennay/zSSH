@@ -353,6 +353,27 @@ test("detects stale reviewer and domain bindings before the final probe", () => 
   );
 });
 
+test("rejects query and fragment suffixes on verified MCP origin evidence", () => {
+  for (const verifiedOrigin of [
+    "https://zssh.cheapgpt.shop/?source=portal",
+    "https://zssh.cheapgpt.shop/#verified",
+  ]) {
+    const result = buildProductionReadinessAudit({
+      ...complete,
+      ZSSH_OPENAI_VERIFIED_MCP_ORIGIN: verifiedOrigin,
+    });
+
+    assert.equal(result.ready.portal_and_host_attestations, false);
+    assert.ok(
+      result.lanes.portal_and_host_attestations.invalid.some(
+        item =>
+          item.name === "ZSSH_OPENAI_VERIFIED_MCP_ORIGIN" &&
+          item.reason.includes("without path, query, or fragment"),
+      ),
+    );
+  }
+});
+
 test("never serializes protected values", () => {
   const result = buildProductionReadinessAudit(complete);
   const serialized = JSON.stringify(result);
