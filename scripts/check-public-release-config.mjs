@@ -73,7 +73,7 @@ function requireValue(env, name, { minLength = 1 } = {}) {
   return value;
 }
 
-function requireHttpsUrl(env, name) {
+function requireHttpsUrl(env, name, { allowFragment = true } = {}) {
   let url;
   try {
     url = new URL(requireValue(env, name));
@@ -83,11 +83,14 @@ function requireHttpsUrl(env, name) {
   if (url.protocol !== "https:" || url.username || url.password) {
     fail(`${name} must be an HTTPS URL without embedded credentials`);
   }
+  if (!allowFragment && url.hash) {
+    fail(`${name} must not contain a URL fragment`);
+  }
   return url;
 }
 
-function requirePublicHttpsUrl(env, name) {
-  const url = requireHttpsUrl(env, name);
+function requirePublicHttpsUrl(env, name, options = {}) {
+  const url = requireHttpsUrl(env, name, options);
   const hostname = url.hostname.replace(/^\[|\]$/g, "").toLowerCase();
   if (
     net.isIP(hostname) ||
@@ -104,7 +107,7 @@ export function validatePublicReleaseConfig(env = process.env) {
     requireValue(env, "ZSSH_PLUGIN_MCP_URL"),
     { name: "ZSSH_PLUGIN_MCP_URL" }
   );
-  const demoRecordingUrl = requirePublicHttpsUrl(env, "ZSSH_PLUGIN_DEMO_RECORDING_URL");
+  const demoRecordingUrl = requirePublicHttpsUrl(env, "ZSSH_PLUGIN_DEMO_RECORDING_URL", { allowFragment: false });
   const oauthIssuerUrl = requirePublicHttpsUrl(env, "ZSSH_OAUTH_ISSUER");
   const auth0ManagementBaseUrl = resolveAuth0ManagementBaseUrl(
     env.ZSSH_OAUTH_ISSUER,
@@ -271,6 +274,10 @@ export function runSelfTest() {
   assertThrows(() => validatePublicReleaseConfig({ ...good, ZSSH_PLUGIN_MCP_URL: "https://mcp.zssh.dev/mcp?target=review" }), /query parameters/);
   assertThrows(() => validatePublicReleaseConfig({ ...good, ZSSH_PLUGIN_DEMO_RECORDING_URL: "http://review.zssh.dev/demo" }), /HTTPS URL/);
   assertThrows(() => validatePublicReleaseConfig({ ...good, ZSSH_PLUGIN_DEMO_RECORDING_URL: "https://127.0.0.1/demo" }), /public DNS hostname/);
+  assertThrows(
+    () => validatePublicReleaseConfig({ ...good, ZSSH_PLUGIN_DEMO_RECORDING_URL: "https://review.zssh.dev/demo#chapter" }),
+    /fragment/,
+  );
   assertThrows(() => validatePublicReleaseConfig({ ...good, ZSSH_OAUTH_ISSUER: "http://tenant.eu.auth0.com" }), /HTTPS URL/);
   assertThrows(() => validatePublicReleaseConfig({ ...good, AUTH0_MANAGEMENT_BASE_URL: "https://127.0.0.1" }), /public hostname/);
   assertThrows(
