@@ -20,3 +20,10 @@ Current reviewed pins:
 A repository-wide regression test scans every active `.github/workflows/*.yml` / `.yaml` file and rejects external `uses:` references that are not pinned to a full 40-character SHA. Local actions under `./` remain permitted.
 
 This extends the M5 DNS-workflow hardening from PR #169 across governance, release-gate, readiness, Auth0 preflight, ingress, origin-watch and CI workflows without changing their permissions or runtime semantics.
+
+
+## Release-gate coverage invariant
+
+The OpenAI public release gate treats every active `.github/workflows/**` change as release-critical on both pull requests and canonical-main pushes. This avoids a denylist-style gap where a new or previously omitted workflow (for example CI or provenance) could change release/security behavior without rerunning the release-contract gate. Explicit high-value paths remain listed for readability, while the wildcard is the fail-closed coverage boundary.
+
+Regression coverage in `test/release-workflow-trigger.test.mjs` requires pull-request/push parity and requires the workflow wildcard on both triggers.
