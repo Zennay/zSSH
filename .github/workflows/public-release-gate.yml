@@ -199,7 +199,6 @@ jobs:
         shell: bash
         env:
           AUTH0_REPORT_PATH: ${{ runner.temp }}/zssh-auth0-production-readiness.json
-          INGRESS_REPORT_PATH: ${{ runner.temp }}/zssh-public-ingress-preflight.json
         run: |
           set -Eeuo pipefail
           node scripts/check-auth0-production.mjs | tee "$AUTH0_REPORT_PATH"
@@ -252,6 +251,7 @@ jobs:
           PROBE_REPORT_PATH: ${{ runner.temp }}/zssh-openai-production-probe.json
           BUNDLE_REPORT_PATH: ${{ runner.temp }}/zssh-openai-bundle.json
           AUTH0_REPORT_PATH: ${{ runner.temp }}/zssh-auth0-production-readiness.json
+          INGRESS_REPORT_PATH: ${{ runner.temp }}/zssh-public-ingress-preflight.json
         run: |
           set -Eeuo pipefail
           node --input-type=module <<'NODE'
