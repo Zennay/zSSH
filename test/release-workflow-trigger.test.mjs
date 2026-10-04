@@ -123,6 +123,7 @@ test("release-critical pull_request and push path filters stay in parity", () =>
     "test/public-gateway-installer.test.mjs",
     "deploy/install-public-caddy.sh",
     "test/public-caddy-installer.test.mjs",
+    "docs/research/public-caddy-promotion-2026-10-04.md",
     "deploy/prepare-reviewer-target.sh",
     "scripts/prepare-review-target.mjs",
     "scripts/reviewer-fixture-contract.mjs",
@@ -139,6 +140,22 @@ test("release-critical pull_request and push path filters stay in parity", () =>
     assert.ok(pullRequestPaths.includes(runtimePath), `pull_request trigger must include release-critical runtime path ${runtimePath}`);
     assert.ok(pushPaths.includes(runtimePath), `push trigger must include release-critical runtime path ${runtimePath}`);
   }
+});
+
+
+test("canonical public ingress runbook stays release-critical", () => {
+  const pullRequestPaths = eventPaths("pull_request");
+  const pushPaths = eventPaths("push");
+  const runbook = "docs/research/public-caddy-promotion-2026-10-04.md";
+
+  assert.ok(
+    pullRequestPaths.includes(runbook),
+    "pull_request release gate must include the canonical public Caddy promotion runbook",
+  );
+  assert.ok(
+    pushPaths.includes(runbook),
+    "push release gate must include the canonical public Caddy promotion runbook",
+  );
 });
 
 
