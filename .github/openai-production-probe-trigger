@@ -1,2 +1,3 @@
 Production probe trigger.
-Requested for canonical release a115e31c7968caa38931218c8b109cc21ee296cd on 2026-10-01.
+Requested after canonical target-agent deployment hardening f2d0aab527831dce7495d78de6b8a06ec345201e on 2026-10-04.
+Presence evidence is secret-safe; production probe must prove outbound-agent transport.
