@@ -102,9 +102,11 @@ jobs:
           if (action === "would_update" && !/^[a-f0-9]{64}$/.test(fingerprint)) {
             throw new Error("Existing A-record update plan is missing its reviewed state fingerprint");
           }
+          appendFileSync(outputPath, `plan_action=${action}\n`);
           appendFileSync(outputPath, `current_state_sha256=${fingerprint}\n`);
           NODE
       - name: Publish exact DNS-only A record
+        if: steps.dns_plan.outputs.plan_action == 'would_create' || steps.dns_plan.outputs.plan_action == 'would_update'
         env:
           ZSSH_DNS_APPLY: "1"
           EVIDENCE_PATH: ${{ runner.temp }}/zssh-cloudflare-dns-result.json
