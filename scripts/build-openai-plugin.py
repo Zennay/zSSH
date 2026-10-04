@@ -212,6 +212,11 @@ def validate_plugin(plugin: dict, expected_listing_urls: dict[str, str] | None =
     release_notes = publication.get("release_notes")
     if not isinstance(release_notes, str) or not release_notes.strip():
         fail("publication.release_notes is required for the review-ready package")
+    version = plugin.get("version")
+    if not isinstance(version, str) or not version.strip():
+        fail("plugin version is required")
+    if re.search(rf"(?<![0-9A-Za-z]){re.escape(version)}(?![0-9A-Za-z])", release_notes) is None:
+        fail(f"publication.release_notes must mention the exact plugin version {version}")
 
 
 def main() -> None:
