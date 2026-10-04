@@ -5,6 +5,7 @@ import { promisify } from "node:util";
 import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { agentPublicKeysFromEnv } from "../agent-transport.mjs";
 
 const execFileAsync = promisify(execFile);
 const ROOT = path.resolve(".");
@@ -48,13 +49,29 @@ test("reviewer target bootstrap is idempotent and never prints private key mater
     assert.equal((await stat(path.dirname(keyFile))).mode & 0o777, 0o700);
     assert.equal((await stat(keyFile)).mode & 0o777, 0o600);
     assert.equal((await stat(publicFile)).mode & 0o777, 0o600);
+    const publicConfig = JSON.parse(await readFile(publicFile, "utf8"));
+    assert.equal(publicConfig.version, 1);
+    assert.deepEqual(Object.keys(publicConfig.targets), [first.report.target_id]);
+    assert.equal(agentPublicKeysFromEnv({ ZSSH_AGENT_PUBLIC_KEYS_FILE: publicFile }).size, 1);
     assert.equal((await stat(first.reviewRoot)).mode & 0o777, 0o700);
     assert.equal((await stat(path.join(first.reviewRoot, "sample.txt"))).mode & 0o777, 0o600);
+
+    // Migrate the wrapper shape shipped by PR #56 without rotating identity.
+    await writeFile(publicFile, JSON.stringify({
+      target_id: first.report.target_id,
+      gateway_public_key_config: publicConfig,
+    }, null, 2) + "\n", { mode: 0o600 });
 
     const second = await runBootstrap(home);
     assert.equal(second.report.target_id, first.report.target_id);
     assert.equal(second.report.public_key_sha256, first.report.public_key_sha256);
     assert.doesNotMatch(JSON.stringify(second.report), /BEGIN PRIVATE KEY/);
+
+    const migrated = JSON.parse(await readFile(publicFile, "utf8"));
+    assert.equal(migrated.version, 1);
+    assert.equal(migrated.gateway_public_key_config, undefined);
+    assert.deepEqual(Object.keys(migrated.targets), [first.report.target_id]);
+    assert.equal(agentPublicKeysFromEnv({ ZSSH_AGENT_PUBLIC_KEYS_FILE: publicFile }).size, 1);
   } finally {
     await rm(home, { recursive: true, force: true });
   }
