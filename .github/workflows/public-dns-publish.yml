@@ -78,6 +78,31 @@ jobs:
           }
           console.log("ZSSH_PRODUCTION_DNS_GREEN");
           NODE
+      - name: Prove public DNS convergence and expose the next live stage
+        shell: bash
+        env:
+          ORIGIN_REPORT_PATH: ${{ runner.temp }}/zssh-public-origin-after-dns.json
+        run: |
+          set -Eeuo pipefail
+          MCP_URL="${ZSSH_PUBLIC_BASE_URL%/}/mcp"
+          for attempt in 1 2 3 4 5 6; do
+            node scripts/observe-public-origin-readiness.mjs "$MCP_URL" | tee "$ORIGIN_REPORT_PATH"
+            STAGE="$(node --input-type=module - "$ORIGIN_REPORT_PATH" <<'NODE'
+          import { readFileSync } from "node:fs";
+          const result = JSON.parse(readFileSync(process.argv[2], "utf8"));
+          process.stdout.write(String(result.stage || "unknown"));
+          NODE
+            )"
+            if [ "$STAGE" != "dns" ]; then
+              echo "ZSSH_PRODUCTION_DNS_EXTERNALLY_RESOLVABLE stage=$STAGE"
+              exit 0
+            fi
+            if [ "$attempt" -lt 6 ]; then
+              sleep 10
+            fi
+          done
+          echo "Public DNS still does not resolve after bounded convergence checks" >&2
+          exit 1
       - name: Upload non-secret DNS evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -87,5 +112,6 @@ jobs:
             ${{ runner.temp }}/zssh-cloudflare-dns-plan.json
             ${{ runner.temp }}/zssh-cloudflare-dns-result.json
             ${{ runner.temp }}/zssh-cloudflare-dns-verify.json
+            ${{ runner.temp }}/zssh-public-origin-after-dns.json
           if-no-files-found: warn
           retention-days: 30

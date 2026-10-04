@@ -1,0 +1,29 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+
+const workflowPath = new URL("../.github/workflows/public-dns-publish.yml", import.meta.url);
+const workflow = readFileSync(workflowPath, "utf8");
+
+test("production DNS publish proves external convergence before reporting success", () => {
+  assert.match(
+    workflow,
+    /Prove public DNS convergence and expose the next live stage[\s\S]*observe-public-origin-readiness\.mjs "\$MCP_URL"/,
+  );
+  assert.match(workflow, /for attempt in 1 2 3 4 5 6; do/);
+  assert.match(
+    workflow,
+    /if \[ "\$STAGE" != "dns" \]; then[\s\S]*ZSSH_PRODUCTION_DNS_EXTERNALLY_RESOLVABLE stage=\$STAGE/,
+  );
+  assert.match(
+    workflow,
+    /Public DNS still does not resolve after bounded convergence checks/,
+  );
+});
+
+test("post-publication origin evidence is retained with Cloudflare DNS evidence", () => {
+  assert.match(
+    workflow,
+    /zssh-cloudflare-dns-verify\.json[\s\S]*zssh-public-origin-after-dns\.json/,
+  );
+});
