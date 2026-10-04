@@ -66,7 +66,7 @@ test("public gateway installer validates a reviewer OAuth/outbound-agent configu
   }
 });
 
-test("public gateway installer removes first-install state when service activation fails", async () => {
+test("public gateway installer removes first-install env/current state when service activation fails", async () => {
   const value = await fixture();
   const fakeBin = path.join(value.home, "fake-bin");
   const releaseRoot = path.join(value.home, ".local", "share", "zssh-public", "releases");
