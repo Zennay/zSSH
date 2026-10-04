@@ -49,4 +49,15 @@ test("release-critical pull_request and push path filters stay in parity", () =>
   ]) {
     assert.ok(pushPaths.includes(provenancePath), `push trigger must include ${provenancePath}`);
   }
+
+  for (const runtimePath of [
+    "server.mjs",
+    "rate-limit.mjs",
+    "test/rate-limit.test.mjs",
+    "deploy/install-public-gateway.sh",
+    "test/public-gateway-installer.test.mjs",
+  ]) {
+    assert.ok(pullRequestPaths.includes(runtimePath), `pull_request trigger must include release-critical runtime path ${runtimePath}`);
+    assert.ok(pushPaths.includes(runtimePath), `push trigger must include release-critical runtime path ${runtimePath}`);
+  }
 });
