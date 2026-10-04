@@ -11,6 +11,7 @@ on:
 permissions:
   contents: read
   pull-requests: read
+  issues: read
 
 concurrency:
   group: zssh-openai-production-readiness
@@ -24,6 +25,7 @@ jobs:
     timeout-minutes: 5
     outputs:
       main_protected: ${{ steps.main-protection.outputs.protected }}
+      governance_verified: ${{ steps.governance-evidence.outputs.verified }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -53,6 +55,14 @@ jobs:
           node scripts/check-main-protection.mjs --public-status | sed "s/^ZSSH_MAIN_PROTECTION_STATUS //" | tee "$REPORT_PATH"
           PROTECTED="$(node -e 'const fs = require("node:fs"); const result = JSON.parse(fs.readFileSync(process.argv[1], "utf8")); process.stdout.write(result.protected === true ? "1" : "0");' "$REPORT_PATH")"
           echo "protected=$PROTECTED" >> "$GITHUB_OUTPUT"
+      - name: Verify immutable rejected-direct-write governance evidence
+        id: governance-evidence
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -Eeuo pipefail
+          node scripts/check-main-protection.mjs --require-negative-proof
+          echo "verified=1" >> "$GITHUB_OUTPUT"
 
   public_origin:
     name: Observe public production origin
@@ -113,7 +123,7 @@ jobs:
       ZSSH_REVIEW_LOGIN_URL: ${{ vars.ZSSH_REVIEW_LOGIN_URL }}
       ZSSH_REVIEW_LOGIN_VERIFIED_URL: ${{ vars.ZSSH_REVIEW_LOGIN_VERIFIED_URL }}
       ZSSH_REVIEW_CREDENTIALS_VERIFIED: ${{ vars.ZSSH_REVIEW_CREDENTIALS_VERIFIED }}
-      ZSSH_MAIN_PROTECTION_VERIFIED: ${{ vars.ZSSH_MAIN_PROTECTION_VERIFIED }}
+      ZSSH_MAIN_PROTECTION_VERIFIED: ${{ needs.provenance.outputs.governance_verified }}
       ZSSH_MAIN_BRANCH_PROTECTED: ${{ needs.provenance.outputs.main_protected }}
       ZSSH_CHATGPT_DESKTOP_REVIEWED: ${{ vars.ZSSH_CHATGPT_DESKTOP_REVIEWED }}
       ZSSH_CHATGPT_MOBILE_REVIEWED: ${{ vars.ZSSH_CHATGPT_MOBILE_REVIEWED }}
