@@ -226,11 +226,11 @@ test("protected readiness workflow proves merged-PR provenance before entering o
   );
 
   for (const workflow of [readinessWorkflow, publicReleaseWorkflow]) {
-    assert.match(
-      workflow,
-      /ZSSH_MAIN_PROTECTION_VERIFIED:\s*\$\{\{ vars\.ZSSH_MAIN_PROTECTION_VERIFIED \}\}/,
-      "protected release workflows must consume the main-protection attestation",
+    assert.ok(
+      workflow.includes("ZSSH_MAIN_PROTECTION_VERIFIED: ${{ needs.provenance.outputs.governance_verified }}"),
+      "protected release workflows must derive governance attestation from live immutable evidence",
     );
+    assert.ok(workflow.includes("check-main-protection.mjs --require-negative-proof"));
   }
 
   const provenanceBlock = readinessWorkflow.match(/  provenance:[\s\S]*?\n  audit:/)?.[0] || "";
@@ -253,4 +253,15 @@ test("canonical non-secret production defaults stay available without environmen
     assert.ok(workflow.includes(readDefault));
     assert.ok(workflow.includes(writeDefault));
   }
+});
+
+test("repository governance attestation is derived before protected release environment use", () => {
+  assert.ok(readinessWorkflow.includes("governance_verified: ${{ steps.governance-evidence.outputs.verified }}"));
+  assert.ok(readinessWorkflow.includes("Verify immutable rejected-direct-write governance evidence"));
+  assert.ok(publicReleaseWorkflow.includes("governance_verified: ${{ steps.governance-evidence.outputs.verified }}"));
+  assert.ok(publicReleaseWorkflow.includes("Verify immutable rejected-direct-write governance evidence"));
+  assert.ok(readinessWorkflow.includes("issues: read"));
+  assert.ok(publicReleaseWorkflow.includes("issues: read"));
+  assert.equal(readinessWorkflow.includes("ZSSH_MAIN_PROTECTION_VERIFIED: ${{ vars.ZSSH_MAIN_PROTECTION_VERIFIED }}"), false);
+  assert.equal(publicReleaseWorkflow.includes("ZSSH_MAIN_PROTECTION_VERIFIED: ${{ vars.ZSSH_MAIN_PROTECTION_VERIFIED }}"), false);
 });
