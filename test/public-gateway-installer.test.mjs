@@ -123,6 +123,21 @@ test("public gateway installer rejects an unsafe public OAuth rate limit", async
   }
 });
 
+test("public gateway installer rejects an unsafe public rate-limit profile table size", async () => {
+  const value = await fixture();
+  try {
+    await assert.rejects(
+      () => execFileAsync("bash", ["deploy/install-public-gateway.sh", ROOT], {
+        cwd: ROOT,
+        env: envFor(value, { ZSSH_PUBLIC_RATE_LIMIT_MAX_PROFILES: "2" }),
+      }),
+      /ZSSH_PUBLIC_RATE_LIMIT_MAX_PROFILES must be an integer between 100 and 100000/,
+    );
+  } finally {
+    await rm(value.home, { recursive: true, force: true });
+  }
+});
+
 test("public gateway service and installer preserve isolated hardened deployment boundaries", async () => {
   const installer = await readFile(path.join(ROOT, "deploy", "install-public-gateway.sh"), "utf8");
   const unit = await readFile(path.join(ROOT, "deploy", "zssh-public.service.in"), "utf8");
@@ -133,6 +148,7 @@ test("public gateway service and installer preserve isolated hardened deployment
   assert.match(installer, /ZSSH_PLUGIN_PROFILE=public/);
   assert.match(installer, /ZSSH_PUBLIC_AUTH_MODE=oauth/);
   assert.match(installer, /ZSSH_PUBLIC_RATE_LIMIT_PER_MINUTE=\$RATE_LIMIT_VALUE/);
+  assert.match(installer, /ZSSH_PUBLIC_RATE_LIMIT_MAX_PROFILES=\$RATE_LIMIT_MAX_PROFILES_VALUE/);
   assert.match(installer, /ZSSH_PAIRING_REQUIRED=1/);
   assert.match(installer, /ZSSH_EXEC_MODE=disabled/);
   assert.match(installer, /ZSSH_AGENT_PUBLIC_KEYS_FILE/);
