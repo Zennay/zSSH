@@ -25,9 +25,12 @@ This note covers only controlled publication of that DNS-only A record. Producti
 - Cloudflare token creation guidance:
   - https://developers.cloudflare.com/fundamentals/api/get-started/create-token/
   - prefer API tokens over the legacy global API key and scope the token to the minimum required zone/resource.
+  - **Current zSSH production path requires a user-owned API token**, created under **My Profile > API Tokens**. Cloudflare also offers account-owned API tokens for durable CI/CD integrations, but those have a separate verification endpoint; do not use one for this M5 cutover until zSSH explicitly supports account-token verification.
+  - account-token distinction: https://developers.cloudflare.com/fundamentals/api/get-started/account-owned-tokens/
 - Cloudflare token verification:
   - https://developers.cloudflare.com/api/resources/user/subresources/tokens/methods/verify/
-  - `GET /user/tokens/verify` is a read-only validity/status check for the presented API token. zSSH uses it before DNS planning so disabled/expired/rejected credentials fail before any mutation path is considered. This verifies token activity, not the required zone/DNS permissions; the existing zone lookup and DNS read remain the scope checks.
+  - `GET /user/tokens/verify` is a read-only validity/status check for the presented **user-owned** API token. zSSH uses this exact endpoint before DNS planning so disabled/expired/rejected credentials fail before any mutation path is considered. This verifies token activity, not the required zone/DNS permissions; the existing zone lookup and DNS read remain the scope checks.
+  - Cloudflare account-owned tokens use the distinct `GET /accounts/{account_id}/tokens/verify` route. The current zSSH verifier does not call that route, so an account-owned token is outside the canonical production path even though Cloudflare DNS itself supports account tokens.
 
 ## Engineering decision
 
@@ -88,7 +91,7 @@ The token is an external credential and is intentionally not stored in the repos
 
 Use this sequence once the external Cloudflare credential has been created. It is intentionally secret-safe: no token value belongs in commits, issues, artifacts, logs, or Notion.
 
-1. In Cloudflare, create a dedicated API token scoped only to the `cheapgpt.shop` zone with `Zone Read` and DNS write permission. Do not use the Global API Key.
+1. In Cloudflare, go to **My Profile > API Tokens > Create Token** and create a **user-owned** token. Start from **Edit Zone DNS** or a custom token, then make the effective permissions **Zone > DNS > Edit** (`DNS Write`) plus **Zone > Zone > Read** (`Zone Read`). Set **Zone Resources > Include > Specific zone > cheapgpt.shop**. Do not use the Global API Key, and do not use an Account API token for this cutover: the current zSSH preflight validates `/user/tokens/verify` before any DNS planning.
 2. In the GitHub `openai-production` environment, store that value only as the protected secret `CLOUDFLARE_API_TOKEN`. Leave `CLOUDFLARE_ZONE_ID` unset on the preferred path; it exists only for the legacy DNS-write-only token mode.
 3. Check whether `zssh.cheapgpt.shop` already has an A record. If it is absent, leave `ZSSH_DNS_EXPECTED_CURRENT_IPV4` unset. If an existing A record must intentionally be replaced, independently verify its current IPv4 in Cloudflare and store that exact non-secret value as the protected environment variable `ZSSH_DNS_EXPECTED_CURRENT_IPV4`. Never guess this value.
 4. Dispatch **zSSH production DNS publish** from canonical `main` and enter the exact confirmation phrase `PUBLISH_ZSSH_PRODUCTION_DNS`.
