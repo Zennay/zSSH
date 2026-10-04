@@ -1,0 +1,33 @@
+name: M5 live runtime observation
+
+on:
+  push:
+    branches:
+      - evidence/m5-live-runtime-20261004
+
+permissions:
+  contents: read
+
+jobs:
+  observe:
+    name: Observe zSSH VPS runtime
+    runs-on:
+      - self-hosted
+      - haxlab
+    timeout-minutes: 5
+    steps:
+      - name: Capture non-secret runtime evidence
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          echo "host=$(hostname)"
+          echo "node=$(node --version 2>/dev/null || echo unavailable)"
+          echo "npm=$(npm --version 2>/dev/null || echo unavailable)"
+          echo "node_path=$(command -v node || true)"
+          echo "node_realpath=$(readlink -f "$(command -v node 2>/dev/null || echo /nonexistent)" 2>/dev/null || true)"
+          echo "service_load_state=$(systemctl show zssh.service -p LoadState --value 2>/dev/null || echo unavailable)"
+          echo "service_active_state=$(systemctl show zssh.service -p ActiveState --value 2>/dev/null || echo unavailable)"
+          echo "service_sub_state=$(systemctl show zssh.service -p SubState --value 2>/dev/null || echo unavailable)"
+          echo "service_user=$(systemctl show zssh.service -p User --value 2>/dev/null || echo unavailable)"
+          echo "service_exec_start=$(systemctl show zssh.service -p ExecStart --value 2>/dev/null || echo unavailable)"
+          echo "service_fragment=$(systemctl show zssh.service -p FragmentPath --value 2>/dev/null || echo unavailable)"
