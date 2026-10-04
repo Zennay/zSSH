@@ -2,8 +2,24 @@ import { readFileSync } from "node:fs";
 import process from "node:process";
 import { pathToFileURL } from "node:url";
 
+const GATE_RUNBOOKS = Object.freeze({
+  dns_publication: {
+    label: "Cloudflare production DNS publication",
+    path: "docs/research/cloudflare-dns-publication-2026-10-04.md",
+  },
+});
+
 function fail(message) {
   throw new Error(message);
+}
+
+function gateRunbookLine({ gate, repository, sha }) {
+  const runbook = GATE_RUNBOOKS[gate];
+  if (!runbook) return null;
+  const repo = String(repository || "Zennay/zSSH").trim();
+  const [owner, name, ...extra] = repo.split("/");
+  if (!owner || !name || extra.length > 0 || /\\s/.test(repo)) fail("repository must be owner/name");
+  return `[${runbook.label}](https://github.com/${repo}/blob/${sha}/${runbook.path})`;
 }
 
 function cleanText(value, maxLength = 600) {
@@ -46,7 +62,7 @@ function invalidSummary(values) {
   }).join("\n");
 }
 
-export function renderM5BlockingIssue({ readiness, canonicalSha }) {
+export function renderM5BlockingIssue({ readiness, canonicalSha, repository = "Zennay/zSSH" }) {
   validateReadiness(readiness);
   const sha = String(canonicalSha || "").trim().toLowerCase();
   if (!/^[a-f0-9]{40}$/.test(sha)) fail("canonicalSha must be a 40-character Git SHA");
@@ -81,6 +97,7 @@ export function renderM5BlockingIssue({ readiness, canonicalSha }) {
   const actionText = cleanText(action?.action, 800) || "Resolve the active M5 blocking gate.";
   const gateKind = cleanText(action?.gate_kind, 120) || "unknown";
   const external = action?.requires_external_input === true;
+  const runbookLine = gateRunbookLine({ gate, repository, sha });
 
   return {
     title: `M5 active gate: ${gate}`,
@@ -97,6 +114,7 @@ export function renderM5BlockingIssue({ readiness, canonicalSha }) {
       "## Required action",
       actionText,
       "",
+      ...(runbookLine ? ["## Canonical runbook", runbookLine, ""] : []),
       "## Missing configuration",
       bulletNames(action?.missing),
       "",
@@ -127,7 +145,7 @@ export async function syncM5BlockingIssue({
   const authToken = String(token || "").trim();
   if (!authToken) fail("GITHUB_TOKEN is required");
 
-  const rendered = renderM5BlockingIssue({ readiness, canonicalSha });
+  const rendered = renderM5BlockingIssue({ readiness, canonicalSha, repository });
   const response = await fetchImpl(
     `${apiUrl.replace(/\/$/, "")}/repos/${repository}/issues/${number}`,
     {
