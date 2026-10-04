@@ -55,6 +55,37 @@ test("renders only secret-safe blocking metadata", () => {
   assert.match(result.body, new RegExp(sha));
 });
 
+test("links later external M5 gates to immutable canonical runbooks", () => {
+  const cases = [
+    ["auth0_preflight", "docs/research/auth0-production-oauth-2026-10-04.md"],
+    ["reviewer_fixture", "docs/openai-plugin-review.md"],
+    ["portal_and_host_attestations", "docs/openai-plugin-release-checklist.md"],
+  ];
+
+  for (const [gate, path] of cases) {
+    const result = renderM5BlockingIssue({
+      readiness: receipt({
+        blocking_gate: gate,
+        blocking_action: {
+          lane: gate,
+          gate_kind: "external_validation",
+          requires_external_input: true,
+          action: `Complete ${gate}.`,
+          missing: [],
+          invalid: [],
+        },
+        next_actions: [{ lane: gate }],
+      }),
+      canonicalSha: sha,
+    });
+
+    assert.ok(
+      result.body.includes(`https://github.com/Zennay/zSSH/blob/${sha}/${path}`),
+      `expected immutable runbook link for ${gate}`,
+    );
+  }
+});
+
 test("renders the no-blocker state without inventing a gate", () => {
   const result = renderM5BlockingIssue({
     readiness: receipt({
