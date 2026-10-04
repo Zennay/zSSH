@@ -101,3 +101,17 @@ test("reviewer target bootstrap fails closed on partial identity state", async (
     await rm(home, { recursive: true, force: true });
   }
 });
+
+
+test("README does not present the default reviewer fixture as production-compatible", async () => {
+  const readme = await readFile(path.join(ROOT, "README.md"), "utf8");
+  assert.match(readme, /default .*development\/test fixture/i);
+  assert.match(readme, /release_compatible=false/);
+  assert.match(readme, /release_variables=null/);
+  assert.match(readme, /ZSSH_REVIEW_ROOT=\/srv\/zssh-review npm run review:target/);
+  assert.match(readme, /Only the exact submitted files `\/srv\/zssh-review\/sample\.txt` and `\/srv\/zssh-review\/output\.txt` produce `release_compatible=true`/);
+  assert.doesNotMatch(
+    readme,
+    /prints a secret-safe JSON report with `ZSSH_REVIEW_FILE`, `ZSSH_REVIEW_WRITE_FILE`/,
+  );
+});
