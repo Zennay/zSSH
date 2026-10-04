@@ -11,19 +11,21 @@ Cloudflare documents that A and AAAA records map the same DNS name to IPv4 and I
 Cloudflare also notes that client software determines whether IPv4 or IPv6 is used when both are available:
 - https://developers.cloudflare.com/network/ipv6-compatibility/
 
+The same Cloudflare record-type reference documents HTTPS/SVCB records as service-binding records that can tell clients how to connect before the HTTP exchange. For DNS-only names, manually configured HTTPS records can be served alongside same-name DNS-only address records.
+
 ## Risk
 
-Before this change, the guarded publisher rejected exact-name CNAME and NS conflicts and multiple A records, but it allowed an unrelated AAAA record to coexist. Because zSSH has no configured or verified production IPv6 origin, leaving an existing AAAA record in place could make IPv6-capable clients reach a different host than the guarded IPv4 target. That would make DNS/TLS/ingress evidence ambiguous and could route part of reviewer traffic outside the intended release target.
+Before this change, the guarded publisher rejected exact-name CNAME/NS conflicts and multiple A records, and the first hardening pass added AAAA. A remaining gap was exact-name HTTPS/SVCB records: those records can alter connection behavior independently of the guarded A record. Because zSSH's M5 contract intentionally binds one DNS-only IPv4 route to one reviewed VPS, any alternate address or service-binding route would make DNS/TLS/ingress evidence ambiguous and could steer reviewer traffic outside the intended release target.
 
 ## Decision
 
-For the current IPv4-only M5 publication lane, an exact-name AAAA record is a fail-closed conflict, like CNAME/NS. The publisher refuses mutation and requires the operator to resolve the IPv6 record explicitly.
+For the current IPv4-only M5 publication lane, exact-name `AAAA`, `CNAME`, `HTTPS`, `NS`, and `SVCB` records are fail-closed routing/delegation conflicts. The publisher refuses mutation and requires the operator to resolve them explicitly.
 
-This does not delete or alter an existing AAAA record automatically. Future intentional dual-stack support must add an explicit desired IPv6 address plus validation/evidence before relaxing this invariant.
+This does not delete or alter an existing conflicting record automatically. Future intentional dual-stack or service-binding support must add an explicit desired route plus validation/evidence before relaxing this invariant.
 
 ## Scope
 
 - validation only before DNS mutation;
 - no credential, OAuth, MCP tool, target permission, or public endpoint expansion;
 - TXT and other unrelated coexisting records remain preserved;
-- regression coverage verifies the AAAA conflict is rejected.
+- regression coverage verifies AAAA, CNAME, HTTPS, NS, and SVCB conflicts are rejected.
