@@ -145,12 +145,22 @@ export function validateAuthorizationServerMetadata(metadata, expectedIssuer, {
   const registrationEndpoint = metadata.registration_endpoint
     ? validateMetadataEndpoint(metadata.registration_endpoint, "registration_endpoint", urlOptions)
     : null;
+  const clientIdMetadataDocumentSupported = metadata.client_id_metadata_document_supported === true;
+  const clientRegistrationMethods = [];
+  if (clientIdMetadataDocumentSupported) clientRegistrationMethods.push("cimd");
+  if (registrationEndpoint) clientRegistrationMethods.push("dcr");
+  if (clientRegistrationMethods.length === 0) {
+    fail("OAuth authorization server metadata must support ChatGPT client identification via CIMD or DCR");
+  }
 
   return {
     issuer: actual,
     authorization_endpoint: authorizationEndpoint,
     token_endpoint: tokenEndpoint,
     registration_endpoint: registrationEndpoint,
+    client_id_metadata_document_supported: clientIdMetadataDocumentSupported,
+    client_registration_methods: clientRegistrationMethods,
+    authorization_response_iss_parameter_supported: metadata.authorization_response_iss_parameter_supported === true,
     pkce_s256: true,
     authorization_code: true,
     token_endpoint_auth_methods: [...new Set(metadata.token_endpoint_auth_methods_supported.map(String))],
