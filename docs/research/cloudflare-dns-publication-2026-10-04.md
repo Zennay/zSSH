@@ -40,6 +40,10 @@ The reconciler:
 
 The workflow runs in the protected `openai-production` environment. Its production destination is repository-locked to `https://zssh.cheapgpt.shop` / `198.244.191.182` / zone `cheapgpt.shop`; manual dispatch cannot substitute another hostname or address. Manual dispatch is also bound to `refs/heads/main`, merged-PR provenance, live branch protection, and the exact current GitHub-reported main SHA before the protected environment may mutate DNS, then requires the explicit phrase `PUBLISH_ZSSH_PRODUCTION_DNS`. A reviewed canonical-main activation may also run through the dedicated `.github/openai-production-dns-trigger` marker after provenance and branch-protection checks pass. Both paths perform a dry-run first, apply the change, re-read Cloudflare, require an idempotent `noop` result, and then prove external DNS convergence.
 
+### Workflow dependency integrity
+
+Because this lane can mutate production DNS, its reusable GitHub Actions are pinned to immutable commit SHAs rather than mutable major-version tags. The current pins correspond to the reviewed v4 releases of `actions/checkout`, `actions/setup-node`, and `actions/upload-artifact`; a regression test rejects a return to `@vN` refs in the production DNS workflow. Future action upgrades therefore require an explicit zSSH code review and a fresh protected-main validation cycle.
+
 ## Required protected configuration
 
 - environment secret: `CLOUDFLARE_API_TOKEN`
