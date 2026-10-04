@@ -14,6 +14,14 @@ const publicReleaseWorkflow = readFileSync(
   new URL("../.github/workflows/public-release-gate.yml", import.meta.url),
   "utf8",
 );
+const releaseChecklist = readFileSync(
+  new URL("../docs/openai-plugin-release-checklist.md", import.meta.url),
+  "utf8",
+);
+const reviewDoc = readFileSync(
+  new URL("../docs/openai-plugin-review.md", import.meta.url),
+  "utf8",
+);
 import { computeHostSurfaceReviewFingerprint } from "../scripts/check-host-surface-review-binding.mjs";
 import { buildProductionReadinessAudit } from "../scripts/check-production-readiness-audit.mjs";
 
@@ -264,4 +272,14 @@ test("repository governance attestation is derived before protected release envi
   assert.ok(publicReleaseWorkflow.includes("issues: read"));
   assert.equal(readinessWorkflow.includes("ZSSH_MAIN_PROTECTION_VERIFIED: ${{ vars.ZSSH_MAIN_PROTECTION_VERIFIED }}"), false);
   assert.equal(publicReleaseWorkflow.includes("ZSSH_MAIN_PROTECTION_VERIFIED: ${{ vars.ZSSH_MAIN_PROTECTION_VERIFIED }}"), false);
+});
+
+test("operator docs do not require the retired mutable governance attestation", () => {
+  for (const doc of [releaseChecklist, reviewDoc]) {
+    assert.equal(doc.includes("only then set \\`ZSSH_MAIN_PROTECTION_VERIFIED=1\\`"), false);
+    assert.equal(doc.includes("# ZSSH_MAIN_PROTECTION_VERIFIED=1"), false);
+  }
+  assert.ok(releaseChecklist.includes("issue #100"));
+  assert.ok(releaseChecklist.includes("No persistent operator-set governance attestation is required."));
+  assert.ok(reviewDoc.includes("Repository governance is derived live from protected main + immutable issue #100 negative-proof evidence."));
 });
