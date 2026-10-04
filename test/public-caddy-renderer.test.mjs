@@ -50,6 +50,8 @@ test("fails closed on unsafe or placeholder public origins", () => {
     "https://127.0.0.1",
     "https://example.com",
     "https://mcp.example.com",
+    "https://mcp.example.net",
+    "https://mcp.example.org",
     "https://mcp.zssh.dev:8443",
   ]) {
     assert.throws(() => validatePublicBaseUrl(value), /ZSSH_PUBLIC_BASE_URL/);
@@ -92,5 +94,5 @@ test("CLI exits non-zero instead of rendering a documentation placeholder", () =
 
   assert.equal(result.status, 2);
   assert.equal(result.stdout, "");
-  assert.match(result.stderr, /documentation-only example\.com domain/);
+  assert.match(result.stderr, /documentation-only example domain/);
 });
