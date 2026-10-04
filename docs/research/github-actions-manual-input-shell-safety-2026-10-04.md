@@ -35,3 +35,21 @@ No user- or operator-controlled GitHub Actions context value should be inserted 
 - workflow regression test proves the confirmation value is carried through a step-scoped environment variable;
 - workflow regression test proves the inline shell no longer contains `${{ inputs.confirmation }}`;
 - existing exact-main, provenance, branch-protection, immutable-action-pin and Cloudflare-token-scope tests remain green.
+
+
+## workflow_run event-data extension — 2026-10-04
+
+GitHub's current script-injection guidance also calls out the `github` context as potentially untrusted and specifically notes that branch names can contain shell-significant characters. The public ingress preflight previously interpolated `github.event.workflow_run.head_branch`, `head_repository.full_name`, and `conclusion` directly into an inline Bash script.
+
+Primary sources re-checked on 2026-10-04:
+- https://docs.github.com/en/actions/concepts/security/script-injections
+- https://docs.github.com/en/actions/reference/security/secure-use#good-practices-for-mitigating-script-injection-attacks
+- https://docs.github.com/en/actions/reference/workflows-and-actions/contexts
+
+Decision:
+- keep the existing `workflow_run` source-binding checks unchanged;
+- pass the source conclusion, branch, repository identity, and expected repository through step-scoped environment variables;
+- compare only quoted shell variables inside `run:`;
+- add regression coverage that rejects any `${{ github.* }}` expression inside that source-validation shell body.
+
+This does not relax source verification or broaden workflow permissions. It only removes event-controlled text from generated shell source before the external production ingress evidence lane executes.
