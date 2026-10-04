@@ -226,3 +226,21 @@ Engineering decision:
 - The probe sends no OAuth bearer token, reviewer credential, cookie, or query-injected secret to the demo host.
 - The probe requests only enough content to prove reachability and cancels the response body instead of downloading the recording.
 - Release evidence records only the resolved demo origin/path and content type, not credentials or private query values.
+
+
+## OpenAI portal domain + Scan Tools completion gate — 2026-10-04
+
+Primary sources re-checked on 2026-10-04:
+- https://developers.openai.com/plugins/deploy/submission
+- https://developers.openai.com/plugins/deploy/submission-errors
+
+Current platform facts:
+- MCP-backed submissions must complete the portal's domain-verification challenge and Verify Domain must pass.
+- Final submission also requires a successful, current Scan Tools result against the production MCP server.
+- A live challenge endpoint or a locally computed tool fingerprint is necessary evidence, but neither proves that the corresponding portal action has actually completed.
+
+Engineering decision:
+- The protected `openai-production` release gate now requires two explicit non-secret operator attestations: `ZSSH_OPENAI_DOMAIN_VERIFIED=1` and `ZSSH_OPENAI_TOOL_SCAN_VERIFIED=1`.
+- Set the domain attestation only after the OpenAI portal reports Verify Domain successful for the exact production MCP host.
+- Set the tool-scan attestation only after Scan Tools has completed successfully against the current production MCP server and required findings are resolved.
+- Release evidence records both attestations alongside the independently computed live tool-contract SHA-256. These attestations do not replace portal verification; they prevent zSSH automation from calling a release ready while those mandatory portal actions are still knowingly incomplete.
