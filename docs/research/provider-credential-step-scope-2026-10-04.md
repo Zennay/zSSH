@@ -2,7 +2,7 @@
 
 ## Scope
 
-This note records an M5 GitHub Actions hardening decision for the protected Cloudflare DNS and Auth0 production-readiness workflows.
+This note records an M5 GitHub Actions hardening decision for the protected Cloudflare DNS, Auth0 production-readiness, and aggregate OpenAI production-readiness workflows.
 
 ## Primary sources
 
@@ -17,8 +17,9 @@ GitHub documents that a secret is readable by a workflow only when the workflow 
 The production DNS and Auth0 workflows already fail closed on canonical protected-main provenance before provider operations. Their provider credentials must therefore not be referenced at job-level, because that makes the token part of the environment for checkout/setup/provenance steps that do not need it.
 
 - `CLOUDFLARE_API_TOKEN` is referenced only by the three Cloudflare API steps: plan/read, apply, and verify/read.
-- `AUTH0_MANAGEMENT_API_TOKEN` is referenced only by the Auth0 provider validation step.
-- Repository checkout, Node setup, canonical-main provenance, branch-protection checks, and DNS convergence observation receive no provider credential.
-- Regression tests fail if either credential returns to the job-level environment.
+- `AUTH0_MANAGEMENT_API_TOKEN` is referenced only by the Auth0 provider validation step in the dedicated Auth0 workflow.
+- The aggregate OpenAI production-readiness audit keeps `CLOUDFLARE_API_TOKEN`, `AUTH0_MANAGEMENT_API_TOKEN`, `ZSSH_REVIEW_ACCESS_TOKEN`, and `OPENAI_APPS_CHALLENGE_TOKEN` out of job-level `env`; those four secrets are injected only into the single classifier step that converts their presence/validity into a secret-safe readiness receipt.
+- Repository checkout, Node setup, canonical-main provenance, branch-protection checks, DNS convergence observation, summaries, issue synchronization, and artifact upload receive no provider/reviewer/challenge credential.
+- Regression tests fail if these protected secrets return to the readiness job-level environment or disappear from the classifier step.
 
 This does not change provider permissions, production targets, or the external-input gate. It narrows credential exposure inside already protected workflows.
