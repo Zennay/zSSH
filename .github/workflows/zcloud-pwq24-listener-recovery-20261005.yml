@@ -1,0 +1,113 @@
+name: Recover zCloud runner for PWQ-24
+
+on:
+  push:
+    branches:
+      - ops/zcloud-pwq24-listener-recovery-20261005
+    paths:
+      - .github/workflows/zcloud-pwq24-listener-recovery-20261005.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: zssh-zcloud-pwq24-listener-recovery-20261005
+  cancel-in-progress: false
+
+jobs:
+  recover:
+    runs-on: self-hosted
+    timeout-minutes: 6
+    env:
+      ZCLOUD_SERVICE: actions.runner.Zennay-zCloud.zcloud-vps-1.service
+      ZCLOUD_RUNNER_ROOT: /home/ubuntu/actions-runner-zcloud
+    steps:
+      - name: Recover only an idle unhealthy zCloud listener
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test "$(hostname)" = "vps-bb300bba"
+          gh auth status >/dev/null 2>&1
+
+          matching_pids() {
+            local needle="$1"
+            for proc in /proc/[0-9]*; do
+              pid="${proc##*/}"
+              cmd="$(tr '\0' ' ' < "$proc/cmdline" 2>/dev/null || true)"
+              [[ "$cmd" == *"$needle"* ]] && echo "$pid"
+            done
+          }
+
+          pre_state="$(systemctl is-active "$ZCLOUD_SERVICE" || true)"
+          pre_pid="$(systemctl show "$ZCLOUD_SERVICE" -p MainPID --value || true)"
+          mapfile -t listeners < <(matching_pids "$ZCLOUD_RUNNER_ROOT/bin/Runner.Listener")
+          mapfile -t workers < <(matching_pids "$ZCLOUD_RUNNER_ROOT/bin/Runner.Worker")
+          echo "ZCLOUD_RECOVERY_PRE runner=${RUNNER_NAME:-unknown} state=$pre_state main_pid=$pre_pid listeners=${#listeners[@]} workers=${#workers[@]}"
+
+          if [[ "${#workers[@]}" -gt 0 ]]; then
+            echo "ZCLOUD_RECOVERY_ACTION=preserve-active-worker pids=${workers[*]}"
+            exit 0
+          fi
+
+          sleep 3
+          mapfile -t workers < <(matching_pids "$ZCLOUD_RUNNER_ROOT/bin/Runner.Worker")
+          if [[ "${#workers[@]}" -gt 0 ]]; then
+            echo "ZCLOUD_RECOVERY_ACTION=preserve-late-worker pids=${workers[*]}"
+            exit 0
+          fi
+
+          action=preserve-healthy-idle-listener
+          if [[ "$pre_state" != "active" || "${#listeners[@]}" -ne 1 ]]; then
+            sudo -n systemctl reset-failed "$ZCLOUD_SERVICE" || true
+            sudo -n systemctl restart "$ZCLOUD_SERVICE"
+            action=restart-idle-unhealthy-listener
+          fi
+
+          for _ in $(seq 1 30); do
+            post_state="$(systemctl is-active "$ZCLOUD_SERVICE" || true)"
+            post_pid="$(systemctl show "$ZCLOUD_SERVICE" -p MainPID --value || true)"
+            mapfile -t listeners < <(matching_pids "$ZCLOUD_RUNNER_ROOT/bin/Runner.Listener")
+            if [[ "$post_state" = "active" && "${#listeners[@]}" -eq 1 && "$post_pid" =~ ^[1-9][0-9]*$ ]]; then
+              break
+            fi
+            sleep 1
+          done
+
+          post_state="$(systemctl is-active "$ZCLOUD_SERVICE" || true)"
+          post_pid="$(systemctl show "$ZCLOUD_SERVICE" -p MainPID --value || true)"
+          mapfile -t listeners < <(matching_pids "$ZCLOUD_RUNNER_ROOT/bin/Runner.Listener")
+          mapfile -t workers < <(matching_pids "$ZCLOUD_RUNNER_ROOT/bin/Runner.Worker")
+          cgroup="$(systemctl show "$ZCLOUD_SERVICE" -p ControlGroup --value || true)"
+          echo "ZCLOUD_RECOVERY_ACTION=$action"
+          echo "ZCLOUD_RECOVERY_POST state=$post_state main_pid=$post_pid listeners=${#listeners[@]} workers=${#workers[@]} cgroup=$cgroup"
+          journalctl -u "$ZCLOUD_SERVICE" --no-pager -n 100 || true
+
+          test "$post_state" = "active"
+          [[ "$post_pid" =~ ^[1-9][0-9]*$ ]]
+          test "${#listeners[@]}" -eq 1
+          grep -Fq "$cgroup" "/proc/${listeners[0]}/cgroup"
+
+      - name: Prove a current-main zCloud deploy starts scheduling
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          expected="$(gh api repos/Zennay/zCloud/branches/main --jq .commit.sha)"
+          echo "ZCLOUD_CURRENT_MAIN=$expected"
+          last=""
+          for _ in $(seq 1 30); do
+            last="$(
+              gh api 'repos/Zennay/zCloud/actions/workflows/zcloud-vps-deploy.yml/runs?per_page=30'                 --jq --arg expected "$expected" '[.workflow_runs[] | select(.head_sha==$expected)] | sort_by(.created_at) | last | {id,status,conclusion,created_at,updated_at}'
+            )"
+            echo "ZCLOUD_DEPLOY_POLL=$last"
+            status="$(python3 -c 'import json,sys; print(json.load(sys.stdin).get("status") or "")' <<<"$last")"
+            case "$status" in
+              in_progress|completed)
+                echo "ZCLOUD_DEPLOY_SCHEDULING_PROVEN=1"
+                exit 0
+                ;;
+            esac
+            sleep 4
+          done
+          echo "zCloud current-main deploy did not start scheduling after listener proof" >&2
+          exit 1
