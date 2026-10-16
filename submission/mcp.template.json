@@ -3,7 +3,18 @@
   "mcpServers": {
     "zssh": {
       "type": "streamable-http",
-      "url": "__ZSSH_MCP_URL__"
+      "url": "__ZSSH_MCP_URL__",
+      "extensions": {
+        "com.openai": {
+          "auth": {
+            "type": "oauth",
+            "baseScopes": [
+              "zssh:read",
+              "zssh:write"
+            ]
+          }
+        }
+      }
     }
   }
 }

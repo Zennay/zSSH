@@ -23,6 +23,20 @@ The builder writes `dist/openai-plugin/plugin.json`, `dist/openai-plugin/mcp.jso
 
 It fails before producing a ZIP when listing limits, URL requirements, icon dimensions, starter prompts, or the required review-case counts do not pass.
 
+## First-run configuration and account linking
+
+The submission package now declares OAuth on the `zssh` MCP server in `mcp.json` (`extensions.com.openai.auth`) and includes a packaged `skills/setup/SKILL.md` selected by `extensions.com.openai.onboardingSkill`. After installing an updated package, run its **Setup** workflow and connect your ChatGPT profile using the normal OAuth account-linking flow. The generated ZIP includes the onboarding skill; the repository template alone is not an installed update.
+
+This plugin does **not** offer a hostname, SSH-key, or password field in ChatGPT. A single public HTTPS `/mcp` gateway must first be online with valid OAuth metadata. Each Linux target uses a configured outbound agent and owner-approved pairing, so the gateway never needs the target SSH private key.
+
+For an owned Linux target, once connected and authenticated:
+
+1. Ask ChatGPT to call `get_pairing_status` and copy the returned pending `pair_...` request ID.
+2. On the Linux target, in the configured agent installation, run `node agent.mjs approve <request-id>`. For an older same-machine gateway deployment, use `node pairing-cli.mjs approve <request-id>` with the gateway's pairing registry.
+3. Ask ChatGPT to refresh pairing status and call `get_system_uptime` as a read-only test.
+
+**Production prerequisites remain external:** the public DNS/TLS origin, Auth0/OIDC configuration, agent trust setup and OpenAI's final domain/tool review must be completed before new installations can connect. See the production-readiness audit and the active M5 issue. Merely adding the auth declaration does not bring an offline MCP endpoint online.
+
 ## Included review material
 
 The manifest contains exactly five positive and three negative initial MCP review cases. Reviewer credentials are intentionally not stored in this repository or ZIP; OpenAI requires those to be entered separately in the secure review form.
