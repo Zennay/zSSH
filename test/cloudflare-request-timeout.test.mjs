@@ -10,7 +10,7 @@ const zoneId = "a".repeat(32);
 const baseInput = Object.freeze({
   zoneId,
   apiToken: "test-cloudflare-token",
-  publicBaseUrl: "https://zssh.cheapgpt.shop",
+  publicBaseUrl: "https://zssh.owned-domain.dev",
   ipv4: "198.244.191.182",
   apply: false,
 });
