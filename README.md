@@ -1,6 +1,6 @@
 # zSSH
 
-> **Domain correction (2026-10-16):** The former `cheapgpt.shop` production assumption is retired because the operator does not own that domain. Do not create a Cloudflare token for it or use historical `zssh.cheapgpt.shop` examples as a deployment target. Public DNS and MCP URLs must now be explicitly configured for a currently owned hostname; see `docs/research/cloudflare-dns-publication-2026-10-04.md` for the archived context and updated guardrails.
+> **Production hostname selected (2026-10-16):** Use the isolated subdomain `zssh.zennay.nl` → `198.244.191.182`; keep the portfolio at the apex `zennay.nl` unchanged. The retired `cheapgpt.shop` hostname must never be reused. See [`docs/research/zennay-nl-oauth-host-2026-10-16.md`](docs/research/zennay-nl-oauth-host-2026-10-16.md) for the protected DNS variables, OAuth endpoint and safe rollout order. DNS publication is still gated on provider access and must not be claimed complete until externally verified.
 
 zSSH is a **standalone security-first remote operations project**. zCloud is its control-plane/dashboard integration, not its parent project.
 
