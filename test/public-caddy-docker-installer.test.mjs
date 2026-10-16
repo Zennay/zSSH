@@ -42,33 +42,33 @@ async function fixture() {
 
   await writeFile(path.join(bin, "sudo"), `#!/usr/bin/env bash
 set -Eeuo pipefail
-if [[ "${1:-}" == "-n" ]]; then shift; fi
+if [[ "\${1:-}" == "-n" ]]; then shift; fi
 exec "$@"
 `, { mode: 0o755 });
 
   await writeFile(path.join(bin, "docker"), `#!/usr/bin/env bash
 set -Eeuo pipefail
 echo "$*" >> "$FAKE_DOCKER_LOG"
-case "${1:-}" in
+case "\${1:-}" in
   inspect)
-    format="${3:-}"
+    format="\${3:-}"
     if [[ "$format" == "{{.State.Running}}" ]]; then
-      echo "${FAKE_RUNNING:-true}"
+      echo "\${FAKE_RUNNING:-true}"
     else
-      echo "${FAKE_RUNNING:-true}|${FAKE_NETWORK:-host}|$FAKE_CADDYFILE|${FAKE_MOUNT_RW:-false}"
+      echo "\${FAKE_RUNNING:-true}|\${FAKE_NETWORK:-host}|$FAKE_CADDYFILE|\${FAKE_MOUNT_RW:-false}"
     fi
     ;;
   cp)
     source="$2"
     destination="$3"
-    destination_path="${destination#*:}"
+    destination_path="\${destination#*:}"
     mkdir -p "$FAKE_CONTAINER_ROOT$(dirname "$destination_path")"
     cp "$source" "$FAKE_CONTAINER_ROOT$destination_path"
     ;;
   exec)
     container="$2"
     shift 2
-    if [[ "${1:-}" == "caddy" && "${2:-}" == "validate" ]]; then
+    if [[ "\${1:-}" == "caddy" && "\${2:-}" == "validate" ]]; then
       config=""
       while [[ $# -gt 0 ]]; do
         if [[ "$1" == "--config" ]]; then config="$2"; shift 2; else shift; fi
@@ -79,17 +79,17 @@ case "${1:-}" in
         config="$FAKE_CONTAINER_ROOT$config"
       fi
       [[ -f "$config" ]]
-      if [[ "${FAKE_VALIDATE_FAIL:-0}" == "1" ]]; then exit 1; fi
+      if [[ "\${FAKE_VALIDATE_FAIL:-0}" == "1" ]]; then exit 1; fi
       ! grep -Fq "BROKEN_CONFIG" "$config"
-    elif [[ "${1:-}" == "rm" && "${2:-}" == "-f" ]]; then
-      rm -f "$FAKE_CONTAINER_ROOT${3:-}"
+    elif [[ "\${1:-}" == "rm" && "\${2:-}" == "-f" ]]; then
+      rm -f "$FAKE_CONTAINER_ROOT\${3:-}"
     else
       echo "unexpected docker exec arguments" >&2
       exit 2
     fi
     ;;
   restart)
-    if [[ "${FAKE_RESTART_FAIL:-0}" == "1" ]]; then exit 1; fi
+    if [[ "\${FAKE_RESTART_FAIL:-0}" == "1" ]]; then exit 1; fi
     ;;
   *)
     echo "unexpected docker arguments" >&2
@@ -100,11 +100,11 @@ esac
 
   await writeFile(path.join(bin, "curl"), `#!/usr/bin/env bash
 set -Eeuo pipefail
-url="${@: -1}"
+url="\${@: -1}"
 if [[ "$url" == http://127.0.0.1:8789/health ]]; then
-  [[ "${FAKE_GATEWAY_FAIL:-0}" != "1" ]] || exit 22
+  [[ "\${FAKE_GATEWAY_FAIL:-0}" != "1" ]] || exit 22
 elif [[ "$url" == https://zssh.zennay.nl/health ]]; then
-  [[ "${FAKE_TLS_FAIL:-0}" != "1" ]] || exit 22
+  [[ "\${FAKE_TLS_FAIL:-0}" != "1" ]] || exit 22
 else
   echo "unexpected curl URL: $url" >&2
   exit 2
