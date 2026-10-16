@@ -382,6 +382,49 @@ The helper sets `ZSSH_TRUST_LOCAL_TUNNEL=1` only for the loopback tunnel path. I
 
 For a private target where `zssh_exec` must be able to call `sudo`, the user service intentionally runs with `NoNewPrivileges=false`. This only permits privilege escalation; it does not grant it by itself. The operating-system sudoers policy remains the authorization boundary, so only configure `NOPASSWD` privileges you deliberately want zSSH to have.
 
+## Maximum private operator access (explicit opt-in)
+
+For a **dedicated, trusted, private** zSSH installation, the operator may grant the
+gateway every file and shell operation permitted by its existing **Linux service
+account**. This mode does not grant root, disable authentication, weaken public
+OAuth, alter target-agent permissions, or allow the gateway to listen on a public
+network interface. Treat any private MCP credential or tunnel with this mode as
+equivalent to remote shell access to that Linux account.
+
+Run on the target **as the existing zSSH service user**, never as root:
+
+```bash
+cd ~/.local/src/zssh
+node ops/enable-private-operator.mjs --check
+node ops/enable-private-operator.mjs --apply --accept-risk
+systemctl --user restart zssh.service
+systemctl --user is-active zssh.service
+bash ops/diagnose.sh
+```
+
+The helper requires an existing owner-only (0600) private gateway configuration and
+a configured authentication method. It refuses the public profile, target-agent
+configuration, symlinks, duplicate configuration keys, and root execution. It
+writes the configuration atomically and never prints credentials. It sets:
+
+```ini
+ZSSH_PLUGIN_PROFILE=private
+ZSSH_ALLOWED_ROOTS=/
+ZSSH_EXEC_MODE=full
+ZSSH_COMMAND_TIMEOUT_SECONDS=300
+ZSSH_MAX_OUTPUT_BYTES=1048576
+ZSSH_MAX_FILE_BYTES=1048576
+```
+
+**Important:** With full shell enabled, the allowed-roots setting is not a
+sandbox. The service user can read and change anything that Linux permits
+that user to access, including files outside the roots through shell commands.
+Keep the private tunnel/credentials restricted to trusted operators. Do not
+add blanket passwordless sudo or run the service as root. For privileged
+service restarts use the existing explicit sudo service allowlists. To disable
+full shell, restore `ZSSH_EXEC_MODE=disabled` and restrict
+`ZSSH_ALLOWED_ROOTS` in `~/.config/zssh/gateway.env`, then restart `zssh.service`.
+
 ## Scoped sudo grants
 
 zSSH runs unprivileged by default. When one narrowly scoped root-level service action is genuinely required, generate an exact sudoers policy instead of granting a generic root shell or argument-less `systemctl`.
