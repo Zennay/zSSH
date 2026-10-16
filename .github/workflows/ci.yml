@@ -153,6 +153,9 @@ jobs:
       - name: Exercise signed target-local pairing control
         run: node agent-pairing-canary.mjs
 
+      - name: Validate private HTTPS IP plugin ZIP (Bearer auth, no secrets)
+        run: python3 scripts/private-plugin-canary.py
+
       - name: Validate OpenAI submission contract canary
         run: python3 scripts/openai-submission-contract-canary.py
 
