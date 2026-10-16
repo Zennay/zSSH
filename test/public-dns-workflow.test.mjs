@@ -55,9 +55,9 @@ test("reviewed marker can trigger the exact production DNS publish only from cur
     workflow,
     /Require reviewed protected-main DNS activation[\s\S]*check-main-protection\.mjs --public-status --require-protected --require-current-sha/,
   );
-  assert.match(workflow, /CLOUDFLARE_ZONE_NAME: cheapgpt\.shop/);
-  assert.match(workflow, /ZSSH_PUBLIC_BASE_URL: https:\/\/zssh\.cheapgpt\.shop/);
-  assert.match(workflow, /ZSSH_PUBLIC_IPV4: 198\.244\.191\.182/);
+  assert.match(workflow, /CLOUDFLARE_ZONE_NAME: \$\{\{ vars\.ZSSH_DNS_ZONE_NAME \}\}/);
+  assert.match(workflow, /ZSSH_PUBLIC_BASE_URL: \$\{\{ vars\.ZSSH_DNS_PUBLIC_BASE_URL \}\}/);
+  assert.match(workflow, /ZSSH_PUBLIC_IPV4: \$\{\{ vars\.ZSSH_DNS_TARGET_IPV4 \}\}/);
 });
 
 test("reviewed DNS activation marker supports a repeatable review nonce without weakening the confirmation phrase", () => {
@@ -73,9 +73,9 @@ test("production DNS target cannot be overridden by manual dispatch inputs", () 
   assert.doesNotMatch(workflow, /^      ipv4:/m);
   assert.doesNotMatch(workflow, /inputs\.public_base_url/);
   assert.doesNotMatch(workflow, /inputs\.ipv4/);
-  assert.match(workflow, /CLOUDFLARE_ZONE_NAME: cheapgpt\.shop/);
-  assert.match(workflow, /ZSSH_PUBLIC_BASE_URL: https:\/\/zssh\.cheapgpt\.shop/);
-  assert.match(workflow, /ZSSH_PUBLIC_IPV4: 198\.244\.191\.182/);
+  assert.match(workflow, /CLOUDFLARE_ZONE_NAME: \$\{\{ vars\.ZSSH_DNS_ZONE_NAME \}\}/);
+  assert.match(workflow, /ZSSH_PUBLIC_BASE_URL: \$\{\{ vars\.ZSSH_DNS_PUBLIC_BASE_URL \}\}/);
+  assert.match(workflow, /ZSSH_PUBLIC_IPV4: \$\{\{ vars\.ZSSH_DNS_TARGET_IPV4 \}\}/);
 });
 
 test("manual production DNS dispatch is bound to the current protected main revision", () => {
@@ -286,4 +286,16 @@ test("Cloudflare provider credential is unavailable before canonical provenance"
       `${stepName} must receive the Cloudflare token explicitly`,
     );
   }
+});
+
+test("retired domain cannot be published and current hostname requires independent owner approval", () => {
+  const check = workflow.indexOf("Require explicitly approved owned production hostname");
+  const token = workflow.indexOf("Verify Cloudflare API token is active");
+  assert.ok(check > 0 && token > check, "ownership guard must run before provider access");
+  assert.match(workflow, /ZSSH_DNS_APPROVED_HOSTNAME: \$\{\{ vars\.ZSSH_DNS_APPROVED_HOSTNAME \}\}/);
+  assert.match(workflow, /host\.endsWith\("\.cheapgpt\.shop"\)/);
+  assert.match(workflow, /host !== approval/);
+  assert.match(workflow, /ZSSH_DNS_OWNERSHIP_APPROVAL_GREEN/);
+  assert.doesNotMatch(workflow, /CLOUDFLARE_ZONE_NAME: cheapgpt\.shop/);
+  assert.doesNotMatch(workflow, /ZSSH_PUBLIC_BASE_URL: https:\/\/zssh\.cheapgpt\.shop/);
 });
