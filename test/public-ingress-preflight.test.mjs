@@ -22,7 +22,7 @@ test("ingress preflight waits for explicit post-rollout dispatch", () => {
   );
   assert.match(
     workflow,
-    /ZSSH_EXPECTED_PUBLIC_ADDRESSES: 198\.244\.191\.182/,
+    /ZSSH_EXPECTED_PUBLIC_ADDRESSES: \$\{\{ vars\.ZSSH_EXPECTED_PUBLIC_ADDRESSES \}\}/,
   );
   assert.match(
     workflow,
