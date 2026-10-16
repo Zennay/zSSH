@@ -23,6 +23,8 @@ sudo -n true >/dev/null 2>&1 || {
   exit 2
 }
 
+DOCKER=(sudo -n docker)
+
 REPO_SHA="${ZSSH_EXPECTED_SHA:-$(git -C "$SOURCE_ROOT" rev-parse HEAD)}"
 [[ "$REPO_SHA" =~ ^[0-9a-f]{40}$ ]] || {
   echo "ZSSH_EXPECTED_SHA / repository HEAD must be a full 40-character Git commit SHA" >&2
@@ -66,12 +68,12 @@ cleanup() {
     echo "Caddy health verification failed; restoring the previous mounted config." >&2
     sudo -n install -m "$root_mode" -o "$root_uid" -g "$root_gid" "$backup_file" "$root_stage"
     sudo -n mv -f "$root_stage" "$ROOT_FILE"
-    docker restart --time 10 "$CONTAINER_NAME" >/dev/null
-    docker exec "$CONTAINER_NAME" caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile >/dev/null 2>&1
-    docker inspect --format '{{.State.Running}}' "$CONTAINER_NAME" | grep -Fx true >/dev/null
+    "${DOCKER[@]}" restart --time 10 "$CONTAINER_NAME" >/dev/null
+    "${DOCKER[@]}" exec "$CONTAINER_NAME" caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile >/dev/null 2>&1
+    "${DOCKER[@]}" inspect --format '{{.State.Running}}' "$CONTAINER_NAME" | grep -Fx true >/dev/null
     echo "ZSSH_PUBLIC_CADDY_DOCKER_ROLLBACK_COMPLETE" >&2
   fi
-  docker exec "$CONTAINER_NAME" rm -f "$container_candidate" >/dev/null 2>&1
+  "${DOCKER[@]}" exec "$CONTAINER_NAME" rm -f "$container_candidate" >/dev/null 2>&1
   rm -rf "$tmp_dir"
   exit "$status"
 }
@@ -96,7 +98,7 @@ if sudo -n test -L "$ROOT_FILE"; then
 fi
 
 inspect_topology() {
-  docker inspect --format '{{.State.Running}}|{{.HostConfig.NetworkMode}}|{{range .Mounts}}{{if eq .Destination "/etc/caddy/Caddyfile"}}{{.Source}}|{{.RW}}{{end}}{{end}}' "$CONTAINER_NAME"
+  "${DOCKER[@]}" inspect --format '{{.State.Running}}|{{.HostConfig.NetworkMode}}|{{range .Mounts}}{{if eq .Destination "/etc/caddy/Caddyfile"}}{{.Source}}|{{.RW}}{{end}}{{end}}' "$CONTAINER_NAME"
 }
 topology="$(inspect_topology)"
 expected_topology="true|host|$ROOT_FILE|false"
@@ -177,11 +179,11 @@ if [[ "$current_sha" != "$original_sha" ]]; then
 fi
 
 # Validate the candidate with the actual Caddy binary in the actual container.
-docker cp "$candidate" "$CONTAINER_NAME:$container_candidate"
-docker exec "$CONTAINER_NAME" caddy validate --config "$container_candidate" --adapter caddyfile >/dev/null
+"${DOCKER[@]}" cp "$candidate" "$CONTAINER_NAME:$container_candidate"
+"${DOCKER[@]}" exec "$CONTAINER_NAME" caddy validate --config "$container_candidate" --adapter caddyfile >/dev/null
 
 if [[ "$candidate_sha" == "$original_sha" ]]; then
-  docker exec "$CONTAINER_NAME" caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile >/dev/null
+  "${DOCKER[@]}" exec "$CONTAINER_NAME" caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile >/dev/null
 else
   # Recheck the mount/network topology and source checksum immediately before atomic promotion.
   [[ "$(inspect_topology)" == "$expected_topology" ]] || {
@@ -196,19 +198,19 @@ else
   sudo -n install -m "$root_mode" -o "$root_uid" -g "$root_gid" "$candidate" "$root_stage"
   sudo -n mv -f "$root_stage" "$ROOT_FILE"
   promoted=1
-  docker restart --time 10 "$CONTAINER_NAME" >/dev/null
+  "${DOCKER[@]}" restart --time 10 "$CONTAINER_NAME" >/dev/null
 fi
 
 running=0
 for _ in $(seq 1 30); do
-  if docker inspect --format '{{.State.Running}}' "$CONTAINER_NAME" | grep -Fxq true; then
+  if "${DOCKER[@]}" inspect --format '{{.State.Running}}' "$CONTAINER_NAME" | grep -Fxq true; then
     running=1
     break
   fi
   sleep 1
 done
 [[ "$running" == "1" ]] || { echo "Docker Caddy did not return to running state" >&2; exit 2; }
-docker exec "$CONTAINER_NAME" caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile >/dev/null
+"${DOCKER[@]}" exec "$CONTAINER_NAME" caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile >/dev/null
 
 tls_health="$tmp_dir/tls-health.json"
 tls_ok=0
