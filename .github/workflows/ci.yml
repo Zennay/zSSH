@@ -182,9 +182,16 @@ jobs:
           assert hashlib.sha256(package.read_bytes()).hexdigest() == first["zip_sha256"]
           with zipfile.ZipFile(package) as z:
               names = set(z.namelist())
-              assert {"plugin.json", "mcp.json", "assets/icon.svg"} <= names
+              assert {"plugin.json", "mcp.json", "assets/icon.svg", "skills/setup/SKILL.md"} <= names
               plugin = json.loads(z.read("plugin.json"))
               mcp = json.loads(z.read("mcp.json"))
+              setup = z.read("skills/setup/SKILL.md").decode("utf-8")
+          assert setup.startswith("---\\nname: setup\\n".replace("\\\\n", "\\n"))
+          assert plugin["extensions"]["com.openai"]["onboardingSkill"] == "./skills/setup/SKILL.md"
+          assert plugin["extensions"]["com.openai"]["interface"]["defaultPrompt"][0] == "Help me set up zSSH and connect my Linux server."
+          auth = mcp["mcpServers"]["zssh"]["extensions"]["com.openai"]["auth"]
+          assert auth["type"] == "oauth"
+          assert auth["baseScopes"] == ["zssh:read", "zssh:write"]
           assert plugin["version"] == "0.1.2"
           review = plugin["extensions"]["com.openai"]["review"]["test_cases"]
           assert len(review["positive"]) == 5
