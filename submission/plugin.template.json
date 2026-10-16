@@ -96,7 +96,8 @@
       },
       "publication": {
         "release_notes": "0.1.2 — Public release candidate adds a same-origin HTTPS review website for overview, support, privacy, and terms, alongside scoped Linux inspection, OAuth resource-server enforcement, local target pairing/revocation, and secret-safe public file access."
-      }
+      },
+      "onboardingSkill": "./skills/setup/SKILL.md"
     }
   }
 }
