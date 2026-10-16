@@ -59,15 +59,13 @@ container_candidate="/tmp/zssh-Caddyfile-candidate-$$"
 promoted=0
 committed=0
 backup_file="$tmp_dir/Caddyfile.before"
-root_stage="$ROOT_FILE.zssh-stage.$$"
 cleanup() {
   local status=$?
   trap - EXIT
   set +e
   if [[ "$promoted" == "1" && "$committed" != "1" ]]; then
     echo "Caddy health verification failed; restoring the previous mounted config." >&2
-    sudo -n install -m "$root_mode" -o "$root_uid" -g "$root_gid" "$backup_file" "$root_stage"
-    sudo -n mv -f "$root_stage" "$ROOT_FILE"
+    write_config_in_place "$backup_file"
     "${DOCKER[@]}" restart --time 10 "$CONTAINER_NAME" >/dev/null
     "${DOCKER[@]}" exec "$CONTAINER_NAME" caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile >/dev/null 2>&1
     "${DOCKER[@]}" inspect --format '{{.State.Running}}' "$CONTAINER_NAME" | grep -Fx true >/dev/null
@@ -119,11 +117,41 @@ if (value?.ok !== true || value?.service !== "zssh") {
 }
 NODE
 
-root_mode="$(sudo -n stat -c '%a' "$ROOT_FILE")"
-root_uid="$(sudo -n stat -c '%u' "$ROOT_FILE")"
-root_gid="$(sudo -n stat -c '%g' "$ROOT_FILE")"
+root_identity="$(sudo -n stat -c '%d:%i' "$ROOT_FILE")"
 sudo -n cat "$ROOT_FILE" > "$backup_file"
 original_sha="$(sha256sum "$backup_file" | awk '{print $1}')"
+
+# The Caddyfile is a bind-mounted single file. Replacing its pathname with mv
+# would leave the running container attached to the old inode, so update the
+# verified regular file in place and retain its inode.
+write_config_in_place() {
+  local source_file="$1"
+  sudo -n python3 - "$ROOT_FILE" "$source_file" "$root_identity" <<'PY'
+import os
+import stat
+import sys
+
+destination, source, expected_identity = sys.argv[1:]
+flags = os.O_WRONLY | getattr(os, "O_NOFOLLOW", 0)
+fd = os.open(destination, flags)
+try:
+    info = os.fstat(fd)
+    identity = f"{info.st_dev}:{info.st_ino}"
+    if not stat.S_ISREG(info.st_mode):
+        raise SystemExit("Caddy config destination is not a regular file")
+    if identity != expected_identity:
+        raise SystemExit("Caddy config inode changed; refusing in-place write")
+    with open(source, "rb") as stream:
+        payload = stream.read()
+    os.ftruncate(fd, 0)
+    with os.fdopen(fd, "wb", closefd=False) as target:
+        target.write(payload)
+        target.flush()
+        os.fsync(target.fileno())
+finally:
+    os.close(fd)
+PY
+}
 
 # Preserve the existing TLS issuer, global admin policy, and response headers.
 # Only the site hostname and its loopback upstream may change in this transaction.
@@ -195,9 +223,8 @@ else
     echo "Caddy config changed during validation; refusing promotion." >&2
     exit 2
   }
-  sudo -n install -m "$root_mode" -o "$root_uid" -g "$root_gid" "$candidate" "$root_stage"
-  sudo -n mv -f "$root_stage" "$ROOT_FILE"
   promoted=1
+  write_config_in_place "$candidate"
   "${DOCKER[@]}" restart --time 10 "$CONTAINER_NAME" >/dev/null
 fi
 
