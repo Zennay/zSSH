@@ -3,7 +3,7 @@ import process from "node:process";
 import { pathToFileURL } from "node:url";
 import { checkPublicIngress } from "./check-public-ingress.mjs";
 
-export const DEFAULT_PRODUCTION_MCP_URL = "https://zssh.cheapgpt.shop/mcp";
+export const DEFAULT_PRODUCTION_MCP_URL = "";
 
 export function classifyPublicIngressFailure(message) {
   const value = String(message || "");
@@ -28,6 +28,15 @@ export async function observePublicOrigin(
   { checkImpl = checkPublicIngress } = {},
 ) {
   const mcpUrl = String(rawMcpUrl || DEFAULT_PRODUCTION_MCP_URL).trim();
+  if (!mcpUrl) {
+    return {
+      schema_version: 1,
+      mcp_url: "",
+      ready: false,
+      stage: "url_contract",
+      reason: "ZSSH_PLUGIN_MCP_URL must be explicitly configured; no production hostname is assumed",
+    };
+  }
 
   try {
     const evidence = await checkImpl(mcpUrl);
