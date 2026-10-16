@@ -7,12 +7,12 @@ import {
   observePublicOrigin,
 } from "../scripts/observe-public-origin-readiness.mjs";
 
-test("public-origin observer defaults to the selected production MCP URL and preserves strict green evidence", async () => {
-  const result = await observePublicOrigin(undefined, {
+test("public-origin observer accepts an explicitly supplied MCP URL and preserves strict green evidence", async () => {
+  const result = await observePublicOrigin("https://zssh.owned-domain.dev/mcp", {
     checkImpl: async url => ({
       ok: true,
       mcp_url: url,
-      endpoint_origin: "https://zssh.cheapgpt.shop",
+      endpoint_origin: "https://zssh.owned-domain.dev",
       dns_address_count: 1,
       dns_families: [4],
       https_health_validated: true,
@@ -23,13 +23,23 @@ test("public-origin observer defaults to the selected production MCP URL and pre
 
   assert.equal(result.ready, true);
   assert.equal(result.stage, "ready");
-  assert.equal(result.mcp_url, DEFAULT_PRODUCTION_MCP_URL);
+  assert.equal(result.mcp_url, "https://zssh.owned-domain.dev/mcp");
   assert.equal(result.evidence.ok, true);
+});
+
+test("public-origin observer refuses to assume an old hostname when none is configured", async () => {
+  assert.equal(DEFAULT_PRODUCTION_MCP_URL, "");
+  const result = await observePublicOrigin(undefined, {
+    checkImpl: async () => { throw new Error("network should not be accessed"); },
+  });
+  assert.equal(result.ready, false);
+  assert.equal(result.stage, "url_contract");
+  assert.match(result.reason, /explicitly configured/);
 });
 
 test("public-origin observer converts expected external not-ready states into non-failing stage evidence", async () => {
   const cases = [
-    ["public DNS lookup failed: getaddrinfo ENOTFOUND zssh.cheapgpt.shop", "dns"],
+    ["public DNS lookup failed: getaddrinfo ENOTFOUND zssh.owned-domain.dev", "dns"],
     ["public health endpoint failed: HTTP 502", "https_health"],
     ["unauthenticated public MCP endpoint must return 401, got 200", "mcp_auth"],
     ["OAuth protected-resource metadata failed: HTTP 404", "oauth_metadata"],
@@ -37,7 +47,7 @@ test("public-origin observer converts expected external not-ready states into no
   ];
 
   for (const [message, stage] of cases) {
-    const result = await observePublicOrigin(DEFAULT_PRODUCTION_MCP_URL, {
+    const result = await observePublicOrigin("https://zssh.owned-domain.dev/mcp", {
       checkImpl: async () => {
         throw new Error(message);
       },
