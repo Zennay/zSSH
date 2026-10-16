@@ -17,8 +17,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     env:
-      ZSSH_PLUGIN_MCP_URL: https://zssh.cheapgpt.shop/mcp
-      ZSSH_EXPECTED_PUBLIC_ADDRESSES: 198.244.191.182
+      ZSSH_PLUGIN_MCP_URL: ${{ vars.ZSSH_PLUGIN_MCP_URL }}
+      ZSSH_EXPECTED_PUBLIC_ADDRESSES: ${{ vars.ZSSH_EXPECTED_PUBLIC_ADDRESSES }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

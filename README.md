@@ -1,5 +1,7 @@
 # zSSH
 
+> **Domain correction (2026-10-16):** The former `cheapgpt.shop` production assumption is retired because the operator does not own that domain. Do not create a Cloudflare token for it or use historical `zssh.cheapgpt.shop` examples as a deployment target. Public DNS and MCP URLs must now be explicitly configured for a currently owned hostname; see `docs/research/cloudflare-dns-publication-2026-10-04.md` for the archived context and updated guardrails.
+
 zSSH is a **standalone security-first remote operations project**. zCloud is its control-plane/dashboard integration, not its parent project.
 
 ## Current milestone

@@ -23,8 +23,9 @@ function response(result, { status = 200, success = true, errors = [] } = {}) {
 function baseArgs(fetchImpl, overrides = {}) {
   return {
     zoneId,
+    zoneName: "owned-domain.dev",
     apiToken: "test-token-not-secret",
-    publicBaseUrl: "https://zssh.cheapgpt.shop",
+    publicBaseUrl: "https://zssh.owned-domain.dev",
     ipv4: "198.244.191.182",
     fetchImpl,
     ...overrides,
@@ -33,12 +34,29 @@ function baseArgs(fetchImpl, overrides = {}) {
 
 test("validates scoped Cloudflare zone IDs and public IPv4 targets", () => {
   assert.equal(validateCloudflareZoneId(zoneId), zoneId);
-  assert.equal(validateCloudflareZoneName("CHEAPGPT.SHOP."), "cheapgpt.shop");
+  assert.equal(validateCloudflareZoneName("OWNED-DOMAIN.DEV."), "owned-domain.dev");
   assert.equal(validatePublicIpv4("198.244.191.182"), "198.244.191.182");
-  assert.throws(() => validateCloudflareZoneId("cheapgpt.shop"), /CLOUDFLARE_ZONE_ID/);
+  assert.throws(() => validateCloudflareZoneId("owned-domain.dev"), /CLOUDFLARE_ZONE_ID/);
   for (const value of ["127.0.0.1", "10.0.0.1", "192.168.1.4", "198.51.100.7", "::1"]) {
     assert.throws(() => validatePublicIpv4(value), /ZSSH_PUBLIC_IPV4/);
   }
+});
+
+test("retired hostname and missing configured zone fail closed before Cloudflare access", async () => {
+  let calls = 0;
+  const fetchImpl = async () => { calls += 1; throw new Error("Cloudflare must not be contacted"); };
+  await assert.rejects(
+    reconcileCloudflareDns(baseArgs(fetchImpl, {
+      zoneName: "cheapgpt.shop",
+      publicBaseUrl: "https://zssh.cheapgpt.shop",
+    })),
+    /retired cheapgpt\.shop/,
+  );
+  await assert.rejects(
+    reconcileCloudflareDns(baseArgs(fetchImpl, { zoneName: undefined })),
+    /CLOUDFLARE_ZONE_NAME must be configured/,
+  );
+  assert.equal(calls, 0);
 });
 
 test("discovers the exact active zone when CLOUDFLARE_ZONE_ID is omitted", async () => {
@@ -47,11 +65,11 @@ test("discovers the exact active zone when CLOUDFLARE_ZONE_ID is omitted", async
     calls.push({ url: String(url), init });
     if (calls.length === 1) {
       assert.match(calls[0].url, /\/client\/v4\/zones\?/);
-      assert.match(calls[0].url, /name=cheapgpt.shop/);
-      return response([{ id: zoneId, name: "cheapgpt.shop", status: "active" }]);
+      assert.match(calls[0].url, /name=owned-domain.dev/);
+      return response([{ id: zoneId, name: "owned-domain.dev", status: "active" }]);
     }
     return response([]);
-  }, { zoneId: "", zoneName: "cheapgpt.shop" }));
+  }, { zoneId: "", zoneName: "owned-domain.dev" }));
   assert.equal(result.action, "would_create");
   assert.equal(result.zone_source, "discovered");
   assert.equal(calls.length, 2);
@@ -66,7 +84,7 @@ test("configured zone ID still validates hostname ownership before provider acce
       zoneId,
       zoneName: "other.example",
       apiToken: "test-token-not-secret",
-      hostname: "zssh.cheapgpt.shop",
+      hostname: "zssh.owned-domain.dev",
       fetchImpl: async () => {
         fetched = true;
         throw new Error("provider access should not occur");
@@ -80,20 +98,20 @@ test("configured zone ID still validates hostname ownership before provider acce
 test("zone autodiscovery fails closed on missing, duplicate, or unrelated zones", async () => {
   for (const zones of [
     [],
-    [{ id: zoneId, name: "cheapgpt.shop", status: "pending" }],
+    [{ id: zoneId, name: "owned-domain.dev", status: "pending" }],
     [
-      { id: zoneId, name: "cheapgpt.shop", status: "active" },
-      { id: "11111111111111111111111111111111", name: "cheapgpt.shop", status: "active" },
+      { id: zoneId, name: "owned-domain.dev", status: "active" },
+      { id: "11111111111111111111111111111111", name: "owned-domain.dev", status: "active" },
     ],
   ]) {
     await assert.rejects(
       resolveCloudflareZoneId({
-        zoneName: "cheapgpt.shop",
+        zoneName: "owned-domain.dev",
         apiToken: "test-token-not-secret",
-        hostname: "zssh.cheapgpt.shop",
+        hostname: "zssh.owned-domain.dev",
         fetchImpl: async () => response(zones),
       }),
-      /exactly one active cheapgpt\.shop zone/,
+      /exactly one active owned-domain\.dev zone/,
     );
   }
 
@@ -101,7 +119,7 @@ test("zone autodiscovery fails closed on missing, duplicate, or unrelated zones"
     resolveCloudflareZoneId({
       zoneName: "other.example",
       apiToken: "test-token-not-secret",
-      hostname: "zssh.cheapgpt.shop",
+      hostname: "zssh.owned-domain.dev",
       fetchImpl: async () => response([]),
     }),
     /must belong/,
@@ -148,14 +166,14 @@ test("apply creates the exact DNS-only A record", async () => {
   const result = await reconcileCloudflareDns(baseArgs(async (url, init) => {
     calls.push({ url: String(url), init });
     if (calls.length === 1) return response([]);
-    return response({ id: recordId, type: "A", name: "zssh.cheapgpt.shop", content: "198.244.191.182", ttl: 1, proxied: false });
+    return response({ id: recordId, type: "A", name: "zssh.owned-domain.dev", content: "198.244.191.182", ttl: 1, proxied: false });
   }, { apply: true, expectedPlanAction: "would_create" }));
   assert.equal(result.action, "created");
   assert.equal(result.ttl, 1);
   assert.equal(calls[1].init.method, "POST");
   assert.deepEqual(JSON.parse(calls[1].init.body), {
     type: "A",
-    name: "zssh.cheapgpt.shop",
+    name: "zssh.owned-domain.dev",
     content: "198.244.191.182",
     ttl: 1,
     proxied: false,
@@ -165,13 +183,13 @@ test("apply creates the exact DNS-only A record", async () => {
 test("apply updates one existing A record but preserves unrelated coexisting records", async () => {
   const calls = [];
   const listed = [
-    { id: recordId, type: "A", name: "zssh.cheapgpt.shop", content: "203.0.113.10", ttl: 300, proxied: true },
-    { id: "11111111111111111111111111111111", type: "TXT", name: "zssh.cheapgpt.shop", content: "verification" },
+    { id: recordId, type: "A", name: "zssh.owned-domain.dev", content: "203.0.113.10", ttl: 300, proxied: true },
+    { id: "11111111111111111111111111111111", type: "TXT", name: "zssh.owned-domain.dev", content: "verification" },
   ];
   const result = await reconcileCloudflareDns(baseArgs(async (url, init) => {
     calls.push({ url: String(url), init });
     if (calls.length === 1) return response(listed);
-    return response({ id: recordId, type: "A", name: "zssh.cheapgpt.shop", content: "198.244.191.182", ttl: 1, proxied: false });
+    return response({ id: recordId, type: "A", name: "zssh.owned-domain.dev", content: "198.244.191.182", ttl: 1, proxied: false });
   }, {
     apply: true,
     expectedCurrentIpv4: "203.0.113.10",
@@ -193,7 +211,7 @@ test("apply updates one existing A record but preserves unrelated coexisting rec
 
 test("dry-run exposes an existing A record but requires an explicit update precondition", async () => {
   const result = await reconcileCloudflareDns(baseArgs(async () => response([
-    { id: recordId, type: "A", name: "zssh.cheapgpt.shop", content: "203.0.113.10", ttl: 300, proxied: true },
+    { id: recordId, type: "A", name: "zssh.owned-domain.dev", content: "203.0.113.10", ttl: 300, proxied: true },
   ])));
 
   assert.equal(result.action, "would_update_requires_precondition");
@@ -206,7 +224,7 @@ test("dry-run exposes an existing A record but requires an explicit update preco
     cloudflareDnsRecordStateSha256({
       id: recordId,
       type: "A",
-      name: "zssh.cheapgpt.shop",
+      name: "zssh.owned-domain.dev",
       content: "203.0.113.10",
       ttl: 300,
       proxied: true,
@@ -218,7 +236,7 @@ test("dry-run with reviewed human precondition emits an apply-ready state finger
   const existing = {
     id: recordId,
     type: "A",
-    name: "zssh.cheapgpt.shop",
+    name: "zssh.owned-domain.dev",
     content: "203.0.113.10",
     ttl: 300,
     proxied: true,
@@ -241,7 +259,7 @@ test("dry-run with reviewed human precondition emits an apply-ready state finger
 
 test("apply refuses an existing A record without exact reviewed human and plan preconditions", async () => {
   const records = [
-    { id: recordId, type: "A", name: "zssh.cheapgpt.shop", content: "203.0.113.10", ttl: 300, proxied: true },
+    { id: recordId, type: "A", name: "zssh.owned-domain.dev", content: "203.0.113.10", ttl: 300, proxied: true },
   ];
   const stateSha256 = cloudflareDnsRecordStateSha256(records[0]);
 
@@ -281,7 +299,7 @@ test("TTL drift is not accepted as exact convergence", async () => {
   const stale = [{
     id: recordId,
     type: "A",
-    name: "zssh.cheapgpt.shop",
+    name: "zssh.owned-domain.dev",
     content: "198.244.191.182",
     ttl: 300,
     proxied: false,
@@ -299,7 +317,7 @@ test("TTL drift is not accepted as exact convergence", async () => {
     return response({
       id: recordId,
       type: "A",
-      name: "zssh.cheapgpt.shop",
+      name: "zssh.owned-domain.dev",
       content: "198.244.191.182",
       ttl: 1,
       proxied: false,
@@ -322,7 +340,7 @@ test("apply fails closed when TTL or proxy state changes after the reviewed dry-
   const reviewed = {
     id: recordId,
     type: "A",
-    name: "zssh.cheapgpt.shop",
+    name: "zssh.owned-domain.dev",
     content: "198.244.191.182",
     ttl: 300,
     proxied: false,
@@ -351,7 +369,7 @@ test("apply binds create plans to continued record absence", async () => {
       {
         id: recordId,
         type: "A",
-        name: "zssh.cheapgpt.shop",
+        name: "zssh.owned-domain.dev",
         content: "198.244.191.182",
         ttl: 1,
         proxied: false,
@@ -368,7 +386,7 @@ test("apply binds update plans before accepting a newly converged noop", async (
   const reviewed = {
     id: recordId,
     type: "A",
-    name: "zssh.cheapgpt.shop",
+    name: "zssh.owned-domain.dev",
     content: "203.0.113.10",
     ttl: 300,
     proxied: true,
@@ -414,7 +432,7 @@ test("apply fails closed when an A record disappears after the reviewed dry-run 
   const reviewed = {
     id: recordId,
     type: "A",
-    name: "zssh.cheapgpt.shop",
+    name: "zssh.owned-domain.dev",
     content: "203.0.113.10",
     ttl: 300,
     proxied: true,
@@ -434,7 +452,7 @@ test("exact record is idempotent and does not write", async () => {
   let calls = 0;
   const result = await reconcileCloudflareDns(baseArgs(async () => {
     calls += 1;
-    return response([{ id: recordId, type: "A", name: "zssh.cheapgpt.shop.", content: "198.244.191.182", ttl: 1, proxied: false }]);
+    return response([{ id: recordId, type: "A", name: "zssh.owned-domain.dev.", content: "198.244.191.182", ttl: 1, proxied: false }]);
   }, { apply: true }));
   assert.equal(result.action, "noop");
   assert.equal(result.ttl, 1);
@@ -443,14 +461,14 @@ test("exact record is idempotent and does not write", async () => {
 
 test("refuses alternate routing records and multi-A RRsets", async () => {
   for (const records of [
-    [{ id: recordId, type: "AAAA", name: "zssh.cheapgpt.shop", content: "2001:4860:4860::8888", ttl: 1, proxied: false }],
-    [{ id: recordId, type: "CNAME", name: "zssh.cheapgpt.shop", content: "other.example.net" }],
-    [{ id: recordId, type: "HTTPS", name: "zssh.cheapgpt.shop", content: "1 alt.example.net alpn=\"h2\"" }],
-    [{ id: recordId, type: "NS", name: "zssh.cheapgpt.shop", content: "ns1.example.net" }],
-    [{ id: recordId, type: "SVCB", name: "zssh.cheapgpt.shop", content: "1 alt.example.net alpn=\"h2\"" }],
+    [{ id: recordId, type: "AAAA", name: "zssh.owned-domain.dev", content: "2001:4860:4860::8888", ttl: 1, proxied: false }],
+    [{ id: recordId, type: "CNAME", name: "zssh.owned-domain.dev", content: "other.example.net" }],
+    [{ id: recordId, type: "HTTPS", name: "zssh.owned-domain.dev", content: "1 alt.example.net alpn=\"h2\"" }],
+    [{ id: recordId, type: "NS", name: "zssh.owned-domain.dev", content: "ns1.example.net" }],
+    [{ id: recordId, type: "SVCB", name: "zssh.owned-domain.dev", content: "1 alt.example.net alpn=\"h2\"" }],
     [
-      { id: recordId, type: "A", name: "zssh.cheapgpt.shop", content: "198.244.191.182", ttl: 1, proxied: false },
-      { id: "11111111111111111111111111111111", type: "A", name: "zssh.cheapgpt.shop", content: "1.1.1.1", ttl: 1, proxied: false },
+      { id: recordId, type: "A", name: "zssh.owned-domain.dev", content: "198.244.191.182", ttl: 1, proxied: false },
+      { id: "11111111111111111111111111111111", type: "A", name: "zssh.owned-domain.dev", content: "1.1.1.1", ttl: 1, proxied: false },
     ],
   ]) {
     await assert.rejects(
@@ -464,18 +482,18 @@ test("refuses alternate routing records and multi-A RRsets", async () => {
 test("autodiscovered zone ID is reused for update writes", async () => {
   const calls = [];
   const listed = [
-    { id: recordId, type: "A", name: "zssh.cheapgpt.shop", content: "203.0.113.10", ttl: 300, proxied: true },
+    { id: recordId, type: "A", name: "zssh.owned-domain.dev", content: "203.0.113.10", ttl: 300, proxied: true },
   ];
   const result = await reconcileCloudflareDns(baseArgs(async (url, init) => {
     calls.push({ url: String(url), init });
     if (calls.length === 1) {
-      return response([{ id: zoneId, name: "cheapgpt.shop", status: "active" }]);
+      return response([{ id: zoneId, name: "owned-domain.dev", status: "active" }]);
     }
     if (calls.length === 2) return response(listed);
-    return response({ id: recordId, type: "A", name: "zssh.cheapgpt.shop", content: "198.244.191.182", ttl: 1, proxied: false });
+    return response({ id: recordId, type: "A", name: "zssh.owned-domain.dev", content: "198.244.191.182", ttl: 1, proxied: false });
   }, {
     zoneId: "",
-    zoneName: "cheapgpt.shop",
+    zoneName: "owned-domain.dev",
     apply: true,
     expectedCurrentIpv4: "203.0.113.10",
     expectedCurrentStateSha256: cloudflareDnsRecordStateSha256(listed[0]),

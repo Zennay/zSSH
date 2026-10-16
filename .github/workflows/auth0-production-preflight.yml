@@ -22,7 +22,7 @@ jobs:
     timeout-minutes: 5
     environment: openai-production
     env:
-      ZSSH_PLUGIN_MCP_URL: ${{ vars.ZSSH_PLUGIN_MCP_URL || 'https://zssh.cheapgpt.shop/mcp' }}
+      ZSSH_PLUGIN_MCP_URL: ${{ vars.ZSSH_PLUGIN_MCP_URL }}
       ZSSH_OAUTH_ISSUER: ${{ vars.ZSSH_OAUTH_ISSUER }}
       AUTH0_MANAGEMENT_BASE_URL: ${{ vars.AUTH0_MANAGEMENT_BASE_URL }}
     steps:

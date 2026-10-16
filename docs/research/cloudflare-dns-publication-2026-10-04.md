@@ -1,5 +1,7 @@
 # Cloudflare production DNS publication — 2026-10-04
 
+> **Retired configuration — 2026-10-16.** The original `cheapgpt.shop` domain and `zssh.cheapgpt.shop` hostname below are historical only: the operator has confirmed that domain is no longer owned. **Never issue Cloudflare tokens for it, publish DNS to it, or follow the old hostname-specific cutover steps.** The DNS workflow now requires protected environment variables `ZSSH_DNS_ZONE_NAME`, `ZSSH_DNS_PUBLIC_BASE_URL`, `ZSSH_DNS_TARGET_IPV4`, and `ZSSH_DNS_APPROVED_HOSTNAME` for a currently owned domain. These must be independently verified before any DNS attempt. No replacement domain has yet been supplied.
+
 ## Scope
 
 zSSH M5 is blocked on one concrete ingress prerequisite: the public production hostname must resolve directly to the VPS before the existing Caddy/public-gateway activation and external ingress proof can run. The selected origin is `https://zssh.cheapgpt.shop` and the expected direct IPv4 is `198.244.191.182`.
