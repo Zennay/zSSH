@@ -28,9 +28,9 @@ jobs:
     environment: openai-production
     env:
       CLOUDFLARE_ZONE_ID: ${{ vars.CLOUDFLARE_ZONE_ID }}
-      CLOUDFLARE_ZONE_NAME: cheapgpt.shop
-      ZSSH_PUBLIC_BASE_URL: https://zssh.cheapgpt.shop
-      ZSSH_PUBLIC_IPV4: 198.244.191.182
+      CLOUDFLARE_ZONE_NAME: ${{ vars.ZSSH_DNS_ZONE_NAME }}
+      ZSSH_PUBLIC_BASE_URL: ${{ vars.ZSSH_DNS_PUBLIC_BASE_URL }}
+      ZSSH_PUBLIC_IPV4: ${{ vars.ZSSH_DNS_TARGET_IPV4 }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -71,6 +71,33 @@ jobs:
         run: |
           set -Eeuo pipefail
           test "$ZSSH_DNS_CONFIRMATION" = "PUBLISH_ZSSH_PRODUCTION_DNS"
+      - name: Require explicitly approved owned production hostname
+        env:
+          ZSSH_DNS_APPROVED_HOSTNAME: ${{ vars.ZSSH_DNS_APPROVED_HOSTNAME }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          node --input-type=module <<'NODE'
+          const base = process.env.ZSSH_PUBLIC_BASE_URL || "";
+          const zone = (process.env.CLOUDFLARE_ZONE_NAME || "").toLowerCase().trim();
+          const approval = (process.env.ZSSH_DNS_APPROVED_HOSTNAME || "").toLowerCase().trim();
+          const ipv4 = (process.env.ZSSH_PUBLIC_IPV4 || "").trim();
+          if (!base || !zone || !approval || !ipv4) {
+            throw new Error("DNS hostname, zone, target IPv4 and explicit owner approval must all be configured in the protected environment");
+          }
+          const origin = new URL(base);
+          if (origin.protocol !== "https:" || origin.pathname !== "/" || origin.search || origin.hash || origin.username || origin.password) {
+            throw new Error("Approved DNS target must use a clean HTTPS origin");
+          }
+          const host = origin.hostname.toLowerCase();
+          if (host === "cheapgpt.shop" || host.endsWith(".cheapgpt.shop") || zone === "cheapgpt.shop") {
+            throw new Error("Retired cheapgpt.shop domain is not approved for zSSH publication");
+          }
+          if (host !== approval || (host !== zone && !host.endsWith("." + zone))) {
+            throw new Error("DNS hostname must exactly match the independently approved owned hostname and zone");
+          }
+          console.log("ZSSH_DNS_OWNERSHIP_APPROVAL_GREEN");
+          NODE
       - name: Verify Cloudflare API token is active
         env:
           EVIDENCE_PATH: ${{ runner.temp }}/zssh-cloudflare-token-verify.json
