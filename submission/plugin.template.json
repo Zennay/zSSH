@@ -34,7 +34,7 @@
         "privacyPolicyURL": "__ZSSH_PRIVACY_URL__",
         "termsOfServiceURL": "__ZSSH_TERMS_URL__",
         "defaultPrompt": [
-          "Show the uptime and resource usage of my paired Linux server.",
+          "Help me set up zSSH and connect my Linux server.",
           "Read the review sample file from my paired Linux target.",
           "Check whether my zSSH profile is paired to this Linux target."
         ],
