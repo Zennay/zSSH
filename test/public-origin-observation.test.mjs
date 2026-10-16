@@ -75,7 +75,7 @@ test("production readiness runs the public-origin observer without entering the 
   const observerBlock = workflow.match(/  public_origin:[\s\S]*?\n  audit:/)?.[0] || "";
   assert.match(observerBlock, /name: Observe public production origin/);
   assert.match(observerBlock, /needs: provenance/);
-  assert.match(observerBlock, /node scripts\/observe-public-origin-readiness\.mjs https:\/\/zssh\.cheapgpt\.shop\/mcp/);
+  assert.match(observerBlock, /node scripts\/observe-public-origin-readiness\.mjs "\$ZSSH_PUBLIC_OBSERVATION_URL"/);
   assert.match(observerBlock, /zssh-public-origin-observation-\$\{\{ github\.run_id \}\}/);
   assert.doesNotMatch(observerBlock, /environment:\s*openai-production/);
 });
@@ -89,7 +89,7 @@ test("scheduled public-origin watch is secretless, read-only, and bounded", () =
   assert.match(workflow, /workflow_dispatch:/);
   assert.match(workflow, /cron: "17 \*\/2 \* \* \*"/);
   assert.match(workflow, /permissions:\n  contents: read/);
-  assert.match(workflow, /node scripts\/observe-public-origin-readiness\.mjs https:\/\/zssh\.cheapgpt\.shop\/mcp/);
+  assert.match(workflow, /node scripts\/observe-public-origin-readiness\.mjs "\$ZSSH_PUBLIC_OBSERVATION_URL"/);
   assert.match(workflow, /retention-days: 7/);
   assert.doesNotMatch(workflow, /environment:\s*openai-production/);
   assert.doesNotMatch(workflow, /secrets\./);
