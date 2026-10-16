@@ -43,6 +43,32 @@ mcp = load_json(ROOT / "submission" / "mcp.template.json")
 mcp["mcpServers"]["zssh"]["url"] = "https://zssh.cheapgpt.shop/mcp"
 builder.validate_mcp_config(mcp, "https://zssh.cheapgpt.shop/mcp")
 
+missing_oauth = copy.deepcopy(mcp)
+del missing_oauth["mcpServers"]["zssh"]["extensions"]
+expect_failure(
+    lambda: builder.validate_mcp_config(missing_oauth, "https://zssh.cheapgpt.shop/mcp"),
+    "must declare OAuth authentication",
+)
+wrong_oauth = copy.deepcopy(mcp)
+wrong_oauth["mcpServers"]["zssh"]["extensions"]["com.openai"]["auth"]["type"] = "none"
+expect_failure(
+    lambda: builder.validate_mcp_config(wrong_oauth, "https://zssh.cheapgpt.shop/mcp"),
+    "must declare OAuth authentication",
+)
+missing_write_consent = copy.deepcopy(mcp)
+missing_write_consent["mcpServers"]["zssh"]["extensions"]["com.openai"]["auth"]["baseScopes"] = ["zssh:read"]
+expect_failure(
+    lambda: builder.validate_mcp_config(missing_write_consent, "https://zssh.cheapgpt.shop/mcp"),
+    "read and write consent scopes",
+)
+missing_onboarding = copy.deepcopy(plugin)
+del missing_onboarding["extensions"]["com.openai"]["onboardingSkill"]
+expect_failure(
+    lambda: builder.validate_plugin(missing_onboarding, listing),
+    "declare the packaged setup onboarding skill",
+)
+assert (ROOT / "submission" / "skills" / "setup" / "SKILL.md").is_file()
+
 expect_failure(
     lambda: builder.https_url(
         "https://zssh.cheapgpt.shop/mcp?tenant=stale",
