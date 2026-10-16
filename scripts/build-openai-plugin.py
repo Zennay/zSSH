@@ -164,7 +164,7 @@ def validate_plugin(plugin: dict, expected_listing_urls: dict[str, str] | None =
     if not setup_skill.is_file():
         fail("zSSH setup onboarding skill is missing from the submission source")
     setup_text = setup_skill.read_text(encoding="utf-8")
-    if not re.search(r"\\A---\\s*\\nname: setup\\s*\\ndescription: [^\\n]+\\n---\\s*\\n", setup_text):
+    if not re.search(r"\A---\s*\nname: setup\s*\ndescription: [^\n]+\n---\s*\n", setup_text):
         fail("zSSH setup onboarding skill requires valid name and description frontmatter")
     interface = ext.get("interface", {})
     required_lengths = {
