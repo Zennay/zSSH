@@ -183,7 +183,7 @@ export async function resolveCloudflareZoneId({
 
 export async function reconcileCloudflareDns({
   zoneId,
-  zoneName = "cheapgpt.shop",
+  zoneName,
   apiToken,
   publicBaseUrl,
   ipv4,
@@ -193,10 +193,15 @@ export async function reconcileCloudflareDns({
   apply = false,
   fetchImpl = fetch,
 } = {}) {
-  const token = String(apiToken || "").trim();
-  if (!token) fail("CLOUDFLARE_API_TOKEN is required");
   const origin = validatePublicBaseUrl(publicBaseUrl);
   const hostname = normalizeDnsName(origin.hostname);
+  const configuredZone = normalizeDnsName(zoneName);
+  if (hostname === "cheapgpt.shop" || hostname.endsWith(".cheapgpt.shop") || configuredZone === "cheapgpt.shop") {
+    fail("retired cheapgpt.shop production DNS target is forbidden");
+  }
+  if (!configuredZone) fail("CLOUDFLARE_ZONE_NAME must be configured explicitly");
+  const token = String(apiToken || "").trim();
+  if (!token) fail("CLOUDFLARE_API_TOKEN is required");
   const checkedIpv4 = validatePublicIpv4(ipv4);
   const zone = await resolveCloudflareZoneId({
     zoneId,
@@ -385,7 +390,7 @@ export async function reconcileCloudflareDns({
 export async function main({ env = process.env, stdout = process.stdout } = {}) {
   const result = await reconcileCloudflareDns({
     zoneId: env.CLOUDFLARE_ZONE_ID,
-    zoneName: env.CLOUDFLARE_ZONE_NAME || "cheapgpt.shop",
+    zoneName: env.CLOUDFLARE_ZONE_NAME,
     apiToken: env.CLOUDFLARE_API_TOKEN,
     publicBaseUrl: env.ZSSH_PUBLIC_BASE_URL,
     ipv4: env.ZSSH_PUBLIC_IPV4,
