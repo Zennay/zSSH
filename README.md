@@ -123,6 +123,8 @@ Revocation affects that client only. Existing static private credentials remain 
 
 ## ChatGPT integration status
 
+For exact setup steps for both the private revocable URL (ChatGPT auth set to **No authentication**) and the separate OAuth-protected public gateway, see [ChatGPT MCP setup](./docs/chatgpt-mcp-setup.md). That guide also explains current account-plan limits and the `npm ci` / missing-lockfile issue.
+
 OpenAI public review uses a separate fail-closed profile so the existing private operator workflow remains available. The public profile now includes a compact MCP Apps connection card for profile/pairing status; the operational tools continue to work without UI.
 
 ### Public plugin review profile
