@@ -23,6 +23,7 @@ function response(result, { status = 200, success = true, errors = [] } = {}) {
 function baseArgs(fetchImpl, overrides = {}) {
   return {
     zoneId,
+    zoneName: "owned-domain.dev",
     apiToken: "test-token-not-secret",
     publicBaseUrl: "https://zssh.owned-domain.dev",
     ipv4: "198.244.191.182",
@@ -39,6 +40,23 @@ test("validates scoped Cloudflare zone IDs and public IPv4 targets", () => {
   for (const value of ["127.0.0.1", "10.0.0.1", "192.168.1.4", "198.51.100.7", "::1"]) {
     assert.throws(() => validatePublicIpv4(value), /ZSSH_PUBLIC_IPV4/);
   }
+});
+
+test("retired hostname and missing configured zone fail closed before Cloudflare access", async () => {
+  let calls = 0;
+  const fetchImpl = async () => { calls += 1; throw new Error("Cloudflare must not be contacted"); };
+  await assert.rejects(
+    reconcileCloudflareDns(baseArgs(fetchImpl, {
+      zoneName: "cheapgpt.shop",
+      publicBaseUrl: "https://zssh.cheapgpt.shop",
+    })),
+    /retired cheapgpt\.shop/,
+  );
+  await assert.rejects(
+    reconcileCloudflareDns(baseArgs(fetchImpl, { zoneName: undefined })),
+    /CLOUDFLARE_ZONE_NAME must be configured/,
+  );
+  assert.equal(calls, 0);
 });
 
 test("discovers the exact active zone when CLOUDFLARE_ZONE_ID is omitted", async () => {
