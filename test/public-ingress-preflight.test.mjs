@@ -18,7 +18,7 @@ test("ingress preflight waits for explicit post-rollout dispatch", () => {
   assert.match(workflow, /persist-credentials: false/);
   assert.match(
     workflow,
-    /ZSSH_PLUGIN_MCP_URL: https:\/\/zssh\.cheapgpt\.shop\/mcp/,
+    /ZSSH_PLUGIN_MCP_URL: \$\{\{ vars\.ZSSH_PLUGIN_MCP_URL \}\}/,
   );
   assert.match(
     workflow,
