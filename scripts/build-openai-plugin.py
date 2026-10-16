@@ -143,6 +143,11 @@ def validate_mcp_config(mcp: dict, expected_url: str) -> None:
         fail("zSSH MCP server must use streamable-http")
     if server.get("url") != expected_url:
         fail("zSSH MCP server URL must match the validated public MCP URL")
+    auth = server.get("extensions", {}).get("com.openai", {}).get("auth", {})
+    if auth.get("type") != "oauth":
+        fail("zSSH public MCP server must declare OAuth authentication")
+    if auth.get("baseScopes") != ["zssh:read", "zssh:write"]:
+        fail("zSSH public OAuth must declare read and write consent scopes")
 
 
 def validate_plugin(plugin: dict, expected_listing_urls: dict[str, str] | None = None) -> None:
@@ -153,6 +158,14 @@ def validate_plugin(plugin: dict, expected_listing_urls: dict[str, str] | None =
         fail("plugin name must be lowercase kebab-case and at most 64 characters")
 
     ext = plugin.get("extensions", {}).get("com.openai", {})
+    if ext.get("onboardingSkill") != "./skills/setup/SKILL.md":
+        fail("zSSH plugin must declare the packaged setup onboarding skill")
+    setup_skill = SUBMISSION / "skills" / "setup" / "SKILL.md"
+    if not setup_skill.is_file():
+        fail("zSSH setup onboarding skill is missing from the submission source")
+    setup_text = setup_skill.read_text(encoding="utf-8")
+    if not re.search(r"\\A---\\s*\\nname: setup\\s*\\ndescription: [^\\n]+\\n---\\s*\\n", setup_text):
+        fail("zSSH setup onboarding skill requires valid name and description frontmatter")
     interface = ext.get("interface", {})
     required_lengths = {
         "displayName": 30,
@@ -315,6 +328,10 @@ def main() -> None:
     (out_dir / "plugin.json").write_text(json.dumps(plugin, indent=2) + "\n", encoding="utf-8")
     (out_dir / "mcp.json").write_text(json.dumps(mcp, indent=2) + "\n", encoding="utf-8")
     shutil.copy2(icon_source, assets_dir / ("icon" + icon_suffix))
+    onboarding_source = SUBMISSION / "skills" / "setup" / "SKILL.md"
+    onboarding_output = out_dir / "skills" / "setup" / "SKILL.md"
+    onboarding_output.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(onboarding_source, onboarding_output)
 
     zip_path = out_dir.parent / "zssh-openai-plugin.zip"
     if zip_path.exists():
