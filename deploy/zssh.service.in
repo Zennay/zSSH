@@ -13,7 +13,10 @@ RestartSec=5s
 TimeoutStopSec=15s
 NoNewPrivileges=false
 PrivateTmp=true
-RestrictSUIDSGID=true
+# Scoped sudo requires setuid on /usr/bin/sudo. This is safe only with
+# exact-command sudoers grants installed by deploy/install-scoped-sudo.sh.
+# RestrictSUIDSGID=true silently sets NoNewPrivs=1 in the service process.
+RestrictSUIDSGID=false
 LockPersonality=true
 UMask=0077
 
