@@ -195,7 +195,8 @@ concurrency:
 jobs:
   contract:
     name: Release gate contract
-    runs-on: ubuntu-latest
+    if: ((github.event_name != 'pull_request' && github.event_name != 'pull_request_target') || (github.event.pull_request.head.repo.full_name == github.repository && github.actor == 'Zennay'))
+    runs-on: [self-hosted, zssh, vps]
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -239,8 +240,8 @@ jobs:
 
   provenance:
     name: Canonical main provenance
-    if: github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
+    if: (github.event_name == 'workflow_dispatch') && ((github.event_name != 'pull_request' && github.event_name != 'pull_request_target') || (github.event.pull_request.head.repo.full_name == github.repository && github.actor == 'Zennay'))
+    runs-on: [self-hosted, zssh, vps]
     timeout-minutes: 5
     outputs:
       governance_verified: ${{ steps.governance-evidence.outputs.verified }}
@@ -277,9 +278,9 @@ jobs:
 
   production:
     name: Production submission probe
-    if: github.event_name == 'workflow_dispatch'
+    if: (github.event_name == 'workflow_dispatch') && ((github.event_name != 'pull_request' && github.event_name != 'pull_request_target') || (github.event.pull_request.head.repo.full_name == github.repository && github.actor == 'Zennay'))
     needs: [contract, provenance]
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, zssh, vps]
     timeout-minutes: 15
     environment: openai-production
     env:

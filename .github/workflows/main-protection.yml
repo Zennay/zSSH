@@ -20,8 +20,8 @@ permissions:
 jobs:
   provenance:
     name: Require canonical merged-PR provenance
-    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.merged == true
-    runs-on: ubuntu-latest
+    if: (github.event_name == 'workflow_dispatch' || github.event.pull_request.merged == true) && ((github.event_name != 'pull_request' && github.event_name != 'pull_request_target') || (github.event.pull_request.head.repo.full_name == github.repository && github.actor == 'Zennay'))
+    runs-on: [self-hosted, zssh, vps]
     timeout-minutes: 5
     steps:
       - name: Require canonical main ref
@@ -52,7 +52,8 @@ jobs:
   status:
     name: Check current main protection
     needs: provenance
-    runs-on: ubuntu-latest
+    if: ((github.event_name != 'pull_request' && github.event_name != 'pull_request_target') || (github.event.pull_request.head.repo.full_name == github.repository && github.actor == 'Zennay'))
+    runs-on: [self-hosted, zssh, vps]
     timeout-minutes: 5
     outputs:
       protected: ${{ steps.protection.outputs.protected }}
@@ -80,8 +81,8 @@ jobs:
     needs:
       - provenance
       - status
-    if: github.event_name == 'workflow_dispatch' || needs.status.outputs.protected != 'true'
-    runs-on: ubuntu-latest
+    if: (github.event_name == 'workflow_dispatch' || needs.status.outputs.protected != 'true') && ((github.event_name != 'pull_request' && github.event_name != 'pull_request_target') || (github.event.pull_request.head.repo.full_name == github.repository && github.actor == 'Zennay'))
+    runs-on: [self-hosted, zssh, vps]
     timeout-minutes: 5
     environment: repository-governance
     steps:
