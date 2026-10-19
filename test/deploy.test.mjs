@@ -28,7 +28,10 @@ test("user service applies restart and baseline sandbox controls", async () => {
   assert.match(text, /Restart=always/);
   assert.match(text, /NoNewPrivileges=false/);
   assert.match(text, /PrivateTmp=true/);
-  assert.match(text, /RestrictSUIDSGID=true/);
+  // RestrictSUIDSGID=true forces NoNewPrivs=1 at execution, breaking
+  // explicitly scoped sudo despite NoNewPrivileges=false above.
+  assert.match(text, /RestrictSUIDSGID=false/);
+  assert.doesNotMatch(text, /^RestrictSUIDSGID=true$/m);
   assert.match(text, /EnvironmentFile=%h\/\.config\/zssh\/gateway\.env/);
 });
 
