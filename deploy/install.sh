@@ -81,33 +81,60 @@ runtime="/run/user/$uid"
 [[ -S "$runtime/bus" ]] || die "systemd user bus is unavailable for $SERVICE_USER."
 
 printf 'zSSH: installing under unprivileged user %s\n' "$SERVICE_USER"
-runuser -u "$SERVICE_USER" -- env \
-  HOME="$home" \
-  XDG_RUNTIME_DIR="$runtime" \
-  DBUS_SESSION_BUS_ADDRESS="unix:path=$runtime/bus" \
-  FORCE_COLOR=0 \
-  ZSSH_REF="$INSTALL_REF" \
-  bash -c '
+if [[ -n "$ENROLL_CODE" ]]; then
+  # Public enrollment installs only the outbound target agent.
+  # Do not replace/start a private MCP gateway or collide on port 8788.
+  runuser -u "$SERVICE_USER" -- env HOME="$home" ZSSH_REF="$INSTALL_REF" bash -c '
     set -Eeuo pipefail
     umask 077
-    bootstrap="$(mktemp "${TMPDIR:-/tmp}/zssh-bootstrap.XXXXXXXX")"
-    trap '\''rm -f "$bootstrap"'\'' EXIT
-    curl --proto "=https" --tlsv1.2 -fsSL \
-      https://raw.githubusercontent.com/Zennay/zSSH/"$ZSSH_REF"/deploy/bootstrap-linux.sh \
-      -o "$bootstrap"
-    bash "$bootstrap"
+    source_root="$HOME/.local/src/zssh"
+    expected="https://github.com/Zennay/zSSH"
+    mkdir -p "$(dirname "$source_root")" "$HOME/zssh-workspace"
+    chmod 700 "$HOME/zssh-workspace"
+    if [[ -e "$source_root" && ! -d "$source_root/.git" ]]; then
+      echo "Refusing non-Git zSSH source directory" >&2
+      exit 2
+    fi
+    if [[ ! -d "$source_root/.git" ]]; then
+      git clone --no-checkout "$expected.git" "$source_root"
+    fi
+    origin="$(git -C "$source_root" remote get-url origin)"
+    [[ "${origin%.git}" == "$expected" ]] || { echo "Unexpected zSSH Git origin" >&2; exit 2; }
+    git -C "$source_root" fetch --depth=1 origin "$ZSSH_REF"
+    git -C "$source_root" checkout --force --detach FETCH_HEAD
+    [[ "$(git -C "$source_root" rev-parse HEAD)" == "$ZSSH_REF" ]] ||
+      { echo "Unexpected zSSH revision" >&2; exit 2; }
   '
-
-runuser -u "$SERVICE_USER" -- env \
-  HOME="$home" \
-  XDG_RUNTIME_DIR="$runtime" \
-  DBUS_SESSION_BUS_ADDRESS="unix:path=$runtime/bus" \
-  systemctl --user is-active --quiet zssh.service ||
-  die "zssh.service did not become active."
-curl --fail --silent --show-error http://127.0.0.1:8788/health ||
-  die "Local zSSH health check failed."
-
+else
+  runuser -u "$SERVICE_USER" -- env \
+    HOME="$home" \
+    XDG_RUNTIME_DIR="$runtime" \
+    DBUS_SESSION_BUS_ADDRESS="unix:path=$runtime/bus" \
+    FORCE_COLOR=0 \
+    ZSSH_REF="$INSTALL_REF" \
+    bash -c '
+      set -Eeuo pipefail
+      umask 077
+      bootstrap="$(mktemp "${TMPDIR:-/tmp}/zssh-bootstrap.XXXXXXXX")"
+      trap '\''rm -f "$bootstrap"'\'' EXIT
+      curl --proto "=https" --tlsv1.2 -fsSL \
+        https://raw.githubusercontent.com/Zennay/zSSH/"$ZSSH_REF"/deploy/bootstrap-linux.sh \
+        -o "$bootstrap"
+      bash "$bootstrap"
+    '
+  
+  runuser -u "$SERVICE_USER" -- env \
+    HOME="$home" \
+    XDG_RUNTIME_DIR="$runtime" \
+    DBUS_SESSION_BUS_ADDRESS="unix:path=$runtime/bus" \
+    systemctl --user is-active --quiet zssh.service ||
+    die "zssh.service did not become active."
+  curl --fail --silent --show-error http://127.0.0.1:8788/health ||
+    die "Local zSSH health check failed."
+fi
+ENROLLMENT_REQUESTED=0
 if [[ -n "$ENROLL_CODE" ]]; then
+  ENROLLMENT_REQUESTED=1
   # Supply the personal code only over stdin. Never write it to disk or place
   # it into the persistent agent environment, systemd unit, or service logs.
   printf '%s\n' "$ENROLL_CODE" | runuser -u "$SERVICE_USER" -- env \
@@ -135,7 +162,11 @@ if [[ -n "$ENROLL_CODE" ]]; then
   printf '%s\n' "ZSSH_PERSONAL_ENROLLMENT_PENDING target=$target_id: confirm the fingerprint inside the ChatGPT zSSH plugin."
 fi
 
-printf '\nZSSH_ONE_COMMAND_INSTALL_GREEN user=%s port=8788 scope=loopback\n' "$SERVICE_USER"
-printf '%s\n' \
-  "Installed and running. Public ChatGPT account/agent enrollment is NOT configured." \
-  "No SSH key, reusable token, public port, or third-party access was enabled."
+if [[ "$ENROLLMENT_REQUESTED" == 1 ]]; then
+  printf '\\nZSSH_ONE_COMMAND_INSTALL_GREEN user=%s mode=outbound-agent\\n' "$SERVICE_USER"
+  echo "Outbound agent installed; confirm the fingerprint in ChatGPT to authorize this VPS."
+else
+  printf '\\nZSSH_ONE_COMMAND_INSTALL_GREEN user=%s port=8788 scope=loopback\\n' "$SERVICE_USER"
+  echo "Private loopback-only zSSH installed; public enrollment not configured."
+fi
+echo "No SSH private key, reusable token or public port was exposed."
