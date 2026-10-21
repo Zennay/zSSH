@@ -4,6 +4,27 @@
 
 zSSH is a **standalone security-first remote operations project**. zCloud is its control-plane/dashboard integration, not its parent project.
 
+## Add a VPS with one command (public plugin)
+
+The intended public experience is: install the zSSH ChatGPT plugin → sign in once
+→ click **Generate install command** → paste the personal command into the Linux
+VPS terminal → compare and approve the printed SHA256 fingerprint in the plugin
+→ control the VPS through the persistent **outbound TLS agent**. End users do not
+need to publish an SSH port, configure Caddy/DNS or copy SSH credentials.
+
+The installer can coexist with a previous private zSSH gateway on the same
+machine: personal enrollment starts only the outbound agent, and refuses to
+overwrite a conflicting existing target identity. Enrollment codes expire
+after 15 minutes, are single-use and tied to the signed-in profile. The Linux
+host holds its own Ed25519 private key.
+
+**Production status:** this flow is implemented behind
+`ZSSH_ENROLLMENT_ENABLED=1`, which requires a public OAuth gateway, a verified
+HTTPS origin and an exact reviewed `ZSSH_INSTALLER_REF`. The public deployment
+and publication gates in [issue #159](https://github.com/Zennay/zSSH/issues/159)
+still apply; updating a GitHub repository or an existing private plugin does
+not automatically publish the new tools.
+
 ## Current milestone
 
 **M5 — public-plugin production submission.** The safe execution foundation, universal public MCP endpoint model, outbound target transport, public OAuth resource-server profile, local target pairing/revocation, and machine-validated submission package are implemented. The first live transition is now external production configuration: publish the reviewed DNS origin, then complete production OAuth/reviewer evidence and the final OpenAI portal/host validation gates.

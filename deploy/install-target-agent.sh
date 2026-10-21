@@ -106,6 +106,21 @@ validate_plain_env_value ZSSH_GATEWAY_URL "$GATEWAY_URL"
 validate_plain_env_value ZSSH_AGENT_PRIVATE_KEY_FILE "$PRIVATE_KEY_FILE"
 validate_plain_env_value ZSSH_PUBLIC_ALLOWED_ROOTS "$PUBLIC_ROOTS"
 
+# Reinstall must not silently reuse an earlier account/target connection.
+# A cloned VPS can have an old agent.env; fail closed until the owner resolves it.
+if [[ -n "${ZSSH_TARGET_ID:-}" && "$TARGET_ID" != "$ZSSH_TARGET_ID" ]]; then
+  echo "Existing zSSH agent is enrolled to another target; refusing to overwrite it." >&2
+  exit 2
+fi
+if [[ -n "${ZSSH_GATEWAY_URL:-}" && "$GATEWAY_URL" != "$ZSSH_GATEWAY_URL" ]]; then
+  echo "Existing zSSH agent uses another gateway; refusing to redirect it." >&2
+  exit 2
+fi
+if [[ -n "${ZSSH_AGENT_PRIVATE_KEY_FILE:-}" && "$PRIVATE_KEY_FILE" != "$ZSSH_AGENT_PRIVATE_KEY_FILE" ]]; then
+  echo "Existing zSSH agent uses another private-key file; refusing to switch identity." >&2
+  exit 2
+fi
+
 VALIDATION_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/zssh-agent-validate.XXXXXX")"
 trap 'rm -rf "$STAGE" "$VALIDATION_ROOT"' EXIT
 git -C "$SOURCE_ROOT" archive --format=tar "$REPO_SHA" pairing.mjs | tar -x -C "$VALIDATION_ROOT"
@@ -146,7 +161,9 @@ if [[ ! -d "$RELEASE" ]]; then
   git -C "$SOURCE_ROOT" archive --format=tar "$REPO_SHA" | tar -x -C "$STAGE"
   rm -rf "$STAGE/node_modules" "$STAGE/data"
   "$NPM_BIN" ci --prefix "$STAGE" --omit=dev --ignore-scripts --no-audit --no-fund
-  GIT_DIR="$SOURCE_ROOT/.git" GIT_WORK_TREE="$STAGE" "$NPM_BIN" test --prefix "$STAGE"
+  # Validate service JavaScript without invoking any QA/regression suites.
+  "$NODE_BIN" --check "$STAGE/server.mjs"
+  "$NODE_BIN" --check "$STAGE/agent.mjs"
   # Drop temporary data written by existing validation before immutable promotion.
   rm -rf -- "$STAGE/data"
   mv "$STAGE" "$RELEASE"
