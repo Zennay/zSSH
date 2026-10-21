@@ -21,7 +21,7 @@ if [[ -z "$NODE_BIN" || -z "$NPM_BIN" ]]; then
   echo "Node.js and npm are required" >&2
   exit 2
 fi
-NODE_MAJOR="$("$NODE_BIN" -p 'Number(process.versions.node.split(".")[0])')"
+NODE_MAJOR="$(FORCE_COLOR=0 "$NODE_BIN" -p 'Number(process.versions.node.split(".")[0])')"
 (( NODE_MAJOR >= 20 )) || { echo "Node.js >=20 required" >&2; exit 2; }
 
 REPO_SHA="$(git -C "$SOURCE_ROOT" rev-parse HEAD 2>/dev/null || true)"
@@ -146,7 +146,9 @@ if [[ ! -d "$RELEASE" ]]; then
   git -C "$SOURCE_ROOT" archive --format=tar "$REPO_SHA" | tar -x -C "$STAGE"
   rm -rf "$STAGE/node_modules" "$STAGE/data"
   "$NPM_BIN" ci --prefix "$STAGE" --omit=dev --ignore-scripts --no-audit --no-fund
-  "$NPM_BIN" test --prefix "$STAGE"
+  GIT_DIR="$SOURCE_ROOT/.git" GIT_WORK_TREE="$STAGE" "$NPM_BIN" test --prefix "$STAGE"
+  # Drop temporary data written by existing validation before immutable promotion.
+  rm -rf -- "$STAGE/data"
   mv "$STAGE" "$RELEASE"
 fi
 

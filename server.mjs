@@ -10,8 +10,10 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import { z } from "zod";
 import { bearerChallenge, oauthConfigFromEnv, protectedResourceMetadata, requireScopes, verifyOAuthAuthorizationHeader } from "./oauth.mjs";
 import { getPairingStatus, profileIdFromAuth, targetIdFromEnv } from "./pairing.mjs";
+import { EnrollmentStore } from "./enrollment-store.mjs";
+import { renderEnrollmentInstallCommand } from "./enrollment-command.mjs";
 import { TargetSessionRegistry, resolveAuthenticatedTarget } from "./target-routing.mjs";
-import { AGENT_ENDPOINTS, OutboundAgentBroker, createAgentRequestVerifier, readJsonBody } from "./agent-transport.mjs";
+import { AGENT_ENDPOINTS, OutboundAgentBroker, createAgentRequestVerifier, AgentReplayCache, verifySignedAgentRequest, readJsonBody } from "./agent-transport.mjs";
 import { AGENT_PAIRING_ENDPOINTS, executeAgentPairingControl } from "./agent-pairing-control.mjs";
 import { publicSiteResponse } from "./public-site.mjs";
 import { verifyClientToken } from "./auth-store.mjs";
@@ -28,6 +30,22 @@ const CAPABILITY_TOKEN = process.env.ZSSH_MCP_CAPABILITY_TOKEN || "";
 const CLIENT_TOKEN_AUTH_CONFIGURED = Boolean(String(process.env.ZSSH_CLIENT_TOKENS_FILE || "").trim());
 const TRUST_LOCAL_TUNNEL = process.env.ZSSH_TRUST_LOCAL_TUNNEL === "1";
 const PLUGIN_PROFILE = process.env.ZSSH_PLUGIN_PROFILE === "public" ? "public" : "private";
+const ENROLLMENT_ENABLED = PLUGIN_PROFILE === "public" && process.env.ZSSH_ENROLLMENT_ENABLED === "1";
+const ENROLLMENT_STORE = ENROLLMENT_ENABLED ? new EnrollmentStore() : null;
+const ENROLLMENT_CLAIM_RATE = new Map();
+function allowEnrollmentClaim(remoteAddress, now = Date.now()) {
+  const key = String(remoteAddress || "");
+  const windowStart = now - (now % 60000);
+  for (const [address, value] of ENROLLMENT_CLAIM_RATE) {
+    if (value.windowStart !== windowStart) ENROLLMENT_CLAIM_RATE.delete(address);
+  }
+  if (!ENROLLMENT_CLAIM_RATE.has(key) && ENROLLMENT_CLAIM_RATE.size >= 1024) return false;
+  const previous = ENROLLMENT_CLAIM_RATE.get(key);
+  const count = previous?.windowStart === windowStart ? previous.count + 1 : 1;
+  ENROLLMENT_CLAIM_RATE.set(key, { count, windowStart });
+  return count <= 10;
+}
+
 const PRIVATE_CLIENT_TOKEN_AUTH_CONFIGURED = PLUGIN_PROFILE !== "public" && CLIENT_TOKEN_AUTH_CONFIGURED;
 const OPENAI_APPS_CHALLENGE_TOKEN = process.env.OPENAI_APPS_CHALLENGE_TOKEN || "";
 const PUBLIC_AUTH_MODE = process.env.ZSSH_PUBLIC_AUTH_MODE === "legacy" ? "legacy" : "oauth";
@@ -46,7 +64,8 @@ const AGENT_BROKER = new OutboundAgentBroker({
   maxPending: Number(process.env.ZSSH_AGENT_MAX_PENDING || 16),
 });
 const AGENT_VERIFIER = createAgentRequestVerifier(process.env);
-const OUTBOUND_AGENT_MODE = Boolean(AGENT_VERIFIER);
+const OUTBOUND_AGENT_MODE = Boolean(AGENT_VERIFIER) || ENROLLMENT_ENABLED;
+const ENROLLMENT_AGENT_REPLAYS = ENROLLMENT_ENABLED ? new AgentReplayCache() : null;
 const AUDIT_LOG = path.resolve(process.env.ZSSH_AUDIT_LOG || "./data/audit.jsonl");
 const SAFE_PROGRAM_PATHS = Object.freeze({
   uptime: "/usr/bin/uptime",
@@ -565,6 +584,25 @@ function result(value, isError = false) {
 
 async function forwardPublicAgentTool(extra, tool, args = {}) {
   if (!OUTBOUND_AGENT_MODE) throw new Error("outbound agent mode is not configured");
+  if (ENROLLMENT_ENABLED) {
+    const owner = profileIdFromAuth(authInfoFromExtra(extra), OAUTH_CONFIG.resource);
+    const owned = await ENROLLMENT_STORE.list(owner);
+    if (owned.length !== 1) {
+      const reason = owned.length ? "multiple_targets_require_selection" : "not_paired";
+      const err = new Error(owned.length
+        ? "Select a single target before using commands (multi-target selection is not enabled)."
+        : "No server has completed enrollment for this account.");
+      err.code = reason;
+      throw err;
+    }
+    const active = TARGET_SESSIONS.resolve(owned[0].target_id);
+    if (!active) {
+      const err = new Error("The enrolled Linux agent is offline.");
+      err.code = "target_offline";
+      throw err;
+    }
+    return await active.send({ tool, args });
+  }
   const route = await resolveAuthenticatedTarget(authInfoFromExtra(extra), {
     resource: OAUTH_CONFIG?.resource || "",
     sessions: TARGET_SESSIONS,
@@ -650,6 +688,17 @@ async function publicToolAuthorizationError(extra, scope, { requirePairing = tru
   const oauthError = oauthToolError(extra, scope);
   if (oauthError) return oauthError;
   if (PLUGIN_PROFILE !== "public" || PUBLIC_AUTH_MODE !== "oauth" || !PAIRING_REQUIRED || !requirePairing) return null;
+  if (ENROLLMENT_ENABLED) {
+    const owner = profileIdFromAuth(authInfoFromExtra(extra), OAUTH_CONFIG.resource);
+    const targets = await ENROLLMENT_STORE.list(owner);
+    if (targets.length === 1) return null;
+    return {
+      content: [{ type: "text", text: targets.length
+        ? "More than one enrolled VPS; target selection is required before commands can run."
+        : "No VPS paired to this account. Call get_server_install_command and run the resulting personalized command." }],
+      isError: true,
+    };
+  }
 
   const pairing = await getPairingStatus(authInfoFromExtra(extra), {
     resource: OAUTH_CONFIG?.resource || "",
@@ -866,6 +915,108 @@ function createMcpServer() {
       }
     );
 
+    // The new enrollment flow is strictly opt-in until the public gateway,
+    // host claim transport, and reviewer tool-surface approval are ready.
+    // It never runs in the private legacy operator profile.
+    if (ENROLLMENT_ENABLED) {
+      server.registerTool(
+        "get_server_install_command",
+        {
+          title: "Get my one-command VPS installer",
+          description: "Generate a short-lived one-time Linux installation command tied to the authenticated zSSH profile. The command includes a personal enrollment code; do not share it.",
+          inputSchema: {},
+          annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+          ...publicSecurity(OAUTH_CONFIG?.writeScope || "zssh:write"),
+        },
+        async (_args, extra) => {
+          const authError = oauthToolError(extra, OAUTH_CONFIG?.writeScope || "zssh:write");
+          if (authError) return authError;
+          try {
+            const owner = profileIdFromAuth(authInfoFromExtra(extra), OAUTH_CONFIG.resource);
+            const issued = await ENROLLMENT_STORE.issue(owner);
+            const installCommand = renderEnrollmentInstallCommand({
+              code: issued.enrollment_code,
+              gatewayUrl: OAUTH_CONFIG.resource,
+              installerRef: process.env.ZSSH_INSTALLER_REF,
+            });
+            const value = { install_command: installCommand, expires_at: issued.expires_at };
+            return { content: [{ type: "text", text: JSON.stringify(value) }], structuredContent: value, isError: false };
+          } catch (err) {
+            return result({ ok: false, error: String(err?.message || err) }, true);
+          }
+        }
+      );
+
+      server.registerTool(
+        "get_server_enrollment_status",
+        {
+          title: "Check new server enrollment",
+          description: "List pending server fingerprints and connected server identities for the authenticated zSSH account.",
+          inputSchema: {},
+          annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+          ...publicSecurity(OAUTH_CONFIG?.readScope || "zssh:read"),
+        },
+        async (_args, extra) => {
+          const authError = oauthToolError(extra, OAUTH_CONFIG?.readScope || "zssh:read");
+          if (authError) return authError;
+          try {
+            const owner = profileIdFromAuth(authInfoFromExtra(extra), OAUTH_CONFIG.resource);
+            const value = { pending: await ENROLLMENT_STORE.pending(owner), targets: await ENROLLMENT_STORE.list(owner) };
+            return { content: [{ type: "text", text: JSON.stringify(value) }], structuredContent: value, isError: false };
+          } catch (err) {
+            return result({ ok: false, error: String(err?.message || err) }, true);
+          }
+        }
+      );
+
+      server.registerTool(
+        "approve_server_enrollment",
+        {
+          title: "Approve server identity",
+          description: "After the one-command setup, confirm the exact server fingerprint shown on the VPS to finish pairing that server with this account.",
+          inputSchema: {
+            target_id: z.string().min(11).max(67),
+            fingerprint: z.string().startsWith("SHA256:").max(55),
+          },
+          annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
+          ...publicSecurity(OAUTH_CONFIG?.writeScope || "zssh:write"),
+        },
+        async ({ target_id, fingerprint }, extra) => {
+          const authError = oauthToolError(extra, OAUTH_CONFIG?.writeScope || "zssh:write");
+          if (authError) return authError;
+          try {
+            const owner = profileIdFromAuth(authInfoFromExtra(extra), OAUTH_CONFIG.resource);
+            const value = await ENROLLMENT_STORE.approve({ profileId: owner, targetId: target_id, fingerprint });
+            return { content: [{ type: "text", text: JSON.stringify(value) }], structuredContent: value, isError: false };
+          } catch (err) {
+            return result({ ok: false, error: String(err?.message || err) }, true);
+          }
+        }
+      );
+      server.registerTool(
+        "revoke_enrolled_server",
+        {
+          title: "Disconnect my enrolled server",
+          description: "Immediately revoke the account's permission to use one previously enrolled VPS and disconnect its active agent session.",
+          inputSchema: { target_id: z.string().min(11).max(67) },
+          annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
+          ...publicSecurity(OAUTH_CONFIG?.writeScope || "zssh:write"),
+        },
+        async ({ target_id }, extra) => {
+          const authError = oauthToolError(extra, OAUTH_CONFIG?.writeScope || "zssh:write");
+          if (authError) return authError;
+          try {
+            const owner = profileIdFromAuth(authInfoFromExtra(extra), OAUTH_CONFIG.resource);
+            const value = await ENROLLMENT_STORE.revoke(owner, target_id);
+            if (value.revoked) TARGET_SESSIONS.unregister(target_id);
+            return { content: [{ type: "text", text: JSON.stringify(value) }], structuredContent: value, isError: false };
+          } catch (err) {
+            return result({ ok: false, error: String(err?.message || err) }, true);
+          }
+        }
+      );
+    }
+
     server.registerTool(
       "get_pairing_status",
       {
@@ -890,11 +1041,24 @@ function createMcpServer() {
         const authError = await publicToolAuthorizationError(extra, OAUTH_CONFIG?.readScope || "zssh:read", { requirePairing: false });
         if (authError) return authError;
         try {
-          const pairing = await getPairingStatus(authInfoFromExtra(extra), {
-            resource: OAUTH_CONFIG?.resource || "",
-            createRequest: true,
-          });
-          const value = publicPairingStatus(pairing);
+          let value;
+          if (ENROLLMENT_ENABLED) {
+            const owner = profileIdFromAuth(authInfoFromExtra(extra), OAUTH_CONFIG.resource);
+            const targets = await ENROLLMENT_STORE.list(owner);
+            const pending = await ENROLLMENT_STORE.pending(owner);
+            value = {
+              paired: targets.length === 1,
+              pending: pending.length > 0,
+              target_label: TARGET_LABEL,
+              request_id: null,
+            };
+          } else {
+            const pairing = await getPairingStatus(authInfoFromExtra(extra), {
+              resource: OAUTH_CONFIG?.resource || "",
+              createRequest: true,
+            });
+            value = publicPairingStatus(pairing);
+          }
           return {
             content: [{ type: "text", text: JSON.stringify(value) }],
             structuredContent: value,
@@ -1176,13 +1340,20 @@ export function start() {
   if (typeof process.getuid === "function" && process.getuid() === 0 && process.env.ZSSH_ALLOW_ROOT !== "1") {
     throw new Error("zSSH refuses to run as root; use a dedicated unprivileged service account");
   }
+  if (ENROLLMENT_ENABLED && (
+    PUBLIC_AUTH_MODE !== "oauth" || !OAUTH_CONFIG ||
+    AGENT_VERIFIER ||
+    !/^[a-f0-9]{40}$/.test(String(process.env.ZSSH_INSTALLER_REF || ""))
+  )) {
+    throw new Error("personal enrollment requires OAuth and a pinned 40-character ZSSH_INSTALLER_REF");
+  }
   if (PLUGIN_PROFILE === "public" && EXEC_MODE === "full") {
     throw new Error("public plugin profile refuses ZSSH_EXEC_MODE=full; raw shell must stay disabled");
   }
   if (OUTBOUND_AGENT_MODE && PLUGIN_PROFILE !== "public") {
     throw new Error("outbound agent gateway mode is only supported by the public plugin profile");
   }
-  if (OUTBOUND_AGENT_MODE && process.env.NODE_ENV === "production") {
+  if (AGENT_VERIFIER && process.env.NODE_ENV === "production") {
     const targetId = targetIdFromEnv(process.env);
     if (targetId === "local") {
       throw new Error("production outbound agent mode requires an opaque ZSSH_TARGET_ID, not local");
@@ -1213,8 +1384,35 @@ export function start() {
     if (!req.url) return res.writeHead(400).end("Missing URL");
     const url = new URL(req.url, "http://" + (req.headers.host || "localhost"));
 
+    // A 256-bit one-use install code authorizes just the signed agent claim.
+    // It never grants tool execution or skips owner-side fingerprint approval.
+    if (ENROLLMENT_ENABLED && url.pathname === "/enrollment/v1/claim") {
+      res.setHeader("cache-control", "no-store");
+      res.setHeader("content-type", "application/json; charset=utf-8");
+      if (req.method !== "POST") {
+        return res.writeHead(405).end(JSON.stringify({ error: "method_not_allowed" }));
+      }
+      if (!allowEnrollmentClaim(req.socket?.remoteAddress)) {
+        res.setHeader("retry-after", "60");
+        return res.writeHead(429).end(JSON.stringify({ error: "rate_limited" }));
+      }
+      let input;
+      try {
+        input = (await readJsonBody(req, { maxBytes: 4096 })).value;
+      } catch {
+        return res.writeHead(400).end(JSON.stringify({ error: "invalid_request" }));
+      }
+      try {
+        const claim = await ENROLLMENT_STORE.claim(input);
+        return res.writeHead(202).end(JSON.stringify(claim));
+      } catch {
+        // Do not reveal whether a code existed, expired, or was already redeemed.
+        return res.writeHead(403).end(JSON.stringify({ error: "enrollment_rejected" }));
+      }
+    }
+
     if (AGENT_ENDPOINTS.includes(url.pathname)) {
-      if (!AGENT_VERIFIER) return res.writeHead(404).end("Not Found");
+      if (!OUTBOUND_AGENT_MODE) return res.writeHead(404).end("Not Found");
       if (req.method !== "POST") return res.writeHead(405).end("Method Not Allowed");
 
       let body;
@@ -1227,12 +1425,31 @@ export function start() {
 
       let verified;
       try {
-        verified = AGENT_VERIFIER.verify({
-          method: req.method,
-          pathname: url.pathname,
-          headers: req.headers,
-          body: body.raw,
-        });
+        if (ENROLLMENT_ENABLED) {
+          const targetId = String(req.headers["x-zssh-agent-target"] || "");
+          // Revoked/unapproved hosts never reach broker sessions, even if they
+          // retain a valid private key or a previous signed request.
+          const trusted = await ENROLLMENT_STORE.trustedTarget(targetId);
+          if (!trusted) throw new Error("target not approved");
+          verified = verifySignedAgentRequest({
+            method: req.method,
+            requestPath: url.pathname,
+            targetId,
+            timestamp: req.headers["x-zssh-agent-timestamp"],
+            nonce: req.headers["x-zssh-agent-nonce"],
+            signature: req.headers["x-zssh-agent-signature"],
+            body: body.raw,
+            trustedKeys: new Map([[targetId, crypto.createPublicKey(trusted.public_key_pem)]]),
+            replayCache: ENROLLMENT_AGENT_REPLAYS,
+          });
+        } else {
+          verified = AGENT_VERIFIER.verify({
+            method: req.method,
+            pathname: url.pathname,
+            headers: req.headers,
+            body: body.raw,
+          });
+        }
       } catch {
         return res.writeHead(401, { "content-type": "application/json", "cache-control": "no-store" })
           .end(JSON.stringify({ error: "unauthorized" }));

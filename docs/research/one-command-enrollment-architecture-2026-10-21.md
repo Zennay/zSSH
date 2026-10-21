@@ -25,9 +25,11 @@ zssh-enrollment-v1
 
 The host must use Ed25519, submit the public SPKI PEM, and never send the private key. Code possession alone is not a connected or approved target.
 
-## Not connected yet
+## Staged integration (2026-10-21)
 
-This registry is intentionally **not** exposed as an unauthenticated public route. The remaining work is an OAuth-scoped plugin issuance/approval tool, a bounded server claim HTTP handler with its own rate limit, a dynamic trusted-target verifier, per-profile routing (the current public gateway routes one configured target), and the non-root outbound-agent one-command enrollment installer. A gateway must confirm DNS, TLS, OAuth provider, and publisher review before public use (issue #159). The module alone is not a live login mechanism.
+The OAuth-scoped plugin tools are now implemented behind explicit `ZSSH_ENROLLMENT_ENABLED=1`: `get_server_install_command` generates the complete account-specific single-command installer (personal code included); `get_server_enrollment_status` lists pending/approved targets; `approve_server_enrollment` confirms the signed Ed25519 fingerprint; `revoke_enrolled_server` removes live authority. The installer accepts `--enroll`, `--gateway`, and a pinned `--ref`, generates its own private identity locally, POSTs a bounded signed claim to `/enrollment/v1/claim`, and provisions an outbound agent. Dynamic signed agent verification, per-profile single-target routing, and revocation are implemented under the same feature flag. The private existing gateway is unchanged.
+
+**Not live yet:** Public DNS, TLS origin, production OAuth, host/portal attestations, the production enrollment gateway deployment profile, durable multi-instance token/route storage, and multi-target selection are not completed. The OAuth+enrollment flag also requires `ZSSH_INSTALLER_REF` set to a full reviewed Git commit and forbids mixing new dynamic enrollment with a static agent trust configuration. A gateway must complete issue #159 before public use. The module and green local health on a VPS are not proof of a live ChatGPT connection.
 
 **Do not** auto-approve claims, place permanent credentials in CLI arguments or logs, hand private keys to a gateway, expose the private loopback gateway, or conflate an active health endpoint with a ChatGPT connection.
 

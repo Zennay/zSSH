@@ -148,7 +148,32 @@ export async function runAgentCli({
     for (const event of ["SIGINT", "SIGTERM"]) {
       process.once(event, () => controller.abort());
     }
-    await runAgent({ env, fetchImpl, signal: controller.signal });
+    // Newly enrolled agents can be running before the owner confirms the
+    // target fingerprint in ChatGPT. Keep the systemd service alive and retry
+    // the outbound connection until the public gateway approves the key.
+    while (!controller.signal.aborted) {
+      try {
+        await runAgent({ env, fetchImpl, signal: controller.signal });
+      } catch (err) {
+        const reason = String(err?.message || err);
+        const transient = reason.includes("HTTP 401") ||
+          reason.includes("HTTP 409") ||
+          reason.includes("HTTP 429") ||
+          reason.includes("fetch failed");
+        if (!transient) throw err;
+        if (!controller.signal.aborted) {
+          console.error("zSSH agent: gateway unavailable or target approval pending; retrying");
+        }
+      }
+      if (controller.signal.aborted) break;
+      await new Promise(resolve => {
+        const timer = setTimeout(resolve, 10000);
+        controller.signal.addEventListener("abort", () => {
+          clearTimeout(timer);
+          resolve();
+        }, { once: true });
+      });
+    }
     return null;
   }
 
