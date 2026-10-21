@@ -7,11 +7,21 @@ function splitScopes(value) {
   return String(value || "").split(/[\s,]+/).map(v => v.trim()).filter(Boolean);
 }
 
-function ensureAbsoluteUrl(value, name) {
+function ensureAbsoluteUrl(value, name, { origin = false } = {}) {
   try {
-    return new URL(value).toString().replace(/\/$/, "");
+    const url = new URL(value);
+    if (url.protocol !== "https:" || url.username || url.password || url.hash) {
+      throw new Error("unsafe OAuth URL");
+    }
+    // OIDC/OAuth issuer identifiers are exact strings: Auth0 commonly includes
+    // the trailing slash in iss. Never strip or normalize it for JWT validation.
+    if (origin) {
+      if (url.pathname !== "/" || url.search) throw new Error("not an OAuth origin");
+      return url.origin;
+    }
+    return url.toString();
   } catch {
-    throw new Error(name + " must be an absolute URL");
+    throw new Error(name + " must be a valid secure HTTPS URL");
   }
 }
 
@@ -25,7 +35,7 @@ export function oauthConfigFromEnv(env = process.env) {
 
   return Object.freeze({
     issuer: ensureAbsoluteUrl(issuer, "ZSSH_OAUTH_ISSUER"),
-    resource: ensureAbsoluteUrl(resource, "ZSSH_PUBLIC_BASE_URL"),
+    resource: ensureAbsoluteUrl(resource, "ZSSH_PUBLIC_BASE_URL", { origin: true }),
     jwksUri: ensureAbsoluteUrl(jwksUri, "ZSSH_OAUTH_JWKS_URI"),
     scopes: [...new Set(scopes)],
     readScope: String(env.ZSSH_OAUTH_READ_SCOPE || "zssh:read").trim(),
