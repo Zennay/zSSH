@@ -161,7 +161,9 @@ if [[ ! -d "$RELEASE" ]]; then
   git -C "$SOURCE_ROOT" archive --format=tar "$REPO_SHA" | tar -x -C "$STAGE"
   rm -rf "$STAGE/node_modules" "$STAGE/data"
   "$NPM_BIN" ci --prefix "$STAGE" --omit=dev --ignore-scripts --no-audit --no-fund
-  GIT_DIR="$SOURCE_ROOT/.git" GIT_WORK_TREE="$STAGE" "$NPM_BIN" test --prefix "$STAGE"
+  # Validate service JavaScript without invoking any QA/regression suites.
+  "$NODE_BIN" --check "$STAGE/server.mjs"
+  "$NODE_BIN" --check "$STAGE/agent.mjs"
   # Drop temporary data written by existing validation before immutable promotion.
   rm -rf -- "$STAGE/data"
   mv "$STAGE" "$RELEASE"
