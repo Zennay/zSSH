@@ -71,6 +71,9 @@ if [[ ! -d "$RELEASE" ]]; then
   # reviewed source checkout. This keeps .git out of the immutable release
   # while allowing provenance-sensitive installer tests to validate the stage.
   GIT_DIR="$SOURCE_ROOT/.git" GIT_WORK_TREE="$STAGE" "$NPM_BIN" test --prefix "$STAGE"
+  # Tests may create runtime state under data/. It must never enter the
+  # immutable release, whose provenance must match the exact tracked tree.
+  rm -rf -- "$STAGE/data"
   mv "$STAGE" "$RELEASE"
 fi
 
