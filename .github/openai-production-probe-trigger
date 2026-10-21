@@ -1,3 +1,0 @@
-Production probe trigger.
-Requested against canonical target-agent deployment hardening d346051d64953dcf260cfeb78214249026e17dc1 on 2026-10-04.
-Presence evidence is secret-safe; production probe must prove outbound-agent transport, OAuth 2.1/PKCE, same-origin listing URLs, and the reviewed public tool fingerprint.
