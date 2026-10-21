@@ -120,6 +120,8 @@
         return;
       }
       if (typeof value.install_command === "string") {
+        enrollEl.hidden = false;
+        statusEl.textContent = "Install your server";
         commandEl.value = value.install_command;
         expiryEl.textContent = "Expires " + new Date(value.expires_at).toLocaleTimeString();
         panelEl.hidden = false;
@@ -131,6 +133,7 @@
         enrollEl.hidden = false;
         statusEl.textContent = value.paired ? "Connected" : value.pending ? "Approval needed" : "Ready to install";
         noteEl.textContent = value.paired ? "Your VPS is enrolled." : "Generate your personal install command below.";
+        requestRowEl.hidden = true;
         return;
       }
 
