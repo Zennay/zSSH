@@ -1034,6 +1034,7 @@ function createMcpServer() {
           pending: z.boolean(),
           target_label: z.string().min(1),
           request_id: z.string().nullable().optional(),
+          enrollment_enabled: z.boolean().optional(),
         },
         annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
         ...publicSecurity(OAUTH_CONFIG?.readScope || "zssh:read", {
