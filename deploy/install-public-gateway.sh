@@ -180,6 +180,8 @@ if [[ ! -d "$RELEASE" ]]; then
   git -C "$SOURCE_ROOT" archive --format=tar "$REPO_SHA" | tar -x -C "$STAGE"
   "$NPM_BIN" ci --prefix "$STAGE" --omit=dev --ignore-scripts --no-audit --no-fund
   "$NPM_BIN" test --prefix "$STAGE"
+  # Keep test-generated runtime state out of the immutable public release.
+  rm -rf -- "$STAGE/data"
   mv "$STAGE" "$RELEASE"
 fi
 
