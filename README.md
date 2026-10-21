@@ -324,6 +324,18 @@ Request header: x-zssh-key: <ZSSH_API_KEY>
 Existing bearer authentication remains available for Claude Code and other
 clients that can set an `Authorization: Bearer ...` header.
 
+## One-command Ubuntu/Debian VPS install (private gateway)
+
+Run this **single command on the VPS** (not on your Windows PowerShell prompt):
+
+```bash
+curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/Zennay/zSSH/main/deploy/install.sh | sudo bash
+```
+
+The installer provisions Node.js 20+, Git, the dedicated non-root `zssh` account, a persistent systemd user service, the immutable-release zSSH private gateway, and checks `http://127.0.0.1:8788/health`. It can be rerun; it preserves the existing gateway credentials. Keep port 8788 on loopback. To pin a specific release, download the installer locally and run it with `ZSSH_REF=<commit-sha>`.
+
+**Important:** this command installs the self-hosted/private gateway only; it cannot log an arbitrary VPS into a ChatGPT account. The intended public-plugin product experience is: install the zSSH plugin once, authenticate as the owner, issue short-lived target enrollment in the plugin, run **one** setup command on each VPS, and approve the host fingerprint in the plugin. The live OAuth-bound enrollment broker and public HTTPS gateway must exist before that final step can work. Do not treat the private gateway's green health response as proof of a ChatGPT connection. See [#382](https://github.com/Zennay/zSSH/issues/382) and the production [#159](https://github.com/Zennay/zSSH/issues/159).
+
 ## Generic Linux installation
 
 zSSH can also be bootstrapped on a generic Linux target without the legacy zCloud/VPS workspace assumption. Run as a dedicated unprivileged user with Node.js 20+, npm, Git, user-level systemd, and curl:
