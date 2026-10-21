@@ -324,6 +324,18 @@ Request header: x-zssh-key: <ZSSH_API_KEY>
 Existing bearer authentication remains available for Claude Code and other
 clients that can set an `Authorization: Bearer ...` header.
 
+## Personalized command from the ChatGPT zSSH plugin (staged)
+
+The **plugin**, not the VPS user, creates the personal code. After OAuth sign-in, `get_server_install_command` issues a 256-bit, single-use, 15-minute `enr_...` code bound to the authenticated owner. The result includes a complete shell command with that code already inserted:
+
+```bash
+curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/Zennay/zSSH/<PINNED_40_CHAR_SHA>/deploy/install.sh | sudo bash -s -- --enroll enr_<PERSONAL_ONE_TIME_CODE> --gateway https://zssh.zennay.nl --ref <PINNED_40_CHAR_SHA>
+```
+
+The installer installs prerequisites as needed, provisions an unprivileged service, generates a **host-local** Ed25519 identity, signs the claim and sends it to the configured gateway over HTTPS. It then prepares the outbound agent, without opening an inbound port or requesting SSH credentials. The account can inspect the pending fingerprint through `get_server_enrollment_status`, approve it with `approve_server_enrollment`, and revoke it with `revoke_enrolled_server`. No code needs to be entered into ChatGPT after installation.
+
+**Deployment gate:** This enrollment API and four new plugin tools are disabled by default. They require the public OAuth resource-server profile, `ZSSH_ENROLLMENT_ENABLED=1`, and a full `ZSSH_INSTALLER_REF` pin on a separately configured gateway; the production DNS/OAuth/portal gates of issue [#159](https://github.com/Zennay/zSSH/issues/159) are not yet complete. Never copy the example placeholders as though they were a real personal credential. The pasted enrollment code may appear in the local shell history and process arguments; it is single-use and expires, unlike a reusable API key.
+
 ## One-command Ubuntu/Debian VPS install (private gateway)
 
 Run this **single command on the VPS** (not on your Windows PowerShell prompt):
