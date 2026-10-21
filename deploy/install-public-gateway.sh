@@ -34,9 +34,28 @@ fi
 : "${ZSSH_PUBLIC_BASE_URL:?Set ZSSH_PUBLIC_BASE_URL to the canonical public HTTPS origin}"
 : "${ZSSH_OAUTH_ISSUER:?Set ZSSH_OAUTH_ISSUER to the production OAuth issuer}"
 : "${ZSSH_OAUTH_JWKS_URI:?Set ZSSH_OAUTH_JWKS_URI to the production JWKS URL}"
-: "${ZSSH_TARGET_ID:?Set ZSSH_TARGET_ID to the reviewer target zt_ identifier}"
-: "${ZSSH_AGENT_PUBLIC_KEYS_FILE:?Set ZSSH_AGENT_PUBLIC_KEYS_FILE to the reviewer public trust JSON}"
 : "${ZSSH_PUBLIC_ALLOWED_ROOTS:?Set ZSSH_PUBLIC_ALLOWED_ROOTS to explicit reviewer-safe roots}"
+
+# A public gateway has two strictly separate operating modes:
+#  - legacy static reviewer-target key
+#  - OAuth-bound one-command enrollment with dynamic Ed25519 claims
+# Never combine them: the server explicitly rejects simultaneous trust modes.
+ENROLLMENT_MODE="${ZSSH_ENROLLMENT_ENABLED:-0}"
+[[ "$ENROLLMENT_MODE" == 0 || "$ENROLLMENT_MODE" == 1 ]] || {
+  echo "ZSSH_ENROLLMENT_ENABLED must be 0 or 1" >&2; exit 2;
+}
+if [[ "$ENROLLMENT_MODE" == 1 ]]; then
+  : "${ZSSH_INSTALLER_REF:?Set ZSSH_INSTALLER_REF to the reviewed immutable Git commit}"
+  [[ "$ZSSH_INSTALLER_REF" =~ ^[a-f0-9]{40}$ ]] || {
+    echo "ZSSH_INSTALLER_REF must be a full 40-character Git commit" >&2; exit 2;
+  }
+  [[ -z "${ZSSH_TARGET_ID:-}" && -z "${ZSSH_AGENT_PUBLIC_KEYS_FILE:-}" ]] || {
+    echo "Dynamic enrollment must not reuse static ZSSH_TARGET_ID or ZSSH_AGENT_PUBLIC_KEYS_FILE" >&2; exit 2;
+  }
+else
+  : "${ZSSH_TARGET_ID:?Set ZSSH_TARGET_ID to the reviewer target zt_ identifier}"
+  : "${ZSSH_AGENT_PUBLIC_KEYS_FILE:?Set ZSSH_AGENT_PUBLIC_KEYS_FILE to the reviewer public trust JSON}"
+fi
 
 PORT_VALUE="${ZSSH_PUBLIC_GATEWAY_PORT:-8789}"
 RATE_LIMIT_VALUE="${ZSSH_PUBLIC_RATE_LIMIT_PER_MINUTE:-120}"
@@ -55,7 +74,7 @@ validate_plain_env_value() {
   esac
 }
 
-for pair in   "ZSSH_PUBLIC_BASE_URL=$ZSSH_PUBLIC_BASE_URL"   "ZSSH_OAUTH_ISSUER=$ZSSH_OAUTH_ISSUER"   "ZSSH_OAUTH_JWKS_URI=$ZSSH_OAUTH_JWKS_URI"   "ZSSH_TARGET_ID=$ZSSH_TARGET_ID"   "ZSSH_AGENT_PUBLIC_KEYS_FILE=$ZSSH_AGENT_PUBLIC_KEYS_FILE"   "ZSSH_PUBLIC_ALLOWED_ROOTS=$ZSSH_PUBLIC_ALLOWED_ROOTS"; do
+for pair in   "ZSSH_PUBLIC_BASE_URL=$ZSSH_PUBLIC_BASE_URL"   "ZSSH_OAUTH_ISSUER=$ZSSH_OAUTH_ISSUER"   "ZSSH_OAUTH_JWKS_URI=$ZSSH_OAUTH_JWKS_URI"   "ZSSH_TARGET_ID=${ZSSH_TARGET_ID:-static}"   "ZSSH_AGENT_PUBLIC_KEYS_FILE=${ZSSH_AGENT_PUBLIC_KEYS_FILE:-dynamic}"   "ZSSH_PUBLIC_ALLOWED_ROOTS=$ZSSH_PUBLIC_ALLOWED_ROOTS"; do
   validate_plain_env_value "${pair%%=*}" "${pair#*=}"
 done
 if [[ -n "$CHALLENGE_TOKEN" ]]; then
@@ -79,13 +98,13 @@ VALIDATION_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/zssh-public-validate.XXXXXX")"
 trap 'rm -rf "$VALIDATION_ROOT"' EXIT
 git -C "$SOURCE_ROOT" archive --format=tar "$REPO_SHA" pairing.mjs agent-transport.mjs target-routing.mjs | tar -x -C "$VALIDATION_ROOT"
 
-"$NODE_BIN" --input-type=module -   "$VALIDATION_ROOT"   "$ZSSH_PUBLIC_BASE_URL"   "$ZSSH_OAUTH_ISSUER"   "$ZSSH_OAUTH_JWKS_URI"   "$ZSSH_TARGET_ID"   "$ZSSH_AGENT_PUBLIC_KEYS_FILE"   "$ZSSH_PUBLIC_ALLOWED_ROOTS" <<'NODE'
+"$NODE_BIN" --input-type=module -   "$VALIDATION_ROOT"   "$ZSSH_PUBLIC_BASE_URL"   "$ZSSH_OAUTH_ISSUER"   "$ZSSH_OAUTH_JWKS_URI"   "$ENROLLMENT_MODE"   "${ZSSH_TARGET_ID:-}"   "${ZSSH_AGENT_PUBLIC_KEYS_FILE:-}"   "${ZSSH_INSTALLER_REF:-}"   "$ZSSH_PUBLIC_ALLOWED_ROOTS" <<'NODE'
 import fs from "node:fs";
 import path from "node:path";
 import net from "node:net";
 import { pathToFileURL } from "node:url";
 
-const [validationRoot, publicBase, issuer, jwks, targetId, trustFile, publicRoots] = process.argv.slice(2);
+const [validationRoot, publicBase, issuer, jwks, enrollmentMode, targetId, trustFile, installerRef, publicRoots] = process.argv.slice(2);
 const { normalizeTargetId } = await import(pathToFileURL(validationRoot + "/pairing.mjs"));
 const { agentPublicKeysFromEnv } = await import(pathToFileURL(validationRoot + "/agent-transport.mjs"));
 
@@ -111,25 +130,38 @@ if (
 httpsUrl(issuer, "ZSSH_OAUTH_ISSUER");
 httpsUrl(jwks, "ZSSH_OAUTH_JWKS_URI");
 
-const normalizedTarget = normalizeTargetId(targetId);
-if (normalizedTarget === "local") throw new Error("public gateway requires an opaque zt_ target id");
-
-if (!path.isAbsolute(trustFile)) {
-  throw new Error("ZSSH_AGENT_PUBLIC_KEYS_FILE must be an absolute file");
-}
-const trustStat = fs.lstatSync(trustFile);
-if (!trustStat.isFile() || trustStat.isSymbolicLink()) {
-  throw new Error("ZSSH_AGENT_PUBLIC_KEYS_FILE must be a regular non-symlink file");
-}
-if ((trustStat.mode & 0o022) !== 0) {
-  throw new Error("ZSSH_AGENT_PUBLIC_KEYS_FILE must not be group/world writable");
-}
-const trusted = agentPublicKeysFromEnv({ ZSSH_AGENT_PUBLIC_KEYS_FILE: trustFile });
-if (!trusted.has(normalizedTarget)) {
-  throw new Error("reviewer target id is not present in ZSSH_AGENT_PUBLIC_KEYS_FILE");
-}
-if (trusted.size !== 1) {
-  throw new Error("reviewer public gateway bootstrap expects exactly one trusted target");
+let normalizedTarget = null;
+let trustedTargetCount = 0;
+if (enrollmentMode === "1") {
+  if (!/^[a-f0-9]{40}$/.test(installerRef)) {
+    throw new Error("OAuth-bound enrollment requires a pinned Git commit");
+  }
+  if (targetId || trustFile) {
+    throw new Error("Dynamic enrollment cannot load the legacy static trust file");
+  }
+} else {
+  normalizedTarget = normalizeTargetId(targetId);
+  if (normalizedTarget === "local") throw new Error("public gateway requires an opaque zt_ target id");
+  
+  if (!path.isAbsolute(trustFile)) {
+    throw new Error("ZSSH_AGENT_PUBLIC_KEYS_FILE must be an absolute file");
+  }
+  const trustStat = fs.lstatSync(trustFile);
+  if (!trustStat.isFile() || trustStat.isSymbolicLink()) {
+    throw new Error("ZSSH_AGENT_PUBLIC_KEYS_FILE must be a regular non-symlink file");
+  }
+  if ((trustStat.mode & 0o022) !== 0) {
+    throw new Error("ZSSH_AGENT_PUBLIC_KEYS_FILE must not be group/world writable");
+  }
+  const trusted = agentPublicKeysFromEnv({ ZSSH_AGENT_PUBLIC_KEYS_FILE: trustFile });
+  if (!trusted.has(normalizedTarget)) {
+    throw new Error("reviewer target id is not present in ZSSH_AGENT_PUBLIC_KEYS_FILE");
+  }
+  if (trusted.size !== 1) {
+    throw new Error("reviewer public gateway bootstrap expects exactly one trusted target");
+  }
+  
+  trustedTargetCount = trusted.size;
 }
 
 for (const value of publicRoots.split(",")) {
@@ -140,8 +172,9 @@ console.log(JSON.stringify({
   ok: true,
   endpoint: resource.origin + "/mcp",
   oauth_issuer: new URL(issuer).origin,
+  enrollment_mode: enrollmentMode === "1" ? "oauth-dynamic" : "static-reviewer",
   target_id: normalizedTarget,
-  trusted_target_count: trusted.size,
+  trusted_target_count: trustedTargetCount,
 }, null, 2));
 NODE
 
@@ -213,8 +246,14 @@ umask 077
   echo "ZSSH_PAIRING_REQUIRED=1"
   echo "ZSSH_PAIRING_FILE=$PAIRING_FILE"
   echo "ZSSH_PAIRING_REQUEST_TTL_SECONDS=900"
-  echo "ZSSH_TARGET_ID=$ZSSH_TARGET_ID"
-  echo "ZSSH_AGENT_PUBLIC_KEYS_FILE=$ZSSH_AGENT_PUBLIC_KEYS_FILE"
+  if [[ "$ENROLLMENT_MODE" == 1 ]]; then
+    echo "ZSSH_ENROLLMENT_ENABLED=1"
+    echo "ZSSH_INSTALLER_REF=$ZSSH_INSTALLER_REF"
+    echo "ZSSH_ENROLLMENT_FILE=$CONFIG/enrollments.json"
+  else
+    echo "ZSSH_TARGET_ID=$ZSSH_TARGET_ID"
+    echo "ZSSH_AGENT_PUBLIC_KEYS_FILE=$ZSSH_AGENT_PUBLIC_KEYS_FILE"
+  fi
   echo "ZSSH_AGENT_MAX_CLOCK_SKEW_MS=60000"
   echo "ZSSH_AGENT_REQUEST_TIMEOUT_MS=30000"
   echo "ZSSH_AGENT_POLL_TIMEOUT_MS=25000"
@@ -277,8 +316,8 @@ for _ in $(seq 1 20); do
   if curl --fail --silent --show-error "$health" >/dev/null; then
     systemctl --user is-active --quiet zssh-public.service
     [[ -z "$ENV_BACKUP" ]] || rm -f "$ENV_BACKUP"
-    printf 'ZSSH_PUBLIC_GATEWAY_INSTALL_GREEN sha=%s endpoint=%s/mcp target=%s service=zssh-public.service port=%s\n' \
-      "$REPO_SHA" "${ZSSH_PUBLIC_BASE_URL%/}" "$ZSSH_TARGET_ID" "$PORT_VALUE"
+    printf 'ZSSH_PUBLIC_GATEWAY_INSTALL_GREEN sha=%s endpoint=%s/mcp mode=%s service=zssh-public.service port=%s\n' \
+      "$REPO_SHA" "${ZSSH_PUBLIC_BASE_URL%/}" "$ENROLLMENT_MODE" "$PORT_VALUE"
     exit 0
   fi
   sleep 1
