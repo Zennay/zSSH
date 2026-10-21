@@ -14,7 +14,7 @@ export function renderEnrollmentInstallCommand({ code, gatewayUrl, installerRef 
   if (
     url.protocol !== "https:" || url.username || url.password ||
     url.search || url.hash || url.pathname !== "/" || url.port ||
-    !url.hostname.includes(".") || url.hostname === "localhost"
+    !url.hostname.includes(".") || url.hostname === "localhost" || net.isIP(url.hostname)
   ) {
     throw new Error("enrollment gateway requires a canonical HTTPS DNS origin");
   }
