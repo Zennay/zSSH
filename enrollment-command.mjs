@@ -1,3 +1,4 @@
+import net from "node:net";
 // Construct only server-issued, time-limited enrollment commands.
 // A user deliberately pastes the one-use code into the terminal; never use a
 // permanent API credential, an SSH password, or a ChatGPT access token here.
