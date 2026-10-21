@@ -11,7 +11,10 @@
             "baseScopes": [
               "zssh:read",
               "zssh:write"
-            ]
+            ],
+            "client": {
+              "mode": "dcr"
+            }
           }
         }
       }
