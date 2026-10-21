@@ -21,5 +21,5 @@ export function renderEnrollmentInstallCommand({ code, gatewayUrl, installerRef 
   // evaluated as shell source by the gateway.
   const installerUrl = "https://raw.githubusercontent.com/Zennay/zSSH/" + installerRef + "/deploy/install.sh";
   return "curl --proto '=https' --tlsv1.2 -fsSL " + installerUrl +
-    " | sudo bash -s -- --enroll " + code + " --gateway " + url.origin;
+    " | sudo bash -s -- --enroll " + code + " --gateway " + url.origin + " --ref " + installerRef;
 }
