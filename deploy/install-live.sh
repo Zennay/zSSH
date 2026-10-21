@@ -24,7 +24,7 @@ if [[ -z "$NODE_BIN" || -z "$NPM_BIN" ]]; then
   echo "Node.js and npm are required" >&2
   exit 2
 fi
-NODE_MAJOR="$("$NODE_BIN" -p 'Number(process.versions.node.split(".")[0])')"
+NODE_MAJOR="$(FORCE_COLOR=0 "$NODE_BIN" -p 'Number(process.versions.node.split(".")[0])')"
 if (( NODE_MAJOR < 20 )); then
   echo "Node.js >=20 required; found $("$NODE_BIN" --version)" >&2
   exit 2

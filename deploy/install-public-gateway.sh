@@ -21,8 +21,8 @@ if [[ -z "$NODE_BIN" || -z "$NPM_BIN" ]]; then
   echo "Node.js and npm are required" >&2
   exit 2
 fi
-NODE_MAJOR="$("$NODE_BIN" -p 'Number(process.versions.node.split(".")[0])')"
-(( NODE_MAJOR >= 20 )) || { echo "Node.js >=20 required" >&2; exit 2; }
+NODE_MAJOR="$(FORCE_COLOR=0 "$NODE_BIN" -p 'Number(process.versions.node.split(".")[0])')"
+[[ "$NODE_MAJOR" =~ ^[0-9]+$ ]] && (( NODE_MAJOR >= 20 )) || { echo "Node.js >=20 required" >&2; exit 2; }
 
 REPO_SHA="$(git -C "$SOURCE_ROOT" rev-parse HEAD 2>/dev/null || true)"
 [[ -n "$REPO_SHA" ]] || { echo "Source root must be a Git checkout" >&2; exit 2; }

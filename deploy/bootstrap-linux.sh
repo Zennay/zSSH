@@ -20,7 +20,7 @@ for command_name in git node npm systemctl curl; do
   fi
 done
 
-node_major="$(node -p 'Number(process.versions.node.split(".")[0])')"
+node_major="$(FORCE_COLOR=0 node -p 'Number(process.versions.node.split(".")[0])')"
 if (( node_major < 20 )); then
   echo "Node.js >=20 required; found $(node --version)" >&2
   exit 2
