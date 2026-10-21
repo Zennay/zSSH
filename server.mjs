@@ -10,6 +10,8 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import { z } from "zod";
 import { bearerChallenge, oauthConfigFromEnv, protectedResourceMetadata, requireScopes, verifyOAuthAuthorizationHeader } from "./oauth.mjs";
 import { getPairingStatus, profileIdFromAuth, targetIdFromEnv } from "./pairing.mjs";
+import { EnrollmentStore } from "./enrollment-store.mjs";
+import { renderEnrollmentInstallCommand } from "./enrollment-command.mjs";
 import { TargetSessionRegistry, resolveAuthenticatedTarget } from "./target-routing.mjs";
 import { AGENT_ENDPOINTS, OutboundAgentBroker, createAgentRequestVerifier, readJsonBody } from "./agent-transport.mjs";
 import { AGENT_PAIRING_ENDPOINTS, executeAgentPairingControl } from "./agent-pairing-control.mjs";
@@ -28,6 +30,8 @@ const CAPABILITY_TOKEN = process.env.ZSSH_MCP_CAPABILITY_TOKEN || "";
 const CLIENT_TOKEN_AUTH_CONFIGURED = Boolean(String(process.env.ZSSH_CLIENT_TOKENS_FILE || "").trim());
 const TRUST_LOCAL_TUNNEL = process.env.ZSSH_TRUST_LOCAL_TUNNEL === "1";
 const PLUGIN_PROFILE = process.env.ZSSH_PLUGIN_PROFILE === "public" ? "public" : "private";
+const ENROLLMENT_ENABLED = PLUGIN_PROFILE === "public" && process.env.ZSSH_ENROLLMENT_ENABLED === "1";
+const ENROLLMENT_STORE = ENROLLMENT_ENABLED ? new EnrollmentStore() : null;
 const PRIVATE_CLIENT_TOKEN_AUTH_CONFIGURED = PLUGIN_PROFILE !== "public" && CLIENT_TOKEN_AUTH_CONFIGURED;
 const OPENAI_APPS_CHALLENGE_TOKEN = process.env.OPENAI_APPS_CHALLENGE_TOKEN || "";
 const PUBLIC_AUTH_MODE = process.env.ZSSH_PUBLIC_AUTH_MODE === "legacy" ? "legacy" : "oauth";
@@ -866,6 +870,86 @@ function createMcpServer() {
       }
     );
 
+    // The new enrollment flow is strictly opt-in until the public gateway,
+    // host claim transport, and reviewer tool-surface approval are ready.
+    // It never runs in the private legacy operator profile.
+    if (ENROLLMENT_ENABLED) {
+      server.registerTool(
+        "get_server_install_command",
+        {
+          title: "Get my one-command VPS installer",
+          description: "Generate a short-lived one-time Linux installation command tied to the authenticated zSSH profile. The command includes a personal enrollment code; do not share it.",
+          inputSchema: {},
+          annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+          ...publicSecurity(OAUTH_CONFIG?.writeScope || "zssh:write"),
+        },
+        async (_args, extra) => {
+          const authError = oauthToolError(extra, OAUTH_CONFIG?.writeScope || "zssh:write");
+          if (authError) return authError;
+          try {
+            const owner = profileIdFromAuth(authInfoFromExtra(extra), OAUTH_CONFIG.resource);
+            const issued = await ENROLLMENT_STORE.issue(owner);
+            const installCommand = renderEnrollmentInstallCommand({
+              code: issued.enrollment_code,
+              gatewayUrl: OAUTH_CONFIG.resource,
+              installerRef: process.env.ZSSH_INSTALLER_REF,
+            });
+            const value = { install_command: installCommand, expires_at: issued.expires_at };
+            return { content: [{ type: "text", text: JSON.stringify(value) }], structuredContent: value, isError: false };
+          } catch (err) {
+            return result({ ok: false, error: String(err?.message || err) }, true);
+          }
+        }
+      );
+
+      server.registerTool(
+        "get_server_enrollment_status",
+        {
+          title: "Check new server enrollment",
+          description: "List pending server fingerprints and connected server identities for the authenticated zSSH account.",
+          inputSchema: {},
+          annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+          ...publicSecurity(OAUTH_CONFIG?.readScope || "zssh:read"),
+        },
+        async (_args, extra) => {
+          const authError = oauthToolError(extra, OAUTH_CONFIG?.readScope || "zssh:read");
+          if (authError) return authError;
+          try {
+            const owner = profileIdFromAuth(authInfoFromExtra(extra), OAUTH_CONFIG.resource);
+            const value = { pending: await ENROLLMENT_STORE.pending(owner), targets: await ENROLLMENT_STORE.list(owner) };
+            return { content: [{ type: "text", text: JSON.stringify(value) }], structuredContent: value, isError: false };
+          } catch (err) {
+            return result({ ok: false, error: String(err?.message || err) }, true);
+          }
+        }
+      );
+
+      server.registerTool(
+        "approve_server_enrollment",
+        {
+          title: "Approve server identity",
+          description: "After the one-command setup, confirm the exact server fingerprint shown on the VPS to finish pairing that server with this account.",
+          inputSchema: {
+            target_id: z.string().min(11).max(67),
+            fingerprint: z.string().startsWith("SHA256:").max(55),
+          },
+          annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
+          ...publicSecurity(OAUTH_CONFIG?.writeScope || "zssh:write"),
+        },
+        async ({ target_id, fingerprint }, extra) => {
+          const authError = oauthToolError(extra, OAUTH_CONFIG?.writeScope || "zssh:write");
+          if (authError) return authError;
+          try {
+            const owner = profileIdFromAuth(authInfoFromExtra(extra), OAUTH_CONFIG.resource);
+            const value = await ENROLLMENT_STORE.approve({ profileId: owner, targetId: target_id, fingerprint });
+            return { content: [{ type: "text", text: JSON.stringify(value) }], structuredContent: value, isError: false };
+          } catch (err) {
+            return result({ ok: false, error: String(err?.message || err) }, true);
+          }
+        }
+      );
+    }
+
     server.registerTool(
       "get_pairing_status",
       {
@@ -1175,6 +1259,12 @@ function cors(res) {
 export function start() {
   if (typeof process.getuid === "function" && process.getuid() === 0 && process.env.ZSSH_ALLOW_ROOT !== "1") {
     throw new Error("zSSH refuses to run as root; use a dedicated unprivileged service account");
+  }
+  if (ENROLLMENT_ENABLED && (
+    PUBLIC_AUTH_MODE !== "oauth" || !OAUTH_CONFIG ||
+    !/^[a-f0-9]{40}$/.test(String(process.env.ZSSH_INSTALLER_REF || ""))
+  )) {
+    throw new Error("personal enrollment requires OAuth and a pinned 40-character ZSSH_INSTALLER_REF");
   }
   if (PLUGIN_PROFILE === "public" && EXEC_MODE === "full") {
     throw new Error("public plugin profile refuses ZSSH_EXEC_MODE=full; raw shell must stay disabled");
