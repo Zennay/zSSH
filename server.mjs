@@ -993,6 +993,28 @@ function createMcpServer() {
           }
         }
       );
+      server.registerTool(
+        "revoke_enrolled_server",
+        {
+          title: "Disconnect my enrolled server",
+          description: "Immediately revoke the account's permission to use one previously enrolled VPS and disconnect its active agent session.",
+          inputSchema: { target_id: z.string().min(11).max(67) },
+          annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
+          ...publicSecurity(OAUTH_CONFIG?.writeScope || "zssh:write"),
+        },
+        async ({ target_id }, extra) => {
+          const authError = oauthToolError(extra, OAUTH_CONFIG?.writeScope || "zssh:write");
+          if (authError) return authError;
+          try {
+            const owner = profileIdFromAuth(authInfoFromExtra(extra), OAUTH_CONFIG.resource);
+            const value = await ENROLLMENT_STORE.revoke(owner, target_id);
+            if (value.revoked) TARGET_SESSIONS.unregister(target_id);
+            return { content: [{ type: "text", text: JSON.stringify(value) }], structuredContent: value, isError: false };
+          } catch (err) {
+            return result({ ok: false, error: String(err?.message || err) }, true);
+          }
+        }
+      );
     }
 
     server.registerTool(
