@@ -867,7 +867,7 @@ function createMcpServer() {
                 resourceDomains: [],
               },
             },
-            "openai/widgetDescription": "Compact zSSH connection and target-pairing status. Pairing approval remains local to the Linux target.",
+            "openai/widgetDescription": "zSSH connection setup, personal one-command Linux installer, and explicit target identity approval.",
           },
         },
       ],
@@ -926,7 +926,10 @@ function createMcpServer() {
           description: "Generate a short-lived one-time Linux installation command tied to the authenticated zSSH profile. The command includes a personal enrollment code; do not share it.",
           inputSchema: {},
           annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
-          ...publicSecurity(OAUTH_CONFIG?.writeScope || "zssh:write"),
+          ...publicSecurity(OAUTH_CONFIG?.writeScope || "zssh:write", {
+            ui: { resourceUri: CONNECTION_UI_URI },
+            "openai/outputTemplate": CONNECTION_UI_URI,
+          }),
         },
         async (_args, extra) => {
           const authError = oauthToolError(extra, OAUTH_CONFIG?.writeScope || "zssh:write");
@@ -954,7 +957,10 @@ function createMcpServer() {
           description: "List pending server fingerprints and connected server identities for the authenticated zSSH account.",
           inputSchema: {},
           annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-          ...publicSecurity(OAUTH_CONFIG?.readScope || "zssh:read"),
+          ...publicSecurity(OAUTH_CONFIG?.readScope || "zssh:read", {
+            ui: { resourceUri: CONNECTION_UI_URI },
+            "openai/outputTemplate": CONNECTION_UI_URI,
+          }),
         },
         async (_args, extra) => {
           const authError = oauthToolError(extra, OAUTH_CONFIG?.readScope || "zssh:read");
@@ -1051,6 +1057,7 @@ function createMcpServer() {
               pending: pending.length > 0,
               target_label: TARGET_LABEL,
               request_id: null,
+              enrollment_enabled: true,
             };
           } else {
             const pairing = await getPairingStatus(authInfoFromExtra(extra), {
