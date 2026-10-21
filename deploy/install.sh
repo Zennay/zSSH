@@ -5,6 +5,20 @@ set -Eeuo pipefail
 # enrollment is separate and must authorize the exact target explicitly.
 SERVICE_USER=zssh
 INSTALL_REF="${ZSSH_REF:-main}"
+ENROLL_CODE=""
+ENROLL_GATEWAY=""
+
+# Personal commands are generated inside the authenticated ChatGPT plugin.
+# Code is deliberately short-lived and single-use: never use an API token here.
+while (( $# )); do
+  case "$1" in
+    --enroll) (( $# >= 2 )) || { echo "missing --enroll value" >&2; exit 2; }; ENROLL_CODE="$2"; shift 2 ;;
+    --gateway) (( $# >= 2 )) || { echo "missing --gateway value" >&2; exit 2; }; ENROLL_GATEWAY="$2"; shift 2 ;;
+    --ref) (( $# >= 2 )) || { echo "missing --ref value" >&2; exit 2; }; INSTALL_REF="$2"; shift 2 ;;
+    --help) break ;;
+    *) echo "unknown installer option" >&2; exit 2 ;;
+  esac
+done
 
 die() { printf 'zSSH install: %s\n' "$*" >&2; exit 2; }
 
@@ -28,6 +42,12 @@ command -v apt-get >/dev/null 2>&1 || die "Automatic system package setup requir
 command -v systemctl >/dev/null 2>&1 || die "systemd is required."
 [[ "$INSTALL_REF" == "main" || "$INSTALL_REF" =~ ^[a-f0-9]{40}$ ]] ||
   die "ZSSH_REF must be main or an exact 40-character Git commit SHA."
+if [[ -n "$ENROLL_CODE" || -n "$ENROLL_GATEWAY" ]]; then
+  [[ "$ENROLL_CODE" =~ ^enr_[A-Za-z0-9_-]{43}$ && -n "$ENROLL_GATEWAY" ]] ||
+    die "personal VPS enrollment requires a valid --enroll code and --gateway URL"
+  [[ "$INSTALL_REF" =~ ^[a-f0-9]{40}$ ]] ||
+    die "personal enrollment requires the installer and bootstrap pinned to the same Git SHA"
+fi
 
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
@@ -86,6 +106,34 @@ runuser -u "$SERVICE_USER" -- env \
   die "zssh.service did not become active."
 curl --fail --silent --show-error http://127.0.0.1:8788/health ||
   die "Local zSSH health check failed."
+
+if [[ -n "$ENROLL_CODE" ]]; then
+  # Supply the personal code only over stdin. Never write it to disk or place
+  # it into the persistent agent environment, systemd unit, or service logs.
+  printf '%s\n' "$ENROLL_CODE" | runuser -u "$SERVICE_USER" -- env \
+    HOME="$home" \
+    FORCE_COLOR=0 \
+    node "$home/.local/src/zssh/scripts/enroll-target.mjs" --gateway "$ENROLL_GATEWAY"
+  unset ENROLL_CODE
+
+  target_id="$(runuser -u "$SERVICE_USER" -- env HOME="$home" FORCE_COLOR=0 \
+    node -p 'JSON.parse(require("fs").readFileSync(process.env.HOME+"/.config/zssh/agent-identity.json", "utf8")).target_id')"
+  [[ "$target_id" =~ ^zt_[A-Za-z0-9_-]{8,64}$ ]] || die "invalid agent identity after enrollment"
+
+  # Keep a persistent outbound agent ready for activation after the plugin
+  # confirms the exact target fingerprint. It never exposes an inbound port.
+  runuser -u "$SERVICE_USER" -- env \
+    HOME="$home" \
+    XDG_RUNTIME_DIR="$runtime" \
+    DBUS_SESSION_BUS_ADDRESS="unix:path=$runtime/bus" \
+    FORCE_COLOR=0 \
+    ZSSH_TARGET_ID="$target_id" \
+    ZSSH_GATEWAY_URL="$ENROLL_GATEWAY" \
+    ZSSH_AGENT_PRIVATE_KEY_FILE="$home/.config/zssh/agent-ed25519.pem" \
+    ZSSH_PUBLIC_ALLOWED_ROOTS="$home/zssh-workspace" \
+    bash "$home/.local/src/zssh/deploy/install-target-agent.sh" "$home/.local/src/zssh"
+  printf '%s\n' "ZSSH_PERSONAL_ENROLLMENT_PENDING target=$target_id: confirm the fingerprint inside the ChatGPT zSSH plugin."
+fi
 
 printf '\nZSSH_ONE_COMMAND_INSTALL_GREEN user=%s port=8788 scope=loopback\n' "$SERVICE_USER"
 printf '%s\n' \
