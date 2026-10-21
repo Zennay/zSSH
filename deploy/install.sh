@@ -134,6 +134,21 @@ else
 fi
 ENROLLMENT_REQUESTED=0
 if [[ -n "$ENROLL_CODE" ]]; then
+  # Fail before spending a single-use enrollment code if this host already has
+  # a persistent agent registered to a different gateway or target identity.
+  existing_agent_env="$home/.config/zssh/agent.env"
+  if [[ -f "$existing_agent_env" ]]; then
+    grep -Fxq "ZSSH_GATEWAY_URL=$ENROLL_GATEWAY" "$existing_agent_env" ||
+      die "Existing target agent uses another gateway; refusing to consume a new enrollment code."
+    existing_target="$(sed -n 's/^ZSSH_TARGET_ID=//p' "$existing_agent_env" | head -n 1)"
+    claimed_target="$(runuser -u "$SERVICE_USER" -- env HOME="$home" node -e '
+      const fs = require("fs");
+      const file = process.env.HOME + "/.config/zssh/agent-identity.json";
+      try { process.stdout.write(JSON.parse(fs.readFileSync(file, "utf8")).target_id || ""); } catch {}
+    ')"
+    [[ -n "$claimed_target" && "$existing_target" == "$claimed_target" ]] ||
+      die "Existing target identity does not match the agent configuration."
+  fi
   ENROLLMENT_REQUESTED=1
   # Supply the personal code only over stdin. Never write it to disk or place
   # it into the persistent agent environment, systemd unit, or service logs.
@@ -163,10 +178,10 @@ if [[ -n "$ENROLL_CODE" ]]; then
 fi
 
 if [[ "$ENROLLMENT_REQUESTED" == 1 ]]; then
-  printf '\\nZSSH_ONE_COMMAND_INSTALL_GREEN user=%s mode=outbound-agent\\n' "$SERVICE_USER"
+  printf '\nZSSH_ONE_COMMAND_INSTALL_GREEN user=%s mode=outbound-agent\n' "$SERVICE_USER"
   echo "Outbound agent installed; confirm the fingerprint in ChatGPT to authorize this VPS."
 else
-  printf '\\nZSSH_ONE_COMMAND_INSTALL_GREEN user=%s port=8788 scope=loopback\\n' "$SERVICE_USER"
+  printf '\nZSSH_ONE_COMMAND_INSTALL_GREEN user=%s port=8788 scope=loopback\n' "$SERVICE_USER"
   echo "Private loopback-only zSSH installed; public enrollment not configured."
 fi
 echo "No SSH private key, reusable token or public port was exposed."
