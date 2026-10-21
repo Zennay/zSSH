@@ -93,7 +93,7 @@ runuser -u "$SERVICE_USER" -- env \
     bootstrap="$(mktemp "${TMPDIR:-/tmp}/zssh-bootstrap.XXXXXXXX")"
     trap '\''rm -f "$bootstrap"'\'' EXIT
     curl --proto "=https" --tlsv1.2 -fsSL \
-      https://raw.githubusercontent.com/Zennay/zSSH/main/deploy/bootstrap-linux.sh \
+      https://raw.githubusercontent.com/Zennay/zSSH/"$ZSSH_REF"/deploy/bootstrap-linux.sh \
       -o "$bootstrap"
     bash "$bootstrap"
   '
