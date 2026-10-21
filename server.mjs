@@ -32,6 +32,20 @@ const TRUST_LOCAL_TUNNEL = process.env.ZSSH_TRUST_LOCAL_TUNNEL === "1";
 const PLUGIN_PROFILE = process.env.ZSSH_PLUGIN_PROFILE === "public" ? "public" : "private";
 const ENROLLMENT_ENABLED = PLUGIN_PROFILE === "public" && process.env.ZSSH_ENROLLMENT_ENABLED === "1";
 const ENROLLMENT_STORE = ENROLLMENT_ENABLED ? new EnrollmentStore() : null;
+const ENROLLMENT_CLAIM_RATE = new Map();
+function allowEnrollmentClaim(remoteAddress, now = Date.now()) {
+  const key = String(remoteAddress || "");
+  const windowStart = now - (now % 60000);
+  for (const [address, value] of ENROLLMENT_CLAIM_RATE) {
+    if (value.windowStart !== windowStart) ENROLLMENT_CLAIM_RATE.delete(address);
+  }
+  if (!ENROLLMENT_CLAIM_RATE.has(key) && ENROLLMENT_CLAIM_RATE.size >= 1024) return false;
+  const previous = ENROLLMENT_CLAIM_RATE.get(key);
+  const count = previous?.windowStart === windowStart ? previous.count + 1 : 1;
+  ENROLLMENT_CLAIM_RATE.set(key, { count, windowStart });
+  return count <= 10;
+}
+
 const PRIVATE_CLIENT_TOKEN_AUTH_CONFIGURED = PLUGIN_PROFILE !== "public" && CLIENT_TOKEN_AUTH_CONFIGURED;
 const OPENAI_APPS_CHALLENGE_TOKEN = process.env.OPENAI_APPS_CHALLENGE_TOKEN || "";
 const PUBLIC_AUTH_MODE = process.env.ZSSH_PUBLIC_AUTH_MODE === "legacy" ? "legacy" : "oauth";
@@ -1302,6 +1316,33 @@ export function start() {
   const httpServer = createServer(async (req, res) => {
     if (!req.url) return res.writeHead(400).end("Missing URL");
     const url = new URL(req.url, "http://" + (req.headers.host || "localhost"));
+
+    // A 256-bit one-use install code authorizes just the signed agent claim.
+    // It never grants tool execution or skips owner-side fingerprint approval.
+    if (ENROLLMENT_ENABLED && url.pathname === "/enrollment/v1/claim") {
+      res.setHeader("cache-control", "no-store");
+      res.setHeader("content-type", "application/json; charset=utf-8");
+      if (req.method !== "POST") {
+        return res.writeHead(405).end(JSON.stringify({ error: "method_not_allowed" }));
+      }
+      if (!allowEnrollmentClaim(req.socket?.remoteAddress)) {
+        res.setHeader("retry-after", "60");
+        return res.writeHead(429).end(JSON.stringify({ error: "rate_limited" }));
+      }
+      let input;
+      try {
+        input = (await readJsonBody(req, { maxBytes: 4096 })).value;
+      } catch {
+        return res.writeHead(400).end(JSON.stringify({ error: "invalid_request" }));
+      }
+      try {
+        const claim = await ENROLLMENT_STORE.claim(input);
+        return res.writeHead(202).end(JSON.stringify(claim));
+      } catch {
+        // Do not reveal whether a code existed, expired, or was already redeemed.
+        return res.writeHead(403).end(JSON.stringify({ error: "enrollment_rejected" }));
+      }
+    }
 
     if (AGENT_ENDPOINTS.includes(url.pathname)) {
       if (!AGENT_VERIFIER) return res.writeHead(404).end("Not Found");
