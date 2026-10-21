@@ -4,11 +4,11 @@ set -Eeuo pipefail
 # One-command private installation for Ubuntu/Debian. Public ChatGPT account
 # enrollment is separate and must authorize the exact target explicitly.
 SERVICE_USER=zssh
-INSTALL_REF="\${ZSSH_REF:-main}"
+INSTALL_REF="${ZSSH_REF:-main}"
 
 die() { printf 'zSSH install: %s\n' "$*" >&2; exit 2; }
 
-if [[ "\${1:-}" == "--help" ]]; then
+if [[ "${1:-}" == "--help" ]]; then
   cat <<'HELP'
 Usage:
   curl -fsSL https://raw.githubusercontent.com/Zennay/zSSH/main/deploy/install.sh | sudo bash
@@ -56,7 +56,7 @@ home="$(getent passwd "$SERVICE_USER" | cut -d: -f6)"
 [[ -n "$home" && -d "$home" ]] || die "Service user needs a real home directory."
 
 loginctl enable-linger "$SERVICE_USER"
-systemctl start "user@\${uid}.service"
+systemctl start "user@${uid}.service"
 runtime="/run/user/$uid"
 [[ -S "$runtime/bus" ]] || die "systemd user bus is unavailable for $SERVICE_USER."
 
@@ -70,7 +70,7 @@ runuser -u "$SERVICE_USER" -- env \
   bash -c '
     set -Eeuo pipefail
     umask 077
-    bootstrap="$(mktemp "\${TMPDIR:-/tmp}/zssh-bootstrap.XXXXXXXX")"
+    bootstrap="$(mktemp "${TMPDIR:-/tmp}/zssh-bootstrap.XXXXXXXX")"
     trap '\''rm -f "$bootstrap"'\'' EXIT
     curl --proto "=https" --tlsv1.2 -fsSL \
       https://raw.githubusercontent.com/Zennay/zSSH/main/deploy/bootstrap-linux.sh \
