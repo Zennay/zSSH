@@ -46,6 +46,14 @@ Keep `ZSSH_ENROLLMENT_FILE` on persistent 0700 private storage, and `gateway-pub
 
 The Caddy configuration must terminate mTLS on the ChatGPT-only host, enforce OpenAI's client certificate requirements, strip untrusted proxy-secret headers, and set the private header **only** on accepted MCP requests. Configure a normal TLS route for `zssh.zennay.nl` to the same loopback gateway for `/enrollment/v1/claim` and signed agent endpoints. Do not copy a permissive reverse-proxy snippet without these checks.
 
+## Preferred minimal production layout (one hostname)
+
+The simpler option is `deploy/Caddyfile.chatgpt-no-login-single-host.example`. It reuses the already-established `zssh.zennay.nl` DNS and valid HTTPS certificate. One TLS virtual host uses `client_auth mode verify_if_given` with an exact OpenAI Connectors intermediate trust pool: an unverified or certificate-free request may fetch public pages, the domain-verification challenge, the one-use signed claim and signed agent transport; **only a successfully validated OpenAI mTLS client certificate with the exact OpenAI SAN can reach `/mcp`**. Other `/mcp` requests receive 403, and no client-supplied proxy attestation header survives. The public Node gateway also checks the private proxy secret and loopback origin before accepting a request.
+
+Do not replace the live Caddyfile with the example until you have installed and reviewed Caddy >=2.11, provisioned the official trust PEM, provisioned the Caddy and gateway secret as service environment variables, validated the adapted Caddyfile, and confirmed plugin tool scans and per-user authorization. The original two-host `deploy/Caddyfile.chatgpt-mtls.example` remains an alternative for operators who want separate DNS origins.
+
+**Plugin ZIP:** the guarded build supports `--auth-mode none` (or `ZSSH_PLUGIN_AUTH_MODE=none`) and generates `auth.type=none`, the login-free setup skill, and enrollment-oriented reviewer examples. E.g. build with `--mcp-url https://zssh.zennay.nl/mcp --auth-mode none`, along with a real required reviewer demonstration URL. OAuth submission packaging remains the default without this flag. This build path has not been proven against a live plugin portal/scan and should not be described as published.
+
 ## Isolated Caddy ingress (prepared, not deployed)
 
 An opt-in dual-host example is included at `deploy/Caddyfile.chatgpt-mtls.example`. It keeps `https://zssh.zennay.nl` open only for `/health`, signed agent requests and a one-use enrollment claim; anonymous MCP routing is deliberately absent there. The `chatgpt.zssh.zennay.nl` hostname requests and verifies an OpenAI-issued client certificate and only then routes `/mcp`, injecting the locally configured proxy secret. Both public hostnames need separate DNS A records and valid server certificates.
