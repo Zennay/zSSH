@@ -356,7 +356,7 @@ function laneStatus(env, laneName, names) {
     return {
       ready: observed && invalid.length === 0,
       configured: present,
-      missing: observed || present.CLOUDFLARE_API_TOKEN ? [] : ["CLOUDFLARE_API_TOKEN"],
+      missing: observed || present.CLOUDFLARE_API_TOKEN ? [] : value(env, "ZSSH_DNS_PROVIDER") === "external" ? ["ZSSH_PUBLIC_ORIGIN_STAGE"] : ["CLOUDFLARE_API_TOKEN"],
       invalid,
     };
   }
@@ -461,17 +461,20 @@ export function buildProductionReadinessAudit(env = process.env) {
   if (!lanes.dns_publication.ready) {
     const tokenPresent = configured(env, "CLOUDFLARE_API_TOKEN");
     const configInvalid = lanes.dns_publication.invalid.length > 0;
+    const externalProvider = value(env, "ZSSH_DNS_PROVIDER") === "external";
     nextActions.push({
       lane: "dns_publication",
-      gate_kind: configInvalid
+      gate_kind: configInvalid || externalProvider
         ? "provider_configuration"
         : tokenPresent
           ? "provider_execution"
           : "provider_credentials",
-      requires_external_input: configInvalid || !tokenPresent,
+      requires_external_input: configInvalid || (externalProvider ? true : !tokenPresent),
       action: configInvalid
         ? "Repair or remove the invalid optional Cloudflare configuration reported below (CLOUDFLARE_ACCOUNT_ID and/or CLOUDFLARE_ZONE_ID), then rerun protected readiness before DNS execution."
-        : tokenPresent
+        : externalProvider
+          ? "The approved domain uses external DNS, not Cloudflare. Confirm the selected hostname and A record with the actual authoritative DNS provider, configure ZSSH_PUBLIC_OBSERVATION_URL for the exact HTTPS /mcp endpoint, and rerun the protected public-origin observation. Keep the existing record until the replacement target and public gateway are ready. A Cloudflare token is not required for this DNS-provider path. Do not bypass live OAuth and ingress checks."
+          : tokenPresent
           ? `Dispatch the guarded "zSSH production DNS publish" workflow ONLY after ZSSH_DNS_PUBLIC_BASE_URL, ZSSH_DNS_ZONE_NAME, ZSSH_DNS_TARGET_IPV4 and matching ZSSH_DNS_APPROVED_HOSTNAME have been set for a currently owned domain (never the retired cheapgpt.shop hostname). Use exact canonical main and enter confirmation PUBLISH_ZSSH_PRODUCTION_DNS. The manual path re-verifies merged-PR provenance, live branch protection, exact current main, Cloudflare token validity, the non-mutating DNS plan, the bounded apply preconditions, and external convergence; live public-origin evidence is still at stage ${value(env, "ZSSH_PUBLIC_ORIGIN_STAGE") || "unknown"}. Use the reviewed .github/openai-production-dns-trigger activation-id path only when a code-reviewed push activation is specifically preferred.`
           : "First select a hostname on a domain you currently own and set ZSSH_DNS_PUBLIC_BASE_URL, ZSSH_DNS_ZONE_NAME, ZSSH_DNS_TARGET_IPV4 and matching ZSSH_DNS_APPROVED_HOSTNAME in the protected environment. Retired cheapgpt.shop is forbidden. Only then provision a protected Cloudflare API token scoped to the CURRENT owned zone with Zone Read + DNS Write. For durable CI/CD prefer an account-owned token and set CLOUDFLARE_ACCOUNT_ID; user-owned tokens from My Profile > API Tokens remain supported when CLOUDFLARE_ACCOUNT_ID is unset. The preflight uses /accounts/{account_id}/tokens/verify only for the explicit account path and /user/tokens/verify otherwise. The hourly protected readiness audit will detect the new credential without a repository push; once the lane becomes provider_execution, dispatch the guarded \"zSSH production DNS publish\" workflow from exact canonical main with confirmation PUBLISH_ZSSH_PRODUCTION_DNS. CLOUDFLARE_ZONE_ID remains an optional legacy override for DNS-write-only tokens.",
       missing: lanes.dns_publication.missing,
