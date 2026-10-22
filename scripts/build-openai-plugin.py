@@ -319,17 +319,18 @@ def main() -> None:
     interface = plugin["extensions"]["com.openai"]["interface"]
     tool_contract = PUBLIC_TOOL_CONTRACT
     if args.auth_mode == "none":
-        if not args.listing_origin:
-            fail("--listing-origin is required for no-login ChatGPT because its MCP hostname requires mTLS")
-        listing_origin = https_url(
-            args.listing_origin, "listing origin",
-            allow_query=False, allow_fragment=False, require_public_hostname=True,
-        )
-        if urlparse(listing_origin).path not in ("", "/"):
-            fail("listing origin must be an HTTPS origin without a path")
-        listing = listing_urls(listing_origin)
-        if urlparse(mcp_url).hostname == urlparse(listing_origin).hostname:
-            fail("no-login ChatGPT MCP and public review site require separate hostnames")
+        if args.listing_origin:
+            listing_origin = https_url(
+                args.listing_origin, "listing origin",
+                allow_query=False, allow_fragment=False, require_public_hostname=True,
+            )
+            if urlparse(listing_origin).path not in ("", "/"):
+                fail("listing origin must be an HTTPS origin without a path")
+            listing = listing_urls(listing_origin)
+        else:
+            # Recommended single-host Caddy layout: public pages are readable,
+            # but MCP routes require a verified ChatGPT mTLS client certificate.
+            listing = listing_urls(mcp_url)
         mcp["mcpServers"]["zssh"]["extensions"]["com.openai"]["auth"] = {"type": "none"}
         interface["longDescription"] = (
             "Connect a Linux VPS using one personal installation command, without a separate "
