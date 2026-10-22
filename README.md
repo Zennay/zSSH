@@ -4,6 +4,18 @@
 
 zSSH is a **standalone security-first remote operations project**. zCloud is its control-plane/dashboard integration, not its parent project.
 
+## Browser Agent capability (private only, no extra service)
+
+zSSH can now run an optional [BrowserAgent](https://github.com/Zennay/BrowserAgent) Playwright module **in this zSSH Node process**. This replaces the previous plan for an independent VPS-agent daemon. zCloud workers select the structured `zssh_browser` capability for browser tasks; shell/files/Git/services stay in zSSH's existing tools.
+
+Install BrowserAgent's dependencies once as the existing non-root zSSH user with `bash ops/prepare-zssh-module.sh` in a local BrowserAgent checkout. Set `ZSSH_BROWSER_ENABLED=1`, `ZSSH_BROWSER_CAPABILITY_FILE` (absolute path to the checkout's `src/zssh-capability.mjs`) and `ZSSH_BROWSER_ALLOWED_HOSTS` in the **private target environment**. The MCP tool is never registered in the public plugin and raw Playwright APIs, token values or arbitrary OS shell are not exposed as browser methods.
+
+Typical private tool input: `{"request":{"action":"start"}}`; then `{"request":{"action":"navigate","session_id":"<UUID>","url":"https://example.org"}}`, `{"request":{"action":"observe","session_id":"<UUID>"}}`, or `{"request":{"action":"accessibility","session_id":"<UUID>"}}`. Tab lists, stripped HTML, selectors, clicks, form fill, downloads, bounded batches and operator-approved JS are implemented in the adapter. Every mutation is **disabled by default** and also needs a single-use human confirmation on the target via `node ops/approve-zssh-browser.mjs <approval_id>`. No secret or sensitive typed data is sent to the approval UI.
+
+With an already-established **private** signed outbound zSSH agent connection, `ZSSH_BROWSER_TARGETS=zt_xxx,zt_yyy` lists allowed remote targets. Passing `request.target_id` routes browser actions over the *existing* zSSH transport rather than opening a new browser-agent network port. Each remote target must independently install/enable the module and retain its own browser sessions/allowlists. Existing public OAuth target routing and release policy are unchanged; this private browser feature is not a shortcut around target approval. See [BrowserAgent integration runbook](https://github.com/Zennay/BrowserAgent/blob/main/docs/zssh-integration.md).
+
+**Rollout status:** merged source is not a live VPS deploy. Existing zSSH connector calls still return `Session terminated`; an operator must verify the installed revision, paired target identity, Chromium and the intended private zSSH restart before claiming availability.
+
 ## Current milestone
 
 **M5 — public-plugin production submission.** The safe execution foundation, universal public MCP endpoint model, outbound target transport, public OAuth resource-server profile, local target pairing/revocation, and machine-validated submission package are implemented. The first live transition is now external production configuration: publish the reviewed DNS origin, then complete production OAuth/reviewer evidence and the final OpenAI portal/host validation gates.
