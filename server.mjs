@@ -666,9 +666,12 @@ function publicProfileFromAuth(extra) {
 function oauthToolError(extra, scope) {
   if (PLUGIN_PROFILE !== "public") return null;
   if (PUBLIC_AUTH_MODE === "chatgpt") {
-    return authInfoFromExtra(extra) ? null : result({
+    const info = authInfoFromExtra(extra);
+    if (!info) return result({
       error: "A verified ChatGPT connection with stable subject metadata is required."
     }, true);
+    const limit = PUBLIC_RATE_LIMITER.consume(profileIdFromAuth(info, PUBLIC_RESOURCE));
+    return limit.allowed ? null : result({ error: "rate_limited", retry_after_seconds: limit.retryAfterSeconds }, true);
   }
   if (PUBLIC_AUTH_MODE !== "oauth") return null;
   try {
@@ -918,6 +921,9 @@ function createMcpServer() {
             isError: false,
           };
         } catch (err) {
+          if (PUBLIC_AUTH_MODE === "chatgpt") {
+            return result({ error: "Verified ChatGPT identity metadata is required." }, true);
+          }
           return {
             content: [{ type: "text", text: "Authentication required for profile resolution." }],
             isError: true,
@@ -1449,7 +1455,7 @@ export function start() {
         return res.writeHead(400).end(JSON.stringify({ error: "invalid_request" }));
       }
       try {
-        const claim = await ENROLLMENT_STORE.claim(input);
+        const claim = await ENROLLMENT_STORE.claim(input, Date.now(), { autoApprove: PUBLIC_AUTH_MODE === "chatgpt" });
         return res.writeHead(202).end(JSON.stringify(claim));
       } catch {
         // Do not reveal whether a code existed, expired, or was already redeemed.
