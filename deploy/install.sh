@@ -167,6 +167,7 @@ if [[ -n "$ENROLL_CODE" ]]; then
     ZSSH_GATEWAY_URL="$ENROLL_GATEWAY" \
     ZSSH_AGENT_PRIVATE_KEY_FILE="$home/.config/zssh/agent-ed25519.pem" \
     ZSSH_PUBLIC_ALLOWED_ROOTS="$home/zssh-workspace" \
+    ZSSH_EXPECTED_SHA="$INSTALL_REF" \
     bash "$home/.local/src/zssh/deploy/install-target-agent.sh" "$home/.local/src/zssh"
   printf '%s\n' "ZSSH_PERSONAL_AGENT_INSTALLED target=$target_id. Secure outbound agent starts on boot and reconnects automatically."
 fi
