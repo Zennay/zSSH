@@ -74,6 +74,9 @@ function configured(env, name) {
 }
 
 function dnsPublicationObserved(env) {
+  if (value(env, "ZSSH_DNS_PROVIDER") === "external") {
+    return value(env, "ZSSH_EXTERNAL_DNS_VERIFIED") === "1";
+  }
   return DNS_RESOLVED_PUBLIC_ORIGIN_STAGES.has(value(env, "ZSSH_PUBLIC_ORIGIN_STAGE"));
 }
 
@@ -139,6 +142,7 @@ function compactIssues(issues) {
 
 function validateDnsLane(env) {
   const issues = [];
+  if (value(env, "ZSSH_DNS_PROVIDER") === "external") return issues;
 
   if (configured(env, "CLOUDFLARE_ZONE_ID")) {
     try {
@@ -429,7 +433,7 @@ export function buildProductionReadinessAudit(env = process.env) {
   );
   const publicOriginStage = value(env, "ZSSH_PUBLIC_ORIGIN_STAGE");
   const publicIngressReady = PUBLIC_INGRESS_READY_STAGES.has(publicOriginStage);
-  const publicIngressNeedsRollout = dnsPublicationObserved(env) && !publicIngressReady;
+  const publicIngressNeedsRollout = lanes.dns_publication.ready && !publicIngressReady;
   const publicIngressIssuerIssue = publicIngressNeedsRollout
     ? validateHttpsUrl(env, "ZSSH_OAUTH_ISSUER", { requirePublicHostname: true })
     : null;
