@@ -46,6 +46,16 @@ Keep `ZSSH_ENROLLMENT_FILE` on persistent 0700 private storage, and `gateway-pub
 
 The Caddy configuration must terminate mTLS on the ChatGPT-only host, enforce OpenAI's client certificate requirements, strip untrusted proxy-secret headers, and set the private header **only** on accepted MCP requests. Configure a normal TLS route for `zssh.zennay.nl` to the same loopback gateway for `/enrollment/v1/claim` and signed agent endpoints. Do not copy a permissive reverse-proxy snippet without these checks.
 
+## Isolated Caddy ingress (prepared, not deployed)
+
+An opt-in dual-host example is included at `deploy/Caddyfile.chatgpt-mtls.example`. It keeps `https://zssh.zennay.nl` open only for `/health`, signed agent requests and a one-use enrollment claim; anonymous MCP routing is deliberately absent there. The `chatgpt.zssh.zennay.nl` hostname requests and verifies an OpenAI-issued client certificate and only then routes `/mcp`, injecting the locally configured proxy secret. Both public hostnames need separate DNS A records and valid server certificates.
+
+**Caddy must be at least v2.11.0**. The earlier v2.10.2 release was affected by [GHSA-hffm-g8v7-wrv7](https://github.com/caddyserver/caddy/security/advisories/GHSA-hffm-g8v7-wrv7), in which unreadable CA trust files could cause client trust validation to fail open. Download the current OpenAI Root and Connectors intermediate certificates only from the [official OpenAI mTLS guide](https://developers.openai.com/plugins/build/auth). Store the intermediate PEM as `/etc/caddy/openai-connectors-mtls-intermediate.pem` with appropriate read access for Caddy, check its chain, and validate the client SAN `mtls.prod.connectors.openai.com`. Do not disable `require_and_verify` or add a catch-all reverse proxy on the ChatGPT-only host.
+
+Provision a 32-byte random base64url `ZSSH_CHATGPT_PROXY_SECRET` only in the central gateway's private environment and the Caddy service environment, not in the public Caddyfile, command lines, GitHub, Notion or chat. The Caddy example overwrites this header *only* on a verified mTLS request and removes it from signed agent routes. Require a fail-closed preflight if Caddy's secret value or intermediate CA trust is absent.
+
+**User-level authorization caveat:** OpenAI documents `openai/subject` for identification and rate limiting, not as a general replacement for user authentication. The mTLS client certificate authenticates ChatGPT (the client), not an individual human. Before enabling write-capable privileged target tools for multiple users, the owner/profile binding must be independently audited; use OAuth or a separate user-scoped secure authorization mechanism if that security claim cannot be substantiated. An unverified `openai/subject` or header must never authorize a target.
+
 ## Gateway switch-over gates
 
 - Preserve existing `zssh.service` on port 8788 (private, no new remote access).
