@@ -1147,6 +1147,7 @@ function createMcpServer() {
               url: z.string().max(3000).optional(),
               attach: z.boolean().optional(),
               allowed_hosts: z.array(z.string().min(1).max(253)).min(1).max(30).optional(),
+              ref: z.string().max(32).regex(/^c[0-9]+_[0-9]+$/).optional(),
               selector: z.string().max(240).optional(),
               role: z.string().max(100).optional(),
               name: z.string().max(200).optional(),
