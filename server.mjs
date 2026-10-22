@@ -1246,6 +1246,61 @@ function createMcpServer() {
       }
     );
     server.registerTool(
+      "zssh_processes",
+      {
+        title: "Processes (structured)",
+        description: "Read a compact list of the top Linux processes by CPU. No arguments, raw process command lines, or privileged access.",
+        inputSchema: {},
+        annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }
+      },
+      async () => {
+        try {
+          const value = await runFixedProgram("/usr/bin/ps",
+            ["-eo", "pid,ppid,comm,etime,%cpu,%mem", "--sort=-%cpu"], getAllowedRoots()[0], "processes", 8);
+          if (!value.ok) return result({ ok: false, error: value.error || "Process inventory unavailable" }, true);
+          return result({ ok: true, processes: value.stdout.split("\n").slice(1, 26).map(line => {
+            const match = /^\s*(\d+)\s+(\d+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s*$/.exec(line);
+            return match ? { pid: Number(match[1]), ppid: Number(match[2]),
+              command: match[3].slice(0, 100), elapsed: match[4],
+              cpu_percent: Number(match[5]), memory_percent: Number(match[6]) } : null;
+          }).filter(Boolean) });
+        } catch {
+          return result({ ok: false, error: "Process inventory unavailable" }, true);
+        }
+      }
+    );
+    server.registerTool(
+      "zssh_docker_inventory",
+      {
+        title: "Docker inventory",
+        description: "Read bounded container/image metadata without Docker write access or arbitrary command arguments. Private-only and disabled until explicitly enabled by the operator.",
+        inputSchema: { kind: z.enum(["containers", "images"]) },
+        annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }
+      },
+      async ({ kind }) => {
+        if (process.env.ZSSH_DOCKER_READ_MODE !== "enabled") {
+          return result({ ok: false, error: "Docker reads are disabled by operator policy" }, true);
+        }
+        try {
+          const fmt = kind === "containers"
+            ? "{{.ID}}|{{.Image}}|{{.Names}}|{{.Status}}"
+            : "{{.Repository}}|{{.Tag}}|{{.ID}}";
+          const args = kind === "containers"
+            ? ["ps", "--all", "--format", fmt]
+            : ["images", "--format", fmt];
+          const value = await runFixedProgram("/usr/bin/docker", args,
+            getAllowedRoots()[0], "docker_inventory", 8);
+          if (!value.ok) return result({ ok: false, error: "Docker inventory unavailable" }, true);
+          const rows = value.stdout.split("\n").filter(Boolean).slice(0, 35)
+            .map(line => redactSecrets(line).split("|").map(item => item.slice(0, 140)));
+          return result({ ok: true, kind, columns: kind === "containers"
+            ? ["id", "image", "name", "status"] : ["repository", "tag", "id"], rows });
+        } catch {
+          return result({ ok: false, error: "Docker inventory unavailable" }, true);
+        }
+      }
+    );
+    server.registerTool(
       "zssh_run_safe",
       {
         title: "Run safe program",

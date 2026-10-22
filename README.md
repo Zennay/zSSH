@@ -4,6 +4,10 @@
 
 zSSH is a **standalone security-first remote operations project**. zCloud is its control-plane/dashboard integration, not its parent project.
 
+## Structured private VPS observations
+
+For low-latency, low-token VPS inspection, private zSSH now exposes `zssh_processes` (top 25 CPU-consuming processes, no command-line arguments) and `zssh_docker_inventory` (bounded container/image metadata, no arbitrary Docker verbs). Docker inventory is **disabled by default**; enabling it requires an operator to grant Docker socket access to the existing restricted zSSH service account and set `ZSSH_DOCKER_READ_MODE=enabled`. Membership in the Docker group is effectively high privilege: avoid enabling it on a general public target; do not enable raw Docker management or unrestricted `docker exec`. Deployment/restarts remain governed by existing reviewed zCloud Actions and zSSH service capabilities. No production activation is implied.
+
 ## Browser Agent capability (private only, no extra service)
 
 zSSH can now run an optional [BrowserAgent](https://github.com/Zennay/BrowserAgent) Playwright module **in this zSSH Node process**. This replaces the previous plan for an independent VPS-agent daemon. zCloud workers select the structured `zssh_browser` capability for browser tasks; shell/files/Git/services stay in zSSH's existing tools.
