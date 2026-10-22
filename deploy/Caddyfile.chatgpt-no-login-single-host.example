@@ -39,7 +39,7 @@ zssh.zennay.nl {
             header_up -X-Zssh-Chatgpt-Proxy-Secret
         }
     }
-    @public path / /health /privacy /terms /support /.well-known/openai-apps-challenge
+    @public path / /install /health /privacy /terms /support /.well-known/openai-apps-challenge
     handle @public {
         reverse_proxy 127.0.0.1:8789 {
             header_up -X-Zssh-Chatgpt-Proxy-Secret
