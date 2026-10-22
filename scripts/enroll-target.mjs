@@ -93,7 +93,7 @@ if (keyStat) {
 }
 if (agentEnvStat) {
   const old = await fs.readFile(agentEnvFile, "utf8");
-  const settings = new Map(old.split(/\\r?\\n/).filter(Boolean).map(line => {
+  const settings = new Map(old.split(/\r?\n/).filter(Boolean).map(line => {
     const match = /^([A-Z][A-Z0-9_]*)=(.*)$/.exec(line);
     if (!match) fail("existing agent configuration has an invalid line");
     return [match[1], match[2]];
