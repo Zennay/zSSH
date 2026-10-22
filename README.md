@@ -324,6 +324,16 @@ Request header: x-zssh-key: <ZSSH_API_KEY>
 Existing bearer authentication remains available for Claude Code and other
 clients that can set an `Authorization: Bearer ...` header.
 
+## Login-free ChatGPT enrollment (optional, guarded)
+
+The desired end-user flow is **add zSSH in ChatGPT → ask for a personal VPS install command → paste it once → stay connected**. The 256-bit `enr_...` code expires after 15 minutes and is used exactly once; the enrolled VPS keeps its Ed25519 identity and outbound systemd agent across restarts and never needs to log in every 15 minutes.
+
+An opt-in `ZSSH_PUBLIC_AUTH_MODE=chatgpt` now supports this flow **without an Auth0 sign-in**. It is NOT anonymous trust: the ingress must verify ChatGPT's OpenAI-managed mTLS client certificate and inject a private local proxy attestation. The gateway then derives a persistent profile ID from the platform-supplied `_meta["openai/subject"]`. That subject is not independently secure without the authenticated transport. In this mode a signed, one-use VPS enrollment claim is automatically approved; a host key can still be revoked.
+
+**Do not turn on this mode at the public hostname until mTLS enforcement, certificate chain/SAN checks, and dedicated HTTPS routing are set up.** Ordinary public requests cannot access the MCP tools. Keep an independent non-mTLS agent enrollment hostname so the VPS can post its signed claim over HTTPS.
+
+See [the login-free rollout and security prerequisites](docs/research/chatgpt-no-login-enrollment-2026-10-22.md). OAuth remains the production default until an operator explicitly elects this verified no-login mode.
+
 ## Personalized command from the ChatGPT zSSH plugin (staged)
 
 The **plugin**, not the VPS user, creates the personal code. After OAuth sign-in, `get_server_install_command` issues a 256-bit, single-use, 15-minute `enr_...` code bound to the authenticated owner. The result includes a complete shell command with that code already inserted:
