@@ -6,9 +6,16 @@ Status: implementation branch; **do not enable on the live gateway without the m
 
 1. Add the zSSH plugin in ChatGPT.
 2. Ask for a new VPS install command. `get_server_install_command` returns one command with a random 256-bit `enr_...` code.
-3. Run that exact command **once** on the VPS.
-4. The installer creates a local Ed25519 private key, signs the enrollment claim, and installs a persistent, outbound-only agent.
-5. The gateway atomically consumes the one-use code and registers that signed host key to the verified ChatGPT subject. It can be revoked through the plugin.
+3. Run that exact command **once** on the VPS. The generated command has this shape (the actual plugin supplies a private 256-bit code):
+
+   ```bash
+   curl --proto '=https' --tlsv1.2 -fsSL https://zssh.zennay.nl/install | sudo bash -s -- --enroll enr_<PERSONAL_CODE>
+   ```
+
+4. The public `GET /install` endpoint serves a code-free shell wrapper. The wrapper fetches the reviewed **immutable Git SHA** for `deploy/install.sh`; the one-use code is not sent in an HTTP path, query or redirect.
+5. The VPS creates a local Ed25519 private key, signs the enrollment claim, and installs a persistent, outbound-only agent. **The agent is not yet authorized to execute tools.**
+6. Compare the `SHA256:` fingerprint printed on the VPS with the pending fingerprint shown by `get_server_enrollment_status`. Explicitly approve the exact match with `approve_server_enrollment` in ChatGPT. No second VPS command is necessary; only then is the host key registered to the account.
+7. `revoke_enrolled_server` can disable the approved identity and active session.
 
 The code expires after 15 minutes and cannot be reused. **The host identity does not expire when the code expires.** The systemd target agent starts on reboot, reconnects automatically, and uses signed requests, not the expired code. Compromise or theft of the unredeemed install command remains a security risk; do not share it.
 
@@ -17,7 +24,7 @@ The code expires after 15 minutes and cannot be reused. **The host identity does
 `_meta["openai/subject"]` identifies an anonymized ChatGPT user, but is NOT independently authenticated by zSSH. Never authorize server operations from this value on an ordinary unauthenticated/public MCP connection. This opt-in mode requires:
 
 - ChatGPT's OpenAI-managed client certificate authenticated via **mTLS** at a dedicated ingress hostname; verify its CA chain, client-auth EKU and expected leaf SAN. See https://developers.openai.com/plugins/build/auth
-- A **separate ChatGPT-only HTTPS hostname** (for example `chatgpt.zssh.zennay.nl`) requiring mTLS. Keep `zssh.zennay.nl` as the normal TLS hostname for VPS agent enrollment and signed outbound agent requests, which cannot present the ChatGPT certificate.
+- A verified ChatGPT-only `/mcp` ingress (either the single-host Caddy example or a separate mTLS hostname). Ordinary `/install`, signed VPS enrollment and agent paths need normal HTTPS without ChatGPT client certificates; they must never forward the privileged proxy attestation.
 - The reverse proxy MUST **discard any incoming `X-Zssh-Chatgpt-Proxy-Secret`** and inject the gateway's random secret only after a successful ChatGPT mTLS check. This secret must be >=43 random base64url characters, shared only between ingress and loopback Node service.
 - Node must listen on loopback only. The gateway additionally enforces loopback source + constant-time proxy-secret comparison before it accepts `openai/subject`.
 - Distinct per-profile hashed owner IDs are derived server-side from the verified subject and stable resource origin. Revocation of a host prevents new agent sessions and commands.
@@ -44,11 +51,11 @@ ZSSH_PUBLIC_ALLOWED_ROOTS=/home/zssh/public-review
 
 Keep `ZSSH_ENROLLMENT_FILE` on persistent 0700 private storage, and `gateway-public.env` mode 0600. Do not copy the private gateway API keys, bearer tokens or client token store. Do not expose raw shell, or open a new inbound port on an enrolled VPS. The deployed installer and the gateway need a mutually compatible pinned release.
 
-The Caddy configuration must terminate mTLS on the ChatGPT-only host, enforce OpenAI's client certificate requirements, strip untrusted proxy-secret headers, and set the private header **only** on accepted MCP requests. Configure a normal TLS route for `zssh.zennay.nl` to the same loopback gateway for `/enrollment/v1/claim` and signed agent endpoints. Do not copy a permissive reverse-proxy snippet without these checks.
+The Caddy configuration must terminate mTLS on the ChatGPT-only host, enforce OpenAI's client certificate requirements, strip untrusted proxy-secret headers, and set the private header **only** on accepted MCP requests. Configure a normal TLS route for `zssh.zennay.nl` to the same loopback gateway for `/install`, `/enrollment/v1/claim` and signed agent endpoints. Do not copy a permissive reverse-proxy snippet without these checks.
 
 ## Preferred minimal production layout (one hostname)
 
-The simpler option is `deploy/Caddyfile.chatgpt-no-login-single-host.example`. It reuses the already-established `zssh.zennay.nl` DNS and valid HTTPS certificate. One TLS virtual host uses `client_auth mode verify_if_given` with an exact OpenAI Connectors intermediate trust pool: an unverified or certificate-free request may fetch public pages, the domain-verification challenge, the one-use signed claim and signed agent transport; **only a successfully validated OpenAI mTLS client certificate with the exact OpenAI SAN can reach `/mcp`**. Other `/mcp` requests receive 403, and no client-supplied proxy attestation header survives. The public Node gateway also checks the private proxy secret and loopback origin before accepting a request.
+The simpler option is `deploy/Caddyfile.chatgpt-no-login-single-host.example`. It reuses the already-established `zssh.zennay.nl` DNS and valid HTTPS certificate. One TLS virtual host uses `client_auth mode verify_if_given` with an exact OpenAI Connectors intermediate trust pool: an unverified or certificate-free request may fetch the code-free `/install` wrapper, public pages, the domain-verification challenge, the one-use signed claim and signed agent transport; **only a successfully validated OpenAI mTLS client certificate with the exact OpenAI SAN can reach `/mcp`**. Other `/mcp` requests receive 403, and no client-supplied proxy attestation header survives. The public Node gateway also checks the private proxy secret and loopback origin before accepting a request.
 
 Do not replace the live Caddyfile with the example until you have installed and reviewed Caddy >=2.11, provisioned the official trust PEM, provisioned the Caddy and gateway secret as service environment variables, validated the adapted Caddyfile, and confirmed plugin tool scans and per-user authorization. The original two-host `deploy/Caddyfile.chatgpt-mtls.example` remains an alternative for operators who want separate DNS origins.
 
@@ -69,7 +76,7 @@ Provision a 32-byte random base64url `ZSSH_CHATGPT_PROXY_SECRET` only in the cen
 - Preserve existing `zssh.service` on port 8788 (private, no new remote access).
 - Update the separately installed `zssh-public.service` from a pinned release and enable it for reboot persistence only when its configuration has been reviewed.
 - In `chatgpt` mode no OAuth metadata or login is offered; `/mcp` without the verified proxy attestation must return 401.
-- The signed enroll claim endpoint remains publicly callable over ordinary HTTPS **only with a 256-bit, unused, unexpired code**; it is rate limited.
+- The code-free `GET /install` wrapper is public and cached nowhere. The signed enroll claim endpoint remains callable over ordinary HTTPS **only with a 256-bit, unused, unexpired code**; it is rate limited. Claims remain **pending** until a human explicitly confirms the exact VPS Ed25519 fingerprint within the plugin.
 - Check that the trusted ChatGPT connection can generate a one-use command, the target can claim it, the enrolled agent stays connected across a reboot, and revocation blocks future agent sessions.
 - Do not switch the existing public plugin or turn off Auth0 until dedicated ChatGPT mTLS ingress and host provisioning have been confirmed. Old OAuth mode is preserved as fallback.
 
