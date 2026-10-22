@@ -48,8 +48,12 @@ function allowEnrollmentClaim(remoteAddress, now = Date.now()) {
 
 const PRIVATE_CLIENT_TOKEN_AUTH_CONFIGURED = PLUGIN_PROFILE !== "public" && CLIENT_TOKEN_AUTH_CONFIGURED;
 const OPENAI_APPS_CHALLENGE_TOKEN = process.env.OPENAI_APPS_CHALLENGE_TOKEN || "";
-const PUBLIC_AUTH_MODE = process.env.ZSSH_PUBLIC_AUTH_MODE === "legacy" ? "legacy" : "oauth";
+// Login-free ChatGPT access must be authenticated by a verifying mTLS ingress.
+const PUBLIC_AUTH_MODE = process.env.ZSSH_PUBLIC_AUTH_MODE === "chatgpt"
+  ? "chatgpt" : process.env.ZSSH_PUBLIC_AUTH_MODE === "legacy" ? "legacy" : "oauth";
 const OAUTH_CONFIG = oauthConfigFromEnv();
+const PUBLIC_RESOURCE = OAUTH_CONFIG?.resource || String(process.env.ZSSH_PUBLIC_BASE_URL || "").trim().replace(/\/$/, "");
+const CHATGPT_PROXY_SECRET = String(process.env.ZSSH_CHATGPT_PROXY_SECRET || "");
 const PAIRING_REQUIRED = PLUGIN_PROFILE === "public" && process.env.ZSSH_PAIRING_REQUIRED !== "0";
 const PUBLIC_RATE_LIMIT_CONFIG = publicRateLimitFromEnv(process.env);
 const PUBLIC_RATE_LIMITER = createFixedWindowRateLimiter(PUBLIC_RATE_LIMIT_CONFIG);
@@ -585,7 +589,7 @@ function result(value, isError = false) {
 async function forwardPublicAgentTool(extra, tool, args = {}) {
   if (!OUTBOUND_AGENT_MODE) throw new Error("outbound agent mode is not configured");
   if (ENROLLMENT_ENABLED) {
-    const owner = profileIdFromAuth(authInfoFromExtra(extra), OAUTH_CONFIG.resource);
+    const owner = profileIdFromAuth(authInfoFromExtra(extra), PUBLIC_RESOURCE);
     const owned = await ENROLLMENT_STORE.list(owner);
     if (owned.length !== 1) {
       const reason = owned.length ? "multiple_targets_require_selection" : "not_paired";
@@ -604,7 +608,7 @@ async function forwardPublicAgentTool(extra, tool, args = {}) {
     return await active.send({ tool, args });
   }
   const route = await resolveAuthenticatedTarget(authInfoFromExtra(extra), {
-    resource: OAUTH_CONFIG?.resource || "",
+    resource: PUBLIC_RESOURCE,
     sessions: TARGET_SESSIONS,
   });
   if (!route.routable) {
@@ -625,12 +629,22 @@ function agentToolResult(value) {
 }
 
 function authInfoFromExtra(extra) {
-  return extra?.authInfo || extra?.http?.authInfo || null;
+  const info = extra?.authInfo || extra?.http?.authInfo || null;
+  if (PUBLIC_AUTH_MODE !== "chatgpt") return info;
+  // An OpenAI subject is NOT authentication on its own. Only consume the
+  // platform-supplied subject after a verified-mTLS local ingress attestation.
+  if (info?.mode !== "verified-chatgpt") return null;
+  const subject = extra?._meta?.["openai/subject"];
+  if (typeof subject !== "string" || !/^[A-Za-z0-9._:@-]{8,256}$/.test(subject)) return null;
+  return { ...info, clientId: subject, scopes: ["zssh:read", "zssh:write"],
+    extra: { sub: subject, issuer: "https://chatgpt.com" } };
 }
 
 function publicSecurity(scope, extraMeta = {}) {
   if (PLUGIN_PROFILE !== "public") return {};
-  const securitySchemes = [{ type: "oauth2", scopes: [scope] }];
+  const securitySchemes = PUBLIC_AUTH_MODE === "chatgpt"
+    ? [{ type: "noauth" }]
+    : [{ type: "oauth2", scopes: [scope] }];
   return {
     securitySchemes,
     _meta: {
@@ -643,14 +657,20 @@ function publicSecurity(scope, extraMeta = {}) {
 function publicProfileFromAuth(extra) {
   const authInfo = authInfoFromExtra(extra);
   return {
-    id: profileIdFromAuth(authInfo, OAUTH_CONFIG?.resource || ""),
+    id: profileIdFromAuth(authInfo, PUBLIC_RESOURCE),
     name: "zSSH",
     nickname: TARGET_LABEL,
   };
 }
 
 function oauthToolError(extra, scope) {
-  if (PLUGIN_PROFILE !== "public" || PUBLIC_AUTH_MODE !== "oauth") return null;
+  if (PLUGIN_PROFILE !== "public") return null;
+  if (PUBLIC_AUTH_MODE === "chatgpt") {
+    return authInfoFromExtra(extra) ? null : result({
+      error: "A verified ChatGPT connection with stable subject metadata is required."
+    }, true);
+  }
+  if (PUBLIC_AUTH_MODE !== "oauth") return null;
   try {
     requireScopes(authInfoFromExtra(extra), [scope]);
     return null;
@@ -687,9 +707,9 @@ export function publicPairingStatus(pairing, { targetLabel = TARGET_LABEL } = {}
 async function publicToolAuthorizationError(extra, scope, { requirePairing = true } = {}) {
   const oauthError = oauthToolError(extra, scope);
   if (oauthError) return oauthError;
-  if (PLUGIN_PROFILE !== "public" || PUBLIC_AUTH_MODE !== "oauth" || !PAIRING_REQUIRED || !requirePairing) return null;
+  if (PLUGIN_PROFILE !== "public" || !["oauth", "chatgpt"].includes(PUBLIC_AUTH_MODE) || !PAIRING_REQUIRED || !requirePairing) return null;
   if (ENROLLMENT_ENABLED) {
-    const owner = profileIdFromAuth(authInfoFromExtra(extra), OAUTH_CONFIG.resource);
+    const owner = profileIdFromAuth(authInfoFromExtra(extra), PUBLIC_RESOURCE);
     const targets = await ENROLLMENT_STORE.list(owner);
     if (targets.length === 1) return null;
     return {
@@ -701,7 +721,7 @@ async function publicToolAuthorizationError(extra, scope, { requirePairing = tru
   }
 
   const pairing = await getPairingStatus(authInfoFromExtra(extra), {
-    resource: OAUTH_CONFIG?.resource || "",
+    resource: PUBLIC_RESOURCE,
     createRequest: false,
   });
   if (pairing.paired) return null;
@@ -885,7 +905,7 @@ function createMcpServer() {
           nickname: z.string().optional(),
         },
         annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-        ...publicSecurity(OAUTH_CONFIG?.readScope || "zssh:read", { "openai/profile": true })
+        ...publicSecurity(OAUTH_CONFIG?.readScope || "zssh:read", PUBLIC_AUTH_MODE === "oauth" ? { "openai/profile": true } : {})
       },
       async (_args, extra) => {
         const authError = await publicToolAuthorizationError(extra, OAUTH_CONFIG?.readScope || "zssh:read", { requirePairing: false });
@@ -932,11 +952,11 @@ function createMcpServer() {
           const authError = oauthToolError(extra, OAUTH_CONFIG?.writeScope || "zssh:write");
           if (authError) return authError;
           try {
-            const owner = profileIdFromAuth(authInfoFromExtra(extra), OAUTH_CONFIG.resource);
+            const owner = profileIdFromAuth(authInfoFromExtra(extra), PUBLIC_RESOURCE);
             const issued = await ENROLLMENT_STORE.issue(owner);
             const installCommand = renderEnrollmentInstallCommand({
               code: issued.enrollment_code,
-              gatewayUrl: OAUTH_CONFIG.resource,
+              gatewayUrl: PUBLIC_RESOURCE,
               installerRef: process.env.ZSSH_INSTALLER_REF,
             });
             const value = { install_command: installCommand, expires_at: issued.expires_at };
@@ -960,7 +980,7 @@ function createMcpServer() {
           const authError = oauthToolError(extra, OAUTH_CONFIG?.readScope || "zssh:read");
           if (authError) return authError;
           try {
-            const owner = profileIdFromAuth(authInfoFromExtra(extra), OAUTH_CONFIG.resource);
+            const owner = profileIdFromAuth(authInfoFromExtra(extra), PUBLIC_RESOURCE);
             const value = { pending: await ENROLLMENT_STORE.pending(owner), targets: await ENROLLMENT_STORE.list(owner) };
             return { content: [{ type: "text", text: JSON.stringify(value) }], structuredContent: value, isError: false };
           } catch (err) {
@@ -985,7 +1005,7 @@ function createMcpServer() {
           const authError = oauthToolError(extra, OAUTH_CONFIG?.writeScope || "zssh:write");
           if (authError) return authError;
           try {
-            const owner = profileIdFromAuth(authInfoFromExtra(extra), OAUTH_CONFIG.resource);
+            const owner = profileIdFromAuth(authInfoFromExtra(extra), PUBLIC_RESOURCE);
             const value = await ENROLLMENT_STORE.approve({ profileId: owner, targetId: target_id, fingerprint });
             return { content: [{ type: "text", text: JSON.stringify(value) }], structuredContent: value, isError: false };
           } catch (err) {
@@ -1006,7 +1026,7 @@ function createMcpServer() {
           const authError = oauthToolError(extra, OAUTH_CONFIG?.writeScope || "zssh:write");
           if (authError) return authError;
           try {
-            const owner = profileIdFromAuth(authInfoFromExtra(extra), OAUTH_CONFIG.resource);
+            const owner = profileIdFromAuth(authInfoFromExtra(extra), PUBLIC_RESOURCE);
             const value = await ENROLLMENT_STORE.revoke(owner, target_id);
             if (value.revoked) TARGET_SESSIONS.unregister(target_id);
             return { content: [{ type: "text", text: JSON.stringify(value) }], structuredContent: value, isError: false };
@@ -1043,7 +1063,7 @@ function createMcpServer() {
         try {
           let value;
           if (ENROLLMENT_ENABLED) {
-            const owner = profileIdFromAuth(authInfoFromExtra(extra), OAUTH_CONFIG.resource);
+            const owner = profileIdFromAuth(authInfoFromExtra(extra), PUBLIC_RESOURCE);
             const targets = await ENROLLMENT_STORE.list(owner);
             const pending = await ENROLLMENT_STORE.pending(owner);
             value = {
@@ -1054,7 +1074,7 @@ function createMcpServer() {
             };
           } else {
             const pairing = await getPairingStatus(authInfoFromExtra(extra), {
-              resource: OAUTH_CONFIG?.resource || "",
+              resource: PUBLIC_RESOURCE,
               createRequest: true,
             });
             value = publicPairingStatus(pairing);
@@ -1268,6 +1288,20 @@ function isMcpPath(pathname) {
 async function authorizeRequest(req, pathname) {
   // Public OAuth is deliberately exclusive: private local client tokens never
   // become a fallback around the reviewed OAuth + pairing boundary.
+  if (PLUGIN_PROFILE === "public" && PUBLIC_AUTH_MODE === "chatgpt") {
+    // Only the proxy which verifies OpenAI's client certificate may insert
+    // this private header. The Node listener remains loopback-only.
+    if (!isLoopbackRequest(req) ||
+        !secureEqual(req.headers["x-zssh-chatgpt-proxy-secret"], CHATGPT_PROXY_SECRET)) {
+      const error = new Error("verified ChatGPT ingress required");
+      error.code = "invalid_token";
+      throw error;
+    }
+    const authInfo = { mode: "verified-chatgpt", clientId: "verified-chatgpt",
+      scopes: ["zssh:read", "zssh:write"] };
+    req.auth = authInfo;
+    return authInfo;
+  }
   if (PLUGIN_PROFILE === "public" && PUBLIC_AUTH_MODE === "oauth") {
     const authInfo = await verifyOAuthAuthorizationHeader(req.headers.authorization, OAUTH_CONFIG);
     // MCP SDK v1 reads req.auth and forwards it to tool callbacks as extra.authInfo.
@@ -1314,7 +1348,7 @@ function unauthorizedResponse(res, error) {
 
 function applyPublicRateLimit(res, authInfo) {
   if (PLUGIN_PROFILE !== "public" || PUBLIC_AUTH_MODE !== "oauth") return true;
-  const profileId = profileIdFromAuth(authInfo, OAUTH_CONFIG?.resource || "");
+  const profileId = profileIdFromAuth(authInfo, PUBLIC_RESOURCE);
   const decision = PUBLIC_RATE_LIMITER.consume(profileId);
   res.setHeader("X-RateLimit-Limit", String(decision.limit));
   res.setHeader("X-RateLimit-Remaining", String(decision.remaining));
@@ -1341,11 +1375,23 @@ export function start() {
     throw new Error("zSSH refuses to run as root; use a dedicated unprivileged service account");
   }
   if (ENROLLMENT_ENABLED && (
-    PUBLIC_AUTH_MODE !== "oauth" || !OAUTH_CONFIG ||
-    AGENT_VERIFIER ||
+    !["oauth", "chatgpt"].includes(PUBLIC_AUTH_MODE) ||
+    (PUBLIC_AUTH_MODE === "oauth" && !OAUTH_CONFIG) ||
+    !PUBLIC_RESOURCE || AGENT_VERIFIER ||
     !/^[a-f0-9]{40}$/.test(String(process.env.ZSSH_INSTALLER_REF || ""))
   )) {
-    throw new Error("personal enrollment requires OAuth and a pinned 40-character ZSSH_INSTALLER_REF");
+    throw new Error("personal enrollment requires verified owner identity and a pinned 40-character installer ref");
+  }
+  if (PLUGIN_PROFILE === "public" && PUBLIC_AUTH_MODE === "chatgpt") {
+    if (process.env.NODE_ENV !== "production" ||
+        !/^[A-Za-z0-9_-]{43,}$/.test(CHATGPT_PROXY_SECRET)) {
+      throw new Error("ChatGPT mode requires production and a strong private proxy secret");
+    }
+    const url = new URL(PUBLIC_RESOURCE);
+    if (url.protocol !== "https:" || url.origin !== PUBLIC_RESOURCE ||
+        url.username || url.password || url.search || url.hash) {
+      throw new Error("ChatGPT mode requires an exact HTTPS public origin");
+    }
   }
   if (PLUGIN_PROFILE === "public" && EXEC_MODE === "full") {
     throw new Error("public plugin profile refuses ZSSH_EXEC_MODE=full; raw shell must stay disabled");
@@ -1376,7 +1422,7 @@ export function start() {
   if (PLUGIN_PROFILE === "public" && !PAIRING_REQUIRED && process.env.NODE_ENV === "production" && process.env.ZSSH_ALLOW_UNPAIRED_PUBLIC !== "1") {
     throw new Error("production public profile requires target pairing; disabling it requires explicit ZSSH_ALLOW_UNPAIRED_PUBLIC=1");
   }
-  if (process.env.NODE_ENV === "production" && !(PLUGIN_PROFILE === "public" && PUBLIC_AUTH_MODE === "oauth") && !CAPABILITY_TOKEN && !API_KEY && !DEV_TOKEN && !PRIVATE_CLIENT_TOKEN_AUTH_CONFIGURED && !TRUST_LOCAL_TUNNEL) {
+  if (process.env.NODE_ENV === "production" && !(PLUGIN_PROFILE === "public" && ["oauth", "chatgpt"].includes(PUBLIC_AUTH_MODE)) && !CAPABILITY_TOKEN && !API_KEY && !DEV_TOKEN && !PRIVATE_CLIENT_TOKEN_AUTH_CONFIGURED && !TRUST_LOCAL_TUNNEL) {
     throw new Error("production requires authentication; configure revocable client tokens, a capability token, ZSSH_API_KEY, a bearer token, or explicitly trust the loopback tunnel");
   }
 
@@ -1521,7 +1567,7 @@ export function start() {
     // Public OAuth remains exclusive even if a stale private capability token is
     // accidentally present in the environment. Rate limiting is keyed only by
     // the authenticated opaque zSSH profile, never by the raw bearer token.
-    if (PLUGIN_PROFILE === "public" && PUBLIC_AUTH_MODE === "oauth") {
+    if (PLUGIN_PROFILE === "public" && ["oauth", "chatgpt"].includes(PUBLIC_AUTH_MODE)) {
       if (!requestAuth) return unauthorizedResponse(res, new Error("OAuth authentication required"));
       try {
         if (!applyPublicRateLimit(res, requestAuth)) return;
