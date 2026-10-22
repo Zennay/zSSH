@@ -5,7 +5,7 @@ import { promises as fs } from "node:fs";
 import { normalizeTargetId } from "./pairing.mjs";
 
 // This is the durable enrollment state machine, not a public HTTP endpoint.
-// Callers MUST derive profile_id from verified OAuth, not client-supplied JSON.
+// Callers MUST derive profile_id from verified OAuth or verified ChatGPT mTLS identity, never client-supplied JSON.
 // Existing paired agents are not changed by this module.
 const CODE_RE = /^enr_[A-Za-z0-9_-]{43}$/;
 const PROFILE_RE = /^zssh_[a-f0-9]{32}$/;
@@ -141,7 +141,7 @@ export class EnrollmentStore {
     });
   }
 
-  async claim({ code, targetId, publicKeyPem, nonce, signature }, now = Date.now()) {
+  async claim({ code, targetId, publicKeyPem, nonce, signature }, now = Date.now(), { autoApprove = false } = {}) {
     const id = normalizeTargetId(targetId);
     const hash = requestHash(code);
     const key = validatePublicKey(publicKeyPem);
@@ -167,6 +167,21 @@ export class EnrollmentStore {
       request.fingerprint = fp;
       request.claimed_at = now;
       request.expires_at = now + this.#approvalTtlMs;
+      if (autoApprove) {
+        // The 256-bit single-use code already names the verified owner and
+        // this claim proves possession of the target's private Ed25519 key.
+        // No reusable credential is ever copied into the installer.
+        state.targets[id] = {
+          profile_id: request.profile_id,
+          public_key_pem: request.public_key_pem,
+          fingerprint: fp,
+          connected_at: now,
+          revoked_at: null,
+        };
+        delete state.requests[hash];
+        await writeState(this.#file, state);
+        return { approved: true, awaiting_approval: false, target_id: id, fingerprint: fp };
+      }
       await writeState(this.#file, state);
       return {
         awaiting_approval: true,

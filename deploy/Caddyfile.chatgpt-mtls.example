@@ -1,0 +1,68 @@
+# EXAMPLE ONLY: requires Caddy >=2.11.0, two public DNS records,
+# the verified official OpenAI Connectors intermediate CA certificate
+# and a strong private environment variable set in the Caddy service.
+# See docs/research/chatgpt-no-login-enrollment-2026-10-22.md.
+#
+# This is a FRONTEND/CLIENT authenticator, not an end-user login system.
+# The platform-provided openai/subject is used for profile separation.
+# An improperly configured proxy can grant VPS access to another user.
+#
+# HTTPS origin for a signed host enrollment claim / agent connections.
+# No anonymous /mcp access is routed through this hostname.
+zssh.zennay.nl {
+    @agents path /agent/v1/* /enrollment/v1/claim
+    handle @agents {
+        reverse_proxy 127.0.0.1:8789 {
+            header_up -X-Zssh-Chatgpt-Proxy-Secret
+        }
+    }
+    @public_pages path / /health /privacy /terms /support
+    handle @public_pages {
+        reverse_proxy 127.0.0.1:8789 {
+            header_up -X-Zssh-Chatgpt-Proxy-Secret
+        }
+    }
+    handle {
+        respond "Not Found" 404
+    }
+}
+
+# ChatGPT-only MCP hostname. No user login screen. Requires a verified
+# OpenAI-managed client certificate, including the expected SAN.
+chatgpt.zssh.zennay.nl {
+    tls {
+        client_auth {
+            mode verify_if_given
+            trust_pool file /etc/caddy/openai-connectors-mtls-intermediate.pem
+        }
+    }
+
+    # These public verification paths never receive the private proxy secret.
+    # "verify_if_given" allows them to work without a client certificate.
+    # The MCP route below REQUIRES a verified OpenAI client certificate.
+    @challenge path /.well-known/openai-apps-challenge
+    handle @challenge {
+        reverse_proxy 127.0.0.1:8789 {
+            header_up -X-Zssh-Chatgpt-Proxy-Secret
+        }
+    }
+
+    # A valid chain alone is not enough: verify OpenAI's documented client SAN.
+    @openai expression `"mtls.prod.connectors.openai.com" in {http.request.tls.client.san.dns_names}`
+    handle @openai {
+        @mcp path /mcp
+        handle @mcp {
+            reverse_proxy 127.0.0.1:8789 {
+                # Deliberately overwrite any value presented by the caller.
+                # Never expose this private secret to the public response.
+                header_up X-Zssh-Chatgpt-Proxy-Secret {env.ZSSH_CHATGPT_PROXY_SECRET}
+            }
+        }
+        handle {
+            respond "Not Found" 404
+        }
+    }
+    handle {
+        respond "Forbidden" 403
+    }
+}

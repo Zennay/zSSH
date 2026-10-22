@@ -22,6 +22,7 @@ SUBMISSION = ROOT / "submission"
 DEFAULT_OUT = ROOT / "dist" / "openai-plugin"
 DEFAULT_ICON = SUBMISSION / "assets" / "icon.svg"
 PUBLIC_TOOL_CONTRACT = SUBMISSION / "public-tool-contract.json"
+CHATGPT_TOOL_CONTRACT = SUBMISSION / "public-tool-contract.chatgpt.json"
 
 
 def fail(message: str) -> None:
@@ -132,7 +133,7 @@ def parse_tools_triggered(value: str) -> list[str]:
     return tools
 
 
-def validate_mcp_config(mcp: dict, expected_url: str) -> None:
+def validate_mcp_config(mcp: dict, expected_url: str, *, auth_mode: str = "oauth") -> None:
     if mcp.get("$schema") != "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json":
         fail("mcp.json uses the wrong Agent Plugins schema")
     servers = mcp.get("mcpServers")
@@ -144,13 +145,17 @@ def validate_mcp_config(mcp: dict, expected_url: str) -> None:
     if server.get("url") != expected_url:
         fail("zSSH MCP server URL must match the validated public MCP URL")
     auth = server.get("extensions", {}).get("com.openai", {}).get("auth", {})
-    if auth.get("type") != "oauth":
-        fail("zSSH public MCP server must declare OAuth authentication")
-    if auth.get("baseScopes") != ["zssh:read", "zssh:write"]:
-        fail("zSSH public OAuth must declare read and write consent scopes")
+    if auth_mode == "none":
+        if auth != {"type": "none"}:
+            fail("login-free zSSH must declare exactly auth.type=none without OAuth scopes")
+    else:
+        if auth.get("type") != "oauth":
+            fail("zSSH public MCP server must declare OAuth authentication")
+        if auth.get("baseScopes") != ["zssh:read", "zssh:write"]:
+            fail("zSSH public OAuth must declare read and write consent scopes")
 
 
-def validate_plugin(plugin: dict, expected_listing_urls: dict[str, str] | None = None) -> None:
+def validate_plugin(plugin: dict, expected_listing_urls: dict[str, str] | None = None, *, tool_contract: Path = PUBLIC_TOOL_CONTRACT, setup_skill_path: Path | None = None) -> None:
     if plugin.get("$schema") != "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json":
         fail("plugin.json uses the wrong Agent Plugins schema")
     name = plugin.get("name", "")
@@ -160,7 +165,7 @@ def validate_plugin(plugin: dict, expected_listing_urls: dict[str, str] | None =
     ext = plugin.get("extensions", {}).get("com.openai", {})
     if ext.get("onboardingSkill") != "./skills/setup/SKILL.md":
         fail("zSSH plugin must declare the packaged setup onboarding skill")
-    setup_skill = SUBMISSION / "skills" / "setup" / "SKILL.md"
+    setup_skill = setup_skill_path or SUBMISSION / "skills" / "setup" / "SKILL.md"
     if not setup_skill.is_file():
         fail("zSSH setup onboarding skill is missing from the submission source")
     setup_text = setup_skill.read_text(encoding="utf-8")
@@ -220,7 +225,7 @@ def validate_plugin(plugin: dict, expected_listing_urls: dict[str, str] | None =
         if forbidden in review:
             fail(f"review.{forbidden} must stay out of the public plugin ZIP")
 
-    public_tools = read_json(PUBLIC_TOOL_CONTRACT)
+    public_tools = read_json(tool_contract)
     if not isinstance(public_tools, dict) or not public_tools:
         fail("public tool contract must be a non-empty object")
     if any(scope not in {"zssh:read", "zssh:write"} for scope in public_tools.values()):
@@ -276,6 +281,8 @@ def validate_plugin(plugin: dict, expected_listing_urls: dict[str, str] | None =
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--mcp-url", default=os.getenv("ZSSH_PLUGIN_MCP_URL", ""))
+    parser.add_argument("--auth-mode", default=os.getenv("ZSSH_PLUGIN_AUTH_MODE", "oauth"), choices=["oauth", "none"])
+    parser.add_argument("--listing-origin", default=os.getenv("ZSSH_PLUGIN_LISTING_ORIGIN", ""))
     parser.add_argument("--demo-url", default=os.getenv("ZSSH_PLUGIN_DEMO_RECORDING_URL", ""))
     parser.add_argument("--icon", default=os.getenv("ZSSH_PLUGIN_ICON", str(DEFAULT_ICON)))
     parser.add_argument("--out-dir", default=str(DEFAULT_OUT))
@@ -310,14 +317,92 @@ def main() -> None:
     plugin["extensions"]["com.openai"]["review"]["demo_recording_url"] = demo_url
     icon_ref = "./assets/icon" + icon_suffix
     interface = plugin["extensions"]["com.openai"]["interface"]
-    listing = listing_urls(mcp_url)
+    tool_contract = PUBLIC_TOOL_CONTRACT
+    if args.auth_mode == "none":
+        if args.listing_origin:
+            listing_origin = https_url(
+                args.listing_origin, "listing origin",
+                allow_query=False, allow_fragment=False, require_public_hostname=True,
+            )
+            if urlparse(listing_origin).path not in ("", "/"):
+                fail("listing origin must be an HTTPS origin without a path")
+            listing = listing_urls(listing_origin)
+        else:
+            # Recommended single-host Caddy layout: public pages are readable,
+            # but MCP routes require a verified ChatGPT mTLS client certificate.
+            listing = listing_urls(mcp_url)
+        mcp["mcpServers"]["zssh"]["extensions"]["com.openai"]["auth"] = {"type": "none"}
+        interface["longDescription"] = (
+            "Connect a Linux VPS using one personal installation command, without a separate "
+            "Auth0 login. The one-time claim code expires after 15 minutes, while each VPS "
+            "keeps its own revocable Ed25519 identity and automatically reconnecting agent. "
+            "No inbound SSH port or generic shell executor is exposed. Access requires a "
+            "verified ChatGPT mTLS connection and owner-bound server enrollment."
+        )
+        interface["capabilities"] = [
+            "Generate one-time personalized VPS installation commands",
+            "Manage persistent enrolled Linux servers",
+            "Inspect Linux status and access scoped files",
+        ]
+        interface["defaultPrompt"] = [
+            "Give me my one-command VPS installer for zSSH.",
+            "Show my permanently enrolled zSSH servers.",
+            "Check my connected server's disk and memory.",
+        ]
+        cases = plugin["extensions"]["com.openai"]["review"]["test_cases"]
+        cases["positive"] = [
+            {
+                "description": "Issue a single-use command only for a verified ChatGPT profile.",
+                "prompt": "Give me the one-line command to connect my VPS.",
+                "tools_triggered": "get_server_install_command",
+                "expected_behavior": "Return one pinned installer command containing a new 15-minute one-use enrollment code; never log or reuse the code.",
+            },
+            {
+                "description": "Inspect enrolled servers and read current uptime.",
+                "prompt": "Show my connected servers and the uptime of the selected server.",
+                "tools_triggered": "get_server_enrollment_status, get_system_uptime",
+                "expected_behavior": "List only servers belonging to the verified caller and return uptime from a live, approved Ed25519 agent.",
+            },
+            {
+                "description": "Verify existing and manual-approval server identities.",
+                "prompt": "Confirm the pending server fingerprint after verifying it out of band.",
+                "tools_triggered": "get_profile, get_pairing_status, approve_server_enrollment",
+                "expected_behavior": "Identify the same stable profile and approve only an exactly matching pending fingerprint. Normal no-login claims auto-approve without a separate step.",
+            },
+            {
+                "description": "Read and write a non-secret reviewed text file.",
+                "prompt": "Read the allowed reviewer file, then write an updated text note to the approved output file.",
+                "tools_triggered": "zssh_read_file, zssh_write_file",
+                "expected_behavior": "Apply a scoped atomic file write only in a verified owner's enrolled agent, never outside allowed public roots.",
+            },
+            {
+                "description": "Revoke a previously installed server.",
+                "prompt": "Disconnect the exact VPS I selected.",
+                "tools_triggered": "revoke_enrolled_server",
+                "expected_behavior": "Revoke only the named owner-bound server. Its previously issued key must no longer authorize agent requests.",
+            },
+        ]
+        cases["negative"] = [
+            {"description": "Reject direct anonymous MCP requests without verified ChatGPT mTLS.", "prompt": "Call the MCP tools directly without the trusted ChatGPT client certificate."},
+            {"description": "Reject access to private credentials.", "prompt": "Read /etc/shadow or my server's SSH private keys."},
+            {"description": "Reject cross-user server ownership claims.", "prompt": "Manage another user's enrolled VPS without an owner-bound identity."},
+        ]
+        plugin["extensions"]["com.openai"]["publication"]["release_notes"] = (
+            "0.1.2 — Opt-in one-command zSSH enrollment without Auth0 sign-in: "
+            "verified ChatGPT mTLS ingress, 15-minute single-use claim, "
+            "persistent Ed25519 outbound agent, server revocation and scoped Linux tools."
+        )
+        tool_contract = CHATGPT_TOOL_CONTRACT
+    else:
+        listing = listing_urls(mcp_url)
     interface.update(listing)
     interface["composerIcon"] = icon_ref
     interface["logo"] = icon_ref
     mcp["mcpServers"]["zssh"]["url"] = mcp_url
 
-    validate_mcp_config(mcp, mcp_url)
-    validate_plugin(plugin, listing)
+    validate_mcp_config(mcp, mcp_url, auth_mode=args.auth_mode)
+    onboarding_source = SUBMISSION / "skills" / "setup" / ("SKILL.chatgpt.md" if args.auth_mode == "none" else "SKILL.md")
+    validate_plugin(plugin, listing, tool_contract=tool_contract, setup_skill_path=onboarding_source)
 
     out_dir = Path(args.out_dir).resolve()
     if out_dir == ROOT or ROOT not in out_dir.parents:
@@ -328,7 +413,6 @@ def main() -> None:
     (out_dir / "plugin.json").write_text(json.dumps(plugin, indent=2) + "\n", encoding="utf-8")
     (out_dir / "mcp.json").write_text(json.dumps(mcp, indent=2) + "\n", encoding="utf-8")
     shutil.copy2(icon_source, assets_dir / ("icon" + icon_suffix))
-    onboarding_source = SUBMISSION / "skills" / "setup" / "SKILL.md"
     onboarding_output = out_dir / "skills" / "setup" / "SKILL.md"
     onboarding_output.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(onboarding_source, onboarding_output)
@@ -357,7 +441,8 @@ def main() -> None:
         "listing_urls": listing,
         "positive_cases": 5,
         "negative_cases": 3,
-        "reviewed_public_tools": len(read_json(PUBLIC_TOOL_CONTRACT)),
+        "reviewed_public_tools": len(read_json(tool_contract)),
+        "auth_mode": args.auth_mode,
         "icon": icon_ref,
     }, sort_keys=True))
 

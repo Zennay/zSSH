@@ -54,6 +54,19 @@ async function existing(file) {
 
 const keyStat = await existing(keyFile);
 const identityStat = await existing(idFile);
+const agentEnvFile = path.join(dir, "agent.env");
+const agentEnvStat = await existing(agentEnvFile);
+// A previous agent installation is a separate ownership boundary. Reject
+// incompatible state BEFORE redeeming the short-lived, single-use code.
+if (agentEnvStat) {
+  if (!agentEnvStat.isFile() || agentEnvStat.isSymbolicLink() ||
+      (agentEnvStat.mode & 0o077) !== 0 || agentEnvStat.uid !== process.getuid()) {
+    fail("existing agent configuration must be a private file owned by zssh");
+  }
+  if (!keyStat || !identityStat) {
+    fail("an existing zSSH agent configuration has no complete signing identity");
+  }
+}
 if (Boolean(keyStat) !== Boolean(identityStat)) {
   fail("partial existing agent identity: refusing to rotate or overwrite key");
 }
@@ -78,6 +91,19 @@ if (keyStat) {
     flag: "wx", mode: 0o600,
   });
 }
+if (agentEnvStat) {
+  const old = await fs.readFile(agentEnvFile, "utf8");
+  const settings = new Map(old.split(/\r?\n/).filter(Boolean).map(line => {
+    const match = /^([A-Z][A-Z0-9_]*)=(.*)$/.exec(line);
+    if (!match) fail("existing agent configuration has an invalid line");
+    return [match[1], match[2]];
+  }));
+  if (settings.get("ZSSH_TARGET_ID") !== targetId ||
+      settings.get("ZSSH_GATEWAY_URL") !== url.origin ||
+      settings.get("ZSSH_AGENT_PRIVATE_KEY_FILE") !== keyFile) {
+    fail("existing agent is bound to a different target, gateway, or signing key");
+  }
+}
 if (privateKey.asymmetricKeyType !== "ed25519") fail("agent must use Ed25519");
 const publicKeyPem = crypto.createPublicKey(privateKey).export({ type: "spki", format: "pem" });
 const nonce = "nonce_" + crypto.randomBytes(18).toString("base64url");
@@ -99,7 +125,7 @@ const expectedFingerprint = "SHA256:" + crypto.createHash("sha256")
   .update(crypto.createPublicKey(privateKey).export({ type: "spki", format: "der" }))
   .digest("base64").replace(/=+$/, "");
 if (
-  result?.awaiting_approval !== true ||
+  (result?.awaiting_approval !== true && result?.approved !== true) ||
   result?.target_id !== targetId ||
   result?.fingerprint !== expectedFingerprint
 ) {
@@ -107,4 +133,8 @@ if (
 }
 console.log("ZSSH_ENROLLMENT_CLAIM_ACCEPTED target=" + targetId);
 console.log("ZSSH_TARGET_FINGERPRINT " + expectedFingerprint);
-console.log("Approve this fingerprint in your zSSH ChatGPT plugin. Do not share the enrollment command.");
+if (result.approved === true) {
+  console.log("ZSSH_ENROLLMENT_APPROVED: permanent Ed25519 host identity registered.");
+} else {
+  console.log("Approve this fingerprint in your zSSH ChatGPT plugin. Do not share the enrollment command.");
+}

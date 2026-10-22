@@ -1,0 +1,53 @@
+# Login-free ChatGPT zSSH on the existing zssh.zennay.nl hostname.
+# EXAMPLE ONLY. Requires Caddy >=2.11.0 (mTLS CA handling security fix),
+# current authentic OpenAI Connectors intermediate CA certificate,
+# and a root-owned systemd EnvironmentFile that supplies a strong
+# ZSSH_CHATGPT_PROXY_SECRET to the Caddy service. The same secret must be
+# set only in the isolated zssh-public.service environment.
+#
+# Neither the public host nor client-provided headers authorize tool use:
+# only valid OpenAI mTLS + exact client SAN + private proxy attestation do.
+# This is a CLIENT attestation; user-level authorization still requires review.
+zssh.zennay.nl {
+    tls {
+        client_auth {
+            # Allow ordinary HTTPS for signed outbound VPS agents and the
+            # OpenAI domain challenge. Verify all client certs if presented.
+            mode verify_if_given
+            trust_pool file /etc/caddy/openai-connectors-mtls-intermediate.pem
+        }
+    }
+
+    # MCP access requires an OpenAI-managed client certificate with the
+    # documented DNS SAN and a valid CA chain / clientAuth EKU.
+    @chatgpt_mcp {
+        path /mcp
+        expression `"mtls.prod.connectors.openai.com" in {http.request.tls.client.san.dns_names}`
+    }
+    handle @chatgpt_mcp {
+        reverse_proxy 127.0.0.1:8789 {
+            # Overwrite, never forward, any client-provided attestation header.
+            header_up X-Zssh-Chatgpt-Proxy-Secret {env.ZSSH_CHATGPT_PROXY_SECRET}
+        }
+    }
+
+    # The following routes never grant ChatGPT tool authorization. Signed
+    # agent requests are verified against persistent Ed25519 host identities.
+    @agent path /agent/v1/* /enrollment/v1/claim
+    handle @agent {
+        reverse_proxy 127.0.0.1:8789 {
+            header_up -X-Zssh-Chatgpt-Proxy-Secret
+        }
+    }
+    @public path / /install /health /privacy /terms /support /.well-known/openai-apps-challenge
+    handle @public {
+        reverse_proxy 127.0.0.1:8789 {
+            header_up -X-Zssh-Chatgpt-Proxy-Secret
+        }
+    }
+
+    # Important: never route naked /mcp to a public backend.
+    handle {
+        respond "Forbidden" 403
+    }
+}

@@ -4,6 +4,33 @@
 
 zSSH is a **standalone security-first remote operations project**. zCloud is its control-plane/dashboard integration, not its parent project.
 
+## One-command ChatGPT VPS connection (no Auth0, not yet live)
+
+The opt-in login-free plugin branch is intended to generate **one personal command** per VPS:
+
+```bash
+curl --proto '=https' --tlsv1.2 -fsSL https://zssh.zennay.nl/install | sudo bash -s -- --enroll enr_<ONE_TIME_PERSONAL_CODE>
+```
+
+The ChatGPT `get_server_install_command` tool supplies a real 256-bit single-use
+code (valid for 15 minutes) instead of the placeholder above. `GET /install`
+serves only a code-free bootstrap that downloads the **pinned immutable Git
+release**; the code is never placed in an HTTP URL. The VPS installs a non-root
+outbound-only Ed25519 agent under systemd. Once the installer prints a
+`SHA256:` fingerprint, compare it with `get_server_enrollment_status` and
+explicitly confirm the exact match through `approve_server_enrollment`.
+Only then can the account use the agent; no repeat login or enrollment code
+is needed when the VPS restarts. `revoke_enrolled_server` invalidates access.
+
+**Release gate:** This branch is not published or live. Do not run the example
+until the gateway and plugin have been deployed with verified OpenAI client
+mTLS, independent per-user authorization/ownership checks, and the reviewed
+installer SHA. Client mTLS alone does **not** prove which person owns a VPS;
+`openai/subject` is not a password or cryptographically proven user identity.
+The old private and OAuth services remain separate. See
+[login-free enrollment details](docs/research/chatgpt-no-login-enrollment-2026-10-22.md).
+
+
 ## Current milestone
 
 **M5 — public-plugin production submission.** The safe execution foundation, universal public MCP endpoint model, outbound target transport, public OAuth resource-server profile, local target pairing/revocation, and machine-validated submission package are implemented. The first live transition is now external production configuration: publish the reviewed DNS origin, then complete production OAuth/reviewer evidence and the final OpenAI portal/host validation gates.
@@ -323,6 +350,16 @@ Request header: x-zssh-key: <ZSSH_API_KEY>
 
 Existing bearer authentication remains available for Claude Code and other
 clients that can set an `Authorization: Bearer ...` header.
+
+## Login-free ChatGPT enrollment (optional, guarded)
+
+The desired end-user flow is **add zSSH in ChatGPT → ask for a personal VPS install command → paste it once → stay connected**. The 256-bit `enr_...` code expires after 15 minutes and is used exactly once; the enrolled VPS keeps its Ed25519 identity and outbound systemd agent across restarts and never needs to log in every 15 minutes.
+
+An opt-in `ZSSH_PUBLIC_AUTH_MODE=chatgpt` now supports this flow **without an Auth0 sign-in**. It is NOT anonymous trust: the ingress must verify ChatGPT's OpenAI-managed mTLS client certificate and inject a private local proxy attestation. The gateway then derives a persistent profile ID from the platform-supplied `_meta["openai/subject"]`. That subject is not independently secure without the authenticated transport. In this mode a signed, one-use VPS enrollment claim is automatically approved; a host key can still be revoked.
+
+**Do not turn on this mode at the public hostname until mTLS enforcement, certificate chain/SAN checks, and dedicated HTTPS routing are set up.** Ordinary public requests cannot access the MCP tools. Keep an independent non-mTLS agent enrollment hostname so the VPS can post its signed claim over HTTPS.
+
+See [the login-free rollout and security prerequisites](docs/research/chatgpt-no-login-enrollment-2026-10-22.md). OAuth remains the production default until an operator explicitly elects this verified no-login mode.
 
 ## Personalized command from the ChatGPT zSSH plugin (staged)
 
