@@ -4,6 +4,33 @@
 
 zSSH is a **standalone security-first remote operations project**. zCloud is its control-plane/dashboard integration, not its parent project.
 
+## One-command ChatGPT VPS connection (no Auth0, not yet live)
+
+The opt-in login-free plugin branch is intended to generate **one personal command** per VPS:
+
+```bash
+curl --proto '=https' --tlsv1.2 -fsSL https://zssh.zennay.nl/install | sudo bash -s -- --enroll enr_<ONE_TIME_PERSONAL_CODE>
+```
+
+The ChatGPT `get_server_install_command` tool supplies a real 256-bit single-use
+code (valid for 15 minutes) instead of the placeholder above. `GET /install`
+serves only a code-free bootstrap that downloads the **pinned immutable Git
+release**; the code is never placed in an HTTP URL. The VPS installs a non-root
+outbound-only Ed25519 agent under systemd. Once the installer prints a
+`SHA256:` fingerprint, compare it with `get_server_enrollment_status` and
+explicitly confirm the exact match through `approve_server_enrollment`.
+Only then can the account use the agent; no repeat login or enrollment code
+is needed when the VPS restarts. `revoke_enrolled_server` invalidates access.
+
+**Release gate:** This branch is not published or live. Do not run the example
+until the gateway and plugin have been deployed with verified OpenAI client
+mTLS, independent per-user authorization/ownership checks, and the reviewed
+installer SHA. Client mTLS alone does **not** prove which person owns a VPS;
+`openai/subject` is not a password or cryptographically proven user identity.
+The old private and OAuth services remain separate. See
+[login-free enrollment details](docs/research/chatgpt-no-login-enrollment-2026-10-22.md).
+
+
 ## Current milestone
 
 **M5 — public-plugin production submission.** The safe execution foundation, universal public MCP endpoint model, outbound target transport, public OAuth resource-server profile, local target pairing/revocation, and machine-validated submission package are implemented. The first live transition is now external production configuration: publish the reviewed DNS origin, then complete production OAuth/reviewer evidence and the final OpenAI portal/host validation gates.
