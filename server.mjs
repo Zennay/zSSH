@@ -18,6 +18,7 @@ import { AGENT_PAIRING_ENDPOINTS, executeAgentPairingControl } from "./agent-pai
 import { publicSiteResponse } from "./public-site.mjs";
 import { verifyClientToken } from "./auth-store.mjs";
 import { VERSION } from "./version.mjs";
+import { runBrowserCapability } from "./browser-capability.mjs";
 import { createFixedWindowRateLimiter, publicRateLimitFromEnv } from "./rate-limit.mjs";
 const PORT = Number(process.env.PORT || 8788);
 const EXEC_MODE = process.env.ZSSH_EXEC_MODE === "full" ? "full" : "disabled";
@@ -1130,6 +1131,48 @@ function createMcpServer() {
       ["-h"]
     );
   } else {
+    if (process.env.ZSSH_BROWSER_ENABLED === "1") {
+      server.registerTool(
+        "zssh_browser",
+        {
+          title: "Browser action (code-first)",
+          description: "Operate only operator-allowlisted websites in the Playwright browser attached to this private zSSH target. Actions are structured JSON; sensitive interactions require exact human approval outside ChatGPT. No separate browser agent service or listening port.",
+          inputSchema: {
+            request: z.object({
+              action: z.enum(["start","tabs","new_tab","close_tab","navigate","observe","html","accessibility","click","fill","press","select","scroll","download","evaluate","close","batch"]),
+              session_id: z.string().uuid().optional(),
+              tab: z.number().int().min(0).max(100).optional(),
+              url: z.string().max(3000).optional(),
+              attach: z.boolean().optional(),
+              selector: z.string().max(240).optional(),
+              role: z.string().max(100).optional(),
+              name: z.string().max(200).optional(),
+              value: z.string().max(4000).optional(),
+              key: z.string().max(32).optional(),
+              delta_y: z.number().min(-2000).max(2000).optional(),
+              script: z.string().max(2000).optional(),
+              steps: z.array(z.record(z.unknown())).max(8).optional(),
+            }).strict()
+          },
+          annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
+        },
+        async ({ request }) => {
+          // The public plugin is deliberately excluded: it has a different OAuth,
+          // pairing and release contract. Private zSSH authentication applies here.
+          try {
+            const raw = await runBrowserCapability(request);
+            const safe = JSON.parse(redactSecrets(JSON.stringify(raw)));
+            await audit({ action: "zssh_browser", operation: request.action,
+              outcome: safe.ok === false ? "denied_or_error" : "ok",
+              session_id: String(request.session_id || "").slice(0, 36) });
+            return result(safe, safe.ok === false);
+          } catch {
+            await audit({ action: "zssh_browser", operation: request.action, outcome: "error" }).catch(() => {});
+            return result({ ok: false, code: "browser_unavailable", error: "Browser capability unavailable on this target" }, true);
+          }
+        }
+      );
+    }
     server.registerTool(
       "zssh_git_status",
       {
