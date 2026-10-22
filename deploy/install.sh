@@ -132,10 +132,13 @@ if [[ -n "$ENROLL_CODE" ]]; then
     ZSSH_AGENT_PRIVATE_KEY_FILE="$home/.config/zssh/agent-ed25519.pem" \
     ZSSH_PUBLIC_ALLOWED_ROOTS="$home/zssh-workspace" \
     bash "$home/.local/src/zssh/deploy/install-target-agent.sh" "$home/.local/src/zssh"
-  printf '%s\n' "ZSSH_PERSONAL_ENROLLMENT_PENDING target=$target_id: confirm the fingerprint inside the ChatGPT zSSH plugin."
+  printf '%s\n' "ZSSH_PERSONAL_AGENT_INSTALLED target=$target_id. Secure outbound agent starts on boot and reconnects automatically."
 fi
 
 printf '\nZSSH_ONE_COMMAND_INSTALL_GREEN user=%s port=8788 scope=loopback\n' "$SERVICE_USER"
-printf '%s\n' \
-  "Installed and running. Public ChatGPT account/agent enrollment is NOT configured." \
-  "No SSH key, reusable token, public port, or third-party access was enabled."
+if [[ -n "$ENROLL_GATEWAY" ]]; then
+  printf '%s\n' "Target identity registered; the outbound agent remains connected when the short-lived enrollment code expires."
+else
+  printf '%s\n' "Private loopback gateway installed; personal ChatGPT enrollment was not requested."
+fi
+printf '%s\n' "No inbound SSH port or reusable ChatGPT token was installed."
