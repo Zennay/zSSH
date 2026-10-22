@@ -11,7 +11,7 @@ import { z } from "zod";
 import { bearerChallenge, oauthConfigFromEnv, protectedResourceMetadata, requireScopes, verifyOAuthAuthorizationHeader } from "./oauth.mjs";
 import { getPairingStatus, profileIdFromAuth, targetIdFromEnv } from "./pairing.mjs";
 import { EnrollmentStore } from "./enrollment-store.mjs";
-import { renderEnrollmentInstallCommand } from "./enrollment-command.mjs";
+import { renderEnrollmentInstallCommand, renderEnrollmentBootstrapScript } from "./enrollment-command.mjs";
 import { TargetSessionRegistry, resolveAuthenticatedTarget } from "./target-routing.mjs";
 import { AGENT_ENDPOINTS, OutboundAgentBroker, createAgentRequestVerifier, AgentReplayCache, verifySignedAgentRequest, readJsonBody } from "./agent-transport.mjs";
 import { AGENT_PAIRING_ENDPOINTS, executeAgentPairingControl } from "./agent-pairing-control.mjs";
@@ -1532,6 +1532,27 @@ export function start() {
       } catch {
         return res.writeHead(409, { "content-type": "application/json", "cache-control": "no-store" })
           .end(JSON.stringify({ error: "agent request rejected" }));
+      }
+    }
+
+    // Public, secret-free installer facade: never put an enrollment code in a
+    // GET path, query or redirect. This wrapper downloads the pinned Git SHA.
+    // The one-use code is passed only as an argument by the human at the VPS.
+    if (ENROLLMENT_ENABLED && url.pathname === "/install") {
+      if (req.method !== "GET") return res.writeHead(405).end("Method Not Allowed");
+      try {
+        const script = renderEnrollmentBootstrapScript({
+          gatewayUrl: PUBLIC_RESOURCE,
+          installerRef: process.env.ZSSH_INSTALLER_REF,
+        });
+        return res.writeHead(200, {
+          "content-type": "text/x-shellscript; charset=utf-8",
+          "cache-control": "no-store",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+        }).end(script);
+      } catch {
+        return res.writeHead(503, { "cache-control": "no-store" }).end("zSSH installer unavailable");
       }
     }
 
