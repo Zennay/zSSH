@@ -45,3 +45,17 @@ Only if `zennay.nl` DNS is already hosted on Cloudflare, provide a new least-pri
 7. Add a **separate** ChatGPT MCP connection with URL `https://zssh.zennay.nl/mcp` and authentication set to OAuth. Keep the existing private capability-link connection unchanged.
 
 A DNS record or healthy HTTPS page alone is not proof that the OAuth connection is ready. The public gateway, OAuth metadata/issuer, local pairing, and ChatGPT tool scan must all pass before calling this live.
+
+
+## Observed DNS provider and migration caution — 22 October 2026
+
+**Verified public resolver observations from the existing connected VPS:**
+
+- Authoritative nameservers for `zennay.nl`: `ns1.site.eu`, `ns2.site.nl`, `ns3.site.be`, `ns4.site.de`. The zone is **not delegated to Cloudflare**.
+- Both Google DNS and Cloudflare DNS-over-HTTPS resolve `zssh.zennay.nl` to the existing IPv4 `198.244.191.182`.
+- `https://zssh.zennay.nl/health` currently responds HTTP 404 via Caddy. This proves only external HTTPS reachability to a Caddy route, **not** a functioning public zSSH OAuth/MCP gateway.
+- The replacement SeedHost VPS in the zCloud migration plan is `95.211.40.88`; no owner-approved DNS flip or independent public-gateway/ingress acceptance on that server has been established.
+
+**Correct next step:** manage the `zssh` DNS record through the current `site.eu/site.nl` authoritative provider; do **not** create a Cloudflare API token or change apex records/nameservers. Preserve the existing A record while the new server is unverified. Only after proving the new isolated public gateway, HTTPS ingress, OAuth issuer/JWKS and target routing should an explicitly authorized, single-record A change point `zssh.zennay.nl` to the verified replacement VPS. Reconfirm external A/AAAA/CNAME answers afterwards.
+
+**Release automation debt:** `check-production-readiness-audit.mjs` still classifies DNS as missing `CLOUDFLARE_API_TOKEN` whenever the public origin observation is incomplete; a follow-up code change must implement externally managed, independently observed DNS convergence without bypassing provenance, real OAuth/provider qualification or production release gates. `ZSSH_PLUGIN_MCP_URL` and `ZSSH_PUBLIC_OBSERVATION_URL` must be updated to `https://zssh.zennay.nl/mcp` in the protected configuration (the historical `cheapgpt.shop` setting is invalid). Do not set fake provider credentials or mark the public gateway live before evidence.
