@@ -908,7 +908,7 @@ function createMcpServer() {
           nickname: z.string().optional(),
         },
         annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-        ...publicSecurity(OAUTH_CONFIG?.readScope || "zssh:read", PUBLIC_AUTH_MODE === "oauth" ? { "openai/profile": true } : {})
+        ...publicSecurity(OAUTH_CONFIG?.readScope || "zssh:read", { "openai/profile": true })
       },
       async (_args, extra) => {
         const authError = await publicToolAuthorizationError(extra, OAUTH_CONFIG?.readScope || "zssh:read", { requirePairing: false });
