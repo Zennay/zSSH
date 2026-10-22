@@ -1455,7 +1455,10 @@ export function start() {
         return res.writeHead(400).end(JSON.stringify({ error: "invalid_request" }));
       }
       try {
-        const claim = await ENROLLMENT_STORE.claim(input, Date.now(), { autoApprove: PUBLIC_AUTH_MODE === "chatgpt" });
+        // Never auto-approve a machine merely because a one-use code was
+        // presented. The human must confirm the Ed25519 fingerprint inside
+        // the already-connected ChatGPT plugin before any agent tool can run.
+        const claim = await ENROLLMENT_STORE.claim(input);
         return res.writeHead(202).end(JSON.stringify(claim));
       } catch {
         // Do not reveal whether a code existed, expired, or was already redeemed.
