@@ -1141,7 +1141,7 @@ function createMcpServer() {
           description: "Operate only operator-allowlisted websites in the Playwright browser attached to this private zSSH target. Actions are structured JSON; sensitive interactions require exact human approval outside ChatGPT. No separate browser agent service or listening port.",
           inputSchema: {
             request: z.object({
-              action: z.enum(["start","tabs","new_tab","close_tab","navigate","observe","html","accessibility","screenshot","click","fill","press","select","scroll","download","evaluate","close","batch"]),
+              action: z.enum(["status","start","tabs","new_tab","close_tab","navigate","observe","html","accessibility","screenshot","click","fill","press","select","scroll","download","evaluate","close","batch"]),
               session_id: z.string().uuid().optional(),
               tab: z.number().int().min(0).max(100).optional(),
               url: z.string().max(3000).optional(),
