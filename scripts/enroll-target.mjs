@@ -99,7 +99,7 @@ const expectedFingerprint = "SHA256:" + crypto.createHash("sha256")
   .update(crypto.createPublicKey(privateKey).export({ type: "spki", format: "der" }))
   .digest("base64").replace(/=+$/, "");
 if (
-  result?.awaiting_approval !== true ||
+  (result?.awaiting_approval !== true && result?.approved !== true) ||
   result?.target_id !== targetId ||
   result?.fingerprint !== expectedFingerprint
 ) {
@@ -107,4 +107,8 @@ if (
 }
 console.log("ZSSH_ENROLLMENT_CLAIM_ACCEPTED target=" + targetId);
 console.log("ZSSH_TARGET_FINGERPRINT " + expectedFingerprint);
-console.log("Approve this fingerprint in your zSSH ChatGPT plugin. Do not share the enrollment command.");
+if (result.approved === true) {
+  console.log("ZSSH_ENROLLMENT_APPROVED: permanent Ed25519 host identity registered.");
+} else {
+  console.log("Approve this fingerprint in your zSSH ChatGPT plugin. Do not share the enrollment command.");
+}
