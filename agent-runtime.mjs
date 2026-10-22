@@ -1,5 +1,6 @@
 import { runSafeProgram, readTextFile, writeTextFile } from "./server.mjs";
 import { VERSION } from "./version.mjs";
+import { runBrowserCapability } from "./browser-capability.mjs";
 
 const PUBLIC_PROGRAMS = Object.freeze({
   get_system_uptime: ["uptime", []],
@@ -52,6 +53,13 @@ export async function executeAgentCommand(command, { targetLabel = process.env.Z
     if (typeof args.path !== "string" || !args.path) throw new Error("path is required");
     if (typeof args.content !== "string") throw new Error("content must be a string");
     return { ok: true, ...(await writeTextFile(args.path, args.content, { rejectSecrets: true })) };
+  }
+
+  if (tool === "zssh_browser") {
+    if (process.env.ZSSH_BROWSER_ENABLED !== "1") throw new Error("Browser capability is disabled on this target");
+    // Only a private zSSH gateway that explicitly allows this tool in its
+    // signed outbound transport can enqueue it. Public tool contract excludes it.
+    return await runBrowserCapability(args.request);
   }
 
   const fixed = PUBLIC_PROGRAMS[tool];

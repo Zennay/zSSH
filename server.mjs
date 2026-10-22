@@ -9,15 +9,16 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { z } from "zod";
 import { bearerChallenge, oauthConfigFromEnv, protectedResourceMetadata, requireScopes, verifyOAuthAuthorizationHeader } from "./oauth.mjs";
-import { getPairingStatus, profileIdFromAuth, targetIdFromEnv } from "./pairing.mjs";
+import { getPairingStatus, profileIdFromAuth, targetIdFromEnv, normalizeTargetId } from "./pairing.mjs";
 import { EnrollmentStore } from "./enrollment-store.mjs";
 import { renderEnrollmentInstallCommand } from "./enrollment-command.mjs";
 import { TargetSessionRegistry, resolveAuthenticatedTarget } from "./target-routing.mjs";
-import { AGENT_ENDPOINTS, OutboundAgentBroker, createAgentRequestVerifier, AgentReplayCache, verifySignedAgentRequest, readJsonBody } from "./agent-transport.mjs";
+import { AGENT_ENDPOINTS, PUBLIC_TARGET_TOOLS, OutboundAgentBroker, createAgentRequestVerifier, AgentReplayCache, verifySignedAgentRequest, readJsonBody } from "./agent-transport.mjs";
 import { AGENT_PAIRING_ENDPOINTS, executeAgentPairingControl } from "./agent-pairing-control.mjs";
 import { publicSiteResponse } from "./public-site.mjs";
 import { verifyClientToken } from "./auth-store.mjs";
 import { VERSION } from "./version.mjs";
+import { runBrowserCapability } from "./browser-capability.mjs";
 import { createFixedWindowRateLimiter, publicRateLimitFromEnv } from "./rate-limit.mjs";
 const PORT = Number(process.env.PORT || 8788);
 const EXEC_MODE = process.env.ZSSH_EXEC_MODE === "full" ? "full" : "disabled";
@@ -59,6 +60,8 @@ const CONNECTION_UI_HTML = readFileSync(new URL("./ui/connection-card.html", imp
 const TARGET_SESSIONS = new TargetSessionRegistry();
 const AGENT_BROKER = new OutboundAgentBroker({
   sessions: TARGET_SESSIONS,
+  allowedTools: PLUGIN_PROFILE === "private" && process.env.ZSSH_BROWSER_ENABLED === "1"
+    ? [...PUBLIC_TARGET_TOOLS, "zssh_browser"] : PUBLIC_TARGET_TOOLS,
   requestTimeoutMs: Number(process.env.ZSSH_AGENT_REQUEST_TIMEOUT_MS || 30000),
   pollTimeoutMs: Number(process.env.ZSSH_AGENT_POLL_TIMEOUT_MS || 25000),
   maxPending: Number(process.env.ZSSH_AGENT_MAX_PENDING || 16),
@@ -1130,6 +1133,66 @@ function createMcpServer() {
       ["-h"]
     );
   } else {
+    if (process.env.ZSSH_BROWSER_ENABLED === "1") {
+      server.registerTool(
+        "zssh_browser",
+        {
+          title: "Browser action (code-first)",
+          description: "Operate only operator-allowlisted websites in the Playwright browser attached to this private zSSH target. Actions are structured JSON; sensitive interactions require exact human approval outside ChatGPT. No separate browser agent service or listening port.",
+          inputSchema: {
+            request: z.object({
+              action: z.enum(["start","tabs","new_tab","close_tab","navigate","observe","html","accessibility","click","fill","press","select","scroll","download","evaluate","close","batch"]),
+              session_id: z.string().uuid().optional(),
+              tab: z.number().int().min(0).max(100).optional(),
+              url: z.string().max(3000).optional(),
+              attach: z.boolean().optional(),
+              selector: z.string().max(240).optional(),
+              role: z.string().max(100).optional(),
+              name: z.string().max(200).optional(),
+              value: z.string().max(4000).optional(),
+              key: z.string().max(32).optional(),
+              delta_y: z.number().min(-2000).max(2000).optional(),
+              script: z.string().max(2000).optional(),
+              steps: z.array(z.record(z.unknown())).max(8).optional(),
+              target_id: z.string().max(100).optional(),
+            }).strict()
+          },
+          annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
+        },
+        async ({ request }) => {
+          // The public plugin is deliberately excluded: it has a different OAuth,
+          // pairing and release contract. Private zSSH authentication applies here.
+          try {
+            const targetId = String(request.target_id || "").trim();
+            let raw;
+            if (targetId) {
+              const allowed = String(process.env.ZSSH_BROWSER_TARGETS || "").split(",").map(x => x.trim()).filter(Boolean);
+              if (!allowed.includes(targetId) || normalizeTargetId(targetId) === "local") {
+                return result({ ok: false, code: "target_not_authorized", error: "Browser target is not in the operator allowlist" }, true);
+              }
+              if (!OUTBOUND_AGENT_MODE) {
+                return result({ ok: false, code: "target_unavailable", error: "zSSH signed outbound target transport is not configured" }, true);
+              }
+              const connected = TARGET_SESSIONS.resolve(targetId);
+              if (!connected) return result({ ok: false, code: "target_offline", error: "Target is not paired and connected" }, true);
+              const { target_id: _target, ...action } = request;
+              raw = await connected.send({ tool: "zssh_browser", args: { request: action } });
+            } else {
+              const { target_id: _target, ...action } = request;
+              raw = await runBrowserCapability(action);
+            }
+            const safe = JSON.parse(redactSecrets(JSON.stringify(raw)));
+            await audit({ action: "zssh_browser", operation: request.action,
+              outcome: safe.ok === false ? "denied_or_error" : "ok",
+              session_id: String(request.session_id || "").slice(0, 36) });
+            return result(safe, safe.ok === false);
+          } catch {
+            await audit({ action: "zssh_browser", operation: request.action, outcome: "error" }).catch(() => {});
+            return result({ ok: false, code: "browser_unavailable", error: "Browser capability unavailable on this target" }, true);
+          }
+        }
+      );
+    }
     server.registerTool(
       "zssh_git_status",
       {
