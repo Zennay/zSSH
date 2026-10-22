@@ -1270,7 +1270,7 @@ function secureEqual(actual, expected) {
 }
 
 function capabilityAuthorized(pathname) {
-  if (PLUGIN_PROFILE === "public" && PUBLIC_AUTH_MODE === "oauth") return false;
+  if (PLUGIN_PROFILE === "public" && ["oauth", "chatgpt"].includes(PUBLIC_AUTH_MODE)) return false;
   return Boolean(CAPABILITY_TOKEN) && secureEqual(pathname, "/mcp/" + CAPABILITY_TOKEN);
 }
 
