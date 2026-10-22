@@ -16,8 +16,8 @@ zssh.zennay.nl {
             header_up -X-Zssh-Chatgpt-Proxy-Secret
         }
     }
-    @health path /health
-    handle @health {
+    @public_pages path / /health /privacy /terms /support
+    handle @public_pages {
         reverse_proxy 127.0.0.1:8789 {
             header_up -X-Zssh-Chatgpt-Proxy-Secret
         }
@@ -32,8 +32,18 @@ zssh.zennay.nl {
 chatgpt.zssh.zennay.nl {
     tls {
         client_auth {
-            mode require_and_verify
+            mode verify_if_given
             trust_pool file /etc/caddy/openai-connectors-mtls-intermediate.pem
+        }
+    }
+
+    # These public verification paths never receive the private proxy secret.
+    # "verify_if_given" allows them to work without a client certificate.
+    # The MCP route below REQUIRES a verified OpenAI client certificate.
+    @challenge path /.well-known/openai-apps-challenge
+    handle @challenge {
+        reverse_proxy 127.0.0.1:8789 {
+            header_up -X-Zssh-Chatgpt-Proxy-Secret
         }
     }
 
