@@ -84,8 +84,20 @@ const PAGES = new Map([
   )],
 ]);
 
-export function publicSiteResponse(pathname) {
+export function publicSiteResponse(pathname, { authMode = "oauth" } = {}) {
   const normalized = pathname === "/" ? "/" : String(pathname || "").replace(/\/+$/, "");
+  if (authMode === "chatgpt" && normalized === "/") {
+    const body = page(
+      "One-command Linux access",
+      "Connect a Linux VPS to zSSH from ChatGPT with one personal installation command.",
+      `<h1 class="hero">One command. Your server stays connected.</h1>
+<p class="lead">Add zSSH in ChatGPT, ask for your personal install command and run it once on your VPS. No separate Auth0 login is required in this deployment mode.</p>
+<section class="card"><h2>How it works</h2><ol><li>ChatGPT issues a random, single-use enrollment code that expires after 15 minutes.</li><li>Your server generates its own private Ed25519 key, signs the claim, and registers that public identity.</li><li>The outbound agent reconnects automatically after service restarts. The enrollment code does not need renewal.</li></ol></section>
+<section class="card"><h2>Security</h2><p>Only a verified ChatGPT client connection can request commands or manage servers. A host-specific key persists until the owner revokes it. There is no inbound SSH port required and no reusable ChatGPT token copied to the VPS. Enrollment commands are sensitive: do not share them.</p></section>
+<p>Read the <a href="/privacy">privacy notice</a> and <a href="/support">support</a> for details.</p>`
+    );
+    return { status: 200, headers: { ...HEADERS }, body };
+  }
   const body = PAGES.get(normalized);
   if (!body) return null;
   return { status: 200, headers: { ...HEADERS }, body };
