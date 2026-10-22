@@ -1536,7 +1536,7 @@ export function start() {
     }
 
     if (req.method === "GET" && PLUGIN_PROFILE === "public") {
-      const publicPage = publicSiteResponse(url.pathname);
+      const publicPage = publicSiteResponse(url.pathname, { authMode: PUBLIC_AUTH_MODE });
       if (publicPage) {
         return res.writeHead(publicPage.status, publicPage.headers).end(publicPage.body);
       }
