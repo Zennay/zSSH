@@ -155,7 +155,7 @@ def validate_mcp_config(mcp: dict, expected_url: str, *, auth_mode: str = "oauth
             fail("zSSH public OAuth must declare read and write consent scopes")
 
 
-def validate_plugin(plugin: dict, expected_listing_urls: dict[str, str] | None = None, *, tool_contract: Path = PUBLIC_TOOL_CONTRACT) -> None:
+def validate_plugin(plugin: dict, expected_listing_urls: dict[str, str] | None = None, *, tool_contract: Path = PUBLIC_TOOL_CONTRACT, setup_skill_path: Path | None = None) -> None:
     if plugin.get("$schema") != "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json":
         fail("plugin.json uses the wrong Agent Plugins schema")
     name = plugin.get("name", "")
@@ -165,7 +165,7 @@ def validate_plugin(plugin: dict, expected_listing_urls: dict[str, str] | None =
     ext = plugin.get("extensions", {}).get("com.openai", {})
     if ext.get("onboardingSkill") != "./skills/setup/SKILL.md":
         fail("zSSH plugin must declare the packaged setup onboarding skill")
-    setup_skill = SUBMISSION / "skills" / "setup" / "SKILL.md"
+    setup_skill = setup_skill_path or SUBMISSION / "skills" / "setup" / "SKILL.md"
     if not setup_skill.is_file():
         fail("zSSH setup onboarding skill is missing from the submission source")
     setup_text = setup_skill.read_text(encoding="utf-8")
@@ -400,7 +400,8 @@ def main() -> None:
     mcp["mcpServers"]["zssh"]["url"] = mcp_url
 
     validate_mcp_config(mcp, mcp_url, auth_mode=args.auth_mode)
-    validate_plugin(plugin, listing, tool_contract=tool_contract)
+    onboarding_source = SUBMISSION / "skills" / "setup" / ("SKILL.chatgpt.md" if args.auth_mode == "none" else "SKILL.md")
+    validate_plugin(plugin, listing, tool_contract=tool_contract, setup_skill_path=onboarding_source)
 
     out_dir = Path(args.out_dir).resolve()
     if out_dir == ROOT or ROOT not in out_dir.parents:
@@ -411,7 +412,6 @@ def main() -> None:
     (out_dir / "plugin.json").write_text(json.dumps(plugin, indent=2) + "\n", encoding="utf-8")
     (out_dir / "mcp.json").write_text(json.dumps(mcp, indent=2) + "\n", encoding="utf-8")
     shutil.copy2(icon_source, assets_dir / ("icon" + icon_suffix))
-    onboarding_source = SUBMISSION / "skills" / "setup" / "SKILL.md"
     onboarding_output = out_dir / "skills" / "setup" / "SKILL.md"
     onboarding_output.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(onboarding_source, onboarding_output)
