@@ -77,7 +77,13 @@ const SAFE_PROGRAM_PATHS = Object.freeze({
   uname: "/usr/bin/uname",
   pwd: "/usr/bin/pwd",
   df: "/usr/bin/df",
-  free: "/usr/bin/free"
+  free: "/usr/bin/free",
+  lsblk: "/usr/bin/lsblk"
+});
+// For block-device discovery, never let callers choose lsblk columns, files or flags.
+// This private-profile inventory is read-only and contains no filesystem writes.
+const SAFE_FIXED_ARGS = Object.freeze({
+  lsblk: Object.freeze(["--list", "--paths", "--output", "NAME,TYPE,FSTYPE,RO,MOUNTPOINTS"])
 });
 const SAFE_PROGRAM_NAMES = Object.freeze(Object.keys(SAFE_PROGRAM_PATHS));
 const GIT_BIN = process.env.ZSSH_GIT_BIN || "/usr/bin/git";
@@ -280,12 +286,17 @@ export async function runSafeProgram(program, args = [], cwd, timeoutSeconds, { 
     throw new Error("args must contain at most 32 strings of at most 512 characters");
   }
 
+  if (Object.hasOwn(SAFE_FIXED_ARGS, name) && args.length !== 0) {
+    await audit({ action: "run_safe", program: name, outcome: "blocked", reason: "fixed-arguments-only" });
+    return { ok: false, blocked: true, program: name, error: "this inventory program accepts no caller arguments" };
+  }
+  const effectiveArgs = SAFE_FIXED_ARGS[name] || args;
   const resolvedCwd = await resolveAllowedPath(cwd || getAllowedRoots({ publicOnly })[0] || process.cwd(), { publicOnly });
   const timeoutMs = clampInt(timeoutSeconds, 1, 300, COMMAND_TIMEOUT_SECONDS) * 1000;
   const startedAt = Date.now();
 
   return await new Promise((resolve) => {
-    const child = spawn(SAFE_PROGRAM_PATHS[name], args, {
+    const child = spawn(SAFE_PROGRAM_PATHS[name], effectiveArgs, {
       cwd: resolvedCwd,
       env: safeEnvironment(),
       shell: false,
@@ -341,7 +352,7 @@ export async function runSafeProgram(program, args = [], cwd, timeoutSeconds, { 
         await audit({
           action: "run_safe",
           program: name,
-          args: args.map(redactSecrets),
+          args: effectiveArgs.map(redactSecrets),
           cwd: resolvedCwd,
           outcome: value.ok ? "ok" : "error",
           exit_code: value.exit_code,
