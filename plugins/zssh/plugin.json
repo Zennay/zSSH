@@ -1,0 +1,43 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "zssh",
+  "version": "0.2.0",
+  "description": "Link your own Linux VPS with one install command and operate it from ChatGPT.",
+  "author": {
+    "name": "Zennay",
+    "url": "https://github.com/Zennay"
+  },
+  "homepage": "https://zssh.zennay.nl",
+  "repository": "https://github.com/Zennay/zSSH",
+  "keywords": ["linux", "vps", "ssh", "developer-tools"],
+  "extensions": {
+    "com.openai": {
+      "interface": {
+        "displayName": "zSSH",
+        "shortDescription": "Operate your own Linux servers",
+        "longDescription": "Link a Linux VPS with one install command and let ChatGPT inspect status, read and write files, and (if you allow it) run shell commands as an unprivileged user. The agent on your server only dials out, so no ports are opened. Manage several servers from one account and disconnect any of them at any time.",
+        "developerName": "Zennay",
+        "category": "Developer Tools",
+        "capabilities": [
+          "Link a VPS with one command",
+          "Inspect Linux system status",
+          "Read and write files",
+          "Run shell commands when allowed",
+          "Manage several servers"
+        ],
+        "websiteURL": "https://zssh.zennay.nl/",
+        "supportURL": "https://zssh.zennay.nl/support",
+        "privacyPolicyURL": "https://zssh.zennay.nl/privacy",
+        "termsOfServiceURL": "https://zssh.zennay.nl/terms",
+        "defaultPrompt": [
+          "Link my Linux server to zSSH.",
+          "How much disk space is left on my server?",
+          "Show my zSSH servers and plan."
+        ],
+        "composerIcon": "./assets/icon.svg",
+        "logo": "./assets/icon.svg"
+      },
+      "onboardingSkill": "./skills/setup/SKILL.md"
+    }
+  }
+}

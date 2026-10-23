@@ -1,59 +1,62 @@
 ---
 name: setup
-description: Connect zSSH to a Linux VPS with one account-bound install command, confirm its key fingerprint, and manage paired servers.
+description: Link a Linux VPS to zSSH with one install command, then operate the user's linked servers safely. Use when the user wants to connect, add, list, rename or remove a server, or check their zSSH plan.
 ---
 
-# Set up zSSH in ChatGPT
+# Set up and use zSSH
 
-A public zSSH plugin uses **one shared HTTPS MCP gateway**, not one URL per VPS.
-End users should never configure their own DNS, reverse proxy, HTTPS certificate, SSH key,
-or public inbound port. Login happens using the plugin's standard OAuth account connection.
+zSSH lets you operate the user's own Linux servers. The plugin already contains
+the connection to the hosted zSSH gateway: the user never pastes an MCP URL,
+SSH key, password or API token. Signing in happens through the plugin's normal
+account connection (OAuth).
 
-## Personal one-command onboarding
+## Link a server (one command)
 
-1. Confirm the zSSH public plugin is connected and signed in. An installed but
-   unpublished or unauthenticated plugin cannot enroll a VPS.
-2. Invoke `get_server_install_command` to get one personal, 15-minute, single-use
-   Linux command. Show the exact returned `install_command` in a copyable code block
-   or the connection card. **Never change the gateway or SHA, reuse another user's
-   command, or publish the enrollment code.**
-3. The owner pastes that command into the terminal of the Linux machine they
-   control. The installer uses apt to create the unprivileged `zssh` service
-   account, downloads the exact reviewed Git revision, and installs only an
-   **outbound** TLS agent; it does not open SSH or MCP ports or replace private
-   local zSSH gateways. No reusable API key or private key is sent to ChatGPT.
-4. The VPS prints `ZSSH_TARGET_FINGERPRINT SHA256:...` and a `zt_...` target
-   ID. Invoke `get_server_enrollment_status`. Ask the owner to compare the
-   displayed fingerprint against their **actual VPS terminal**. Approval must
-   be explicit; never silently approve because a gateway says "pending".
-5. Only when both values match, call `approve_server_enrollment` with that
-   exact target and fingerprint. The installed agent will establish an outbound
-   connection. Use `get_server_enrollment_status` again, then a read-only
-   `zssh_server_info` or `get_system_uptime` to confirm the intended VPS.
-6. To disconnect a machine, call `revoke_enrolled_server` with the target ID.
-   Multiple-server target selection is not yet available; do not imply more
-   than one simultaneously enrolled server can be controlled.
+1. Make sure the plugin is signed in. If a tool answers that authentication is
+   required, ask the user to connect/sign in to zSSH first.
+2. Call `get_server_install_command`. Show the returned `install_command`
+   exactly, in one copyable code block, and say:
+   "Run this once on your VPS as root (or with sudo). It expires in 15 minutes
+   and works only once." Never alter the command or reuse an old one.
+3. The user runs it. The installer creates an unprivileged `zssh` user and an
+   outbound-only agent (no inbound ports), and the server is **linked to this
+   account automatically**. The terminal ends with `ZSSH_LINKED name=...`.
+4. Call `list_servers` and confirm the server appears with `online: true`.
+   Then run `zssh_server_info` (with `target` if several servers are linked)
+   to show the user it works.
 
-If the owner already ran the command and the plugin shows pending, **do not run
-the installer again**: refresh enrollment status, compare the fingerprints, and
-approve once. If the command expired before redemption, generate a new one.
-If a previously cloned VPS has conflicting agent identity files, installation
-stops rather than overwriting keys or silently redirecting to another target.
+If the server shows as pending instead (the gateway requires a second
+confirmation), call `get_server_enrollment_status`, ask the user to compare the
+fingerprint with the `ZSSH_TARGET_FINGERPRINT` line in their terminal, and only
+when they match call `approve_server_enrollment`.
+
+If the command expired, simply get a new one. If the user already ran it, do
+not ask them to run it again: refresh `list_servers` first.
+
+## Working on servers
+
+- With one linked server, tools use it automatically. With several, pass
+  `target` (the server name or `zt_` id from `list_servers`). Ask the user
+  which server when it is ambiguous.
+- Prefer read-only inspection first (`zssh_server_info`, `get_disk_usage`,
+  `get_memory_usage`, `zssh_read_file`).
+- `zssh_exec` (when available) runs bash as the unprivileged `zssh` user. It
+  only works if the server was linked with shell access. Explain anything
+  destructive or hard to undo before running it, and never claim a command
+  ran without a tool result.
+- Never ask for or print passwords, private keys, tokens or full `.env` files.
+
+## Managing the account
+
+- `rename_server` gives a server a friendlier name.
+- `revoke_enrolled_server` disconnects a server immediately.
+- `get_account` shows the plan, server and daily action limits and returns a
+  personal `manage_url` (valid one hour) for upgrading or managing billing.
+  Share it only with this user. When a tool reports a plan limit, offer this.
 
 ## Legacy private setup
 
-When `get_server_install_command` is absent, this is not the new public
-onboarding service. The existing private zSSH deployment may still expose
-`get_pairing_status`, a separate local pairing approval, or a capability URL.
-Do not try to enroll those private endpoints using a public one-time command.
-No ChatGPT plugin can remotely alter a registered MCP base URL by writing to
-the target machine: the hosted gateway origin must actually be online.
-
-## Availability and safety
-
-The public enrollment tools require the production gateway with
-`ZSSH_ENROLLMENT_ENABLED=1`, a pinned `ZSSH_INSTALLER_REF`, OAuth resource
-server validation, and production DNS/TLS. An offline or unreviewed deployment
-cannot be declared ready just because this UI and installer exist in the repo.
-Never ask for passwords, private keys, reusable API tokens, raw personal
-enrollment commands, or a user's SSH credentials in chat.
+When `get_server_install_command` is absent, this is a private self-hosted
+zSSH gateway, not the hosted service. It may expose `get_pairing_status` with
+a separate local approval instead. Do not try to enroll a private endpoint
+with a one-time command.

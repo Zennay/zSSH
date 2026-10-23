@@ -1,0 +1,19 @@
+{
+  "name": "zssh",
+  "owner": {
+    "name": "Zennay",
+    "url": "https://github.com/Zennay"
+  },
+  "metadata": {
+    "description": "zSSH: let Claude operate your own Linux servers through one install command."
+  },
+  "plugins": [
+    {
+      "name": "zssh",
+      "source": "./plugins/zssh",
+      "description": "Link your VPS with one command and let Claude inspect, edit and run commands on it.",
+      "category": "development",
+      "homepage": "https://zssh.zennay.nl"
+    }
+  ]
+}

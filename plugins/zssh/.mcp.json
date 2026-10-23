@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "zssh": {
+      "type": "http",
+      "url": "https://zssh.zennay.nl/mcp"
+    }
+  }
+}

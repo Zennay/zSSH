@@ -22,12 +22,49 @@ test("public review site does not expose unknown routes", () => {
   assert.equal(publicSiteResponse("/admin"), null);
 });
 
-test("public review pages explain the local-pairing security boundary", () => {
+test("public review pages explain the owner-controlled linking boundary", () => {
   const overview = publicSiteResponse("/").body;
   const privacy = publicSiteResponse("/privacy").body;
-  assert.match(overview, /Linux owner must separately approve pairing/i);
-  assert.match(overview, /generic shell execution is not exposed/i);
+  assert.match(overview, /one-use install command/i);
+  assert.match(overview, /Shell access is a per-server opt-in/i);
+  assert.match(overview, /outbound-only agent/i);
   assert.match(privacy, /OAuth authentication alone does not authorize a target/i);
+});
+
+test("site pages contain no script and pricing mirrors the billing plans", async () => {
+  const { PLANS } = await import("../billing.mjs");
+  for (const path of ["/", "/pricing", "/docs", "/account/welcome", ...publicListingPaths()]) {
+    const response = publicSiteResponse(path);
+    assert.equal(response.status, 200, path);
+    assert.doesNotMatch(response.body, /<script/i, path);
+  }
+  const pricing = publicSiteResponse("/pricing").body;
+  for (const plan of Object.values(PLANS)) {
+    assert.match(pricing, new RegExp(plan.daily_actions.toLocaleString("en-US")));
+    assert.match(pricing, new RegExp("€" + plan.price_eur.year));
+  }
+});
+
+test("account page escapes values and never caches", async () => {
+  const { accountPageResponse, messagePageResponse } = await import("../public-site.mjs");
+  const { planFor } = await import("../billing.mjs");
+  const page = accountPageResponse({
+    plan: planFor("free"),
+    entitlement: { status: "none", current_period_end: null },
+    servers: 1,
+    actionsToday: 42,
+    resetsAt: "2026-01-02T00:00:00.000Z",
+    token: "acct_a\"<b>.sig",
+    canManage: false,
+  });
+  assert.equal(page.headers["cache-control"], "no-store");
+  assert.doesNotMatch(page.body, /acct_a"<b>/);
+  assert.match(page.body, /t=acct_a%22%3Cb%3E\.sig/);
+  assert.match(page.body, /plan=pro&amp;interval=month/);
+  assert.doesNotMatch(page.body, /billing\/portal/);
+  const message = messagePageResponse(403, "<x>", "a & b");
+  assert.equal(message.status, 403);
+  assert.match(message.body, /&lt;x&gt;/);
 });
 
 
