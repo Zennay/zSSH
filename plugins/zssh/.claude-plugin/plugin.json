@@ -1,0 +1,13 @@
+{
+  "name": "zssh",
+  "version": "0.2.0",
+  "description": "Link your own Linux VPS with one install command and let Claude inspect, edit and run commands on it through the hosted zSSH gateway.",
+  "author": {
+    "name": "Zennay",
+    "url": "https://github.com/Zennay"
+  },
+  "homepage": "https://zssh.zennay.nl",
+  "repository": "https://github.com/Zennay/zSSH",
+  "license": "UNLICENSED",
+  "keywords": ["ssh", "vps", "linux", "devops", "servers"]
+}

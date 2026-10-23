@@ -7,6 +7,8 @@ SERVICE_USER=zssh
 INSTALL_REF="${ZSSH_REF:-main}"
 ENROLL_CODE=""
 ENROLL_GATEWAY=""
+SERVER_NAME=""
+AGENT_EXEC_MODE=""
 
 # Personal commands are generated inside the authenticated ChatGPT plugin.
 # Code is deliberately short-lived and single-use: never use an API token here.
@@ -15,6 +17,9 @@ while (( $# )); do
     --enroll) (( $# >= 2 )) || { echo "missing --enroll value" >&2; exit 2; }; ENROLL_CODE="$2"; shift 2 ;;
     --gateway) (( $# >= 2 )) || { echo "missing --gateway value" >&2; exit 2; }; ENROLL_GATEWAY="$2"; shift 2 ;;
     --ref) (( $# >= 2 )) || { echo "missing --ref value" >&2; exit 2; }; INSTALL_REF="$2"; shift 2 ;;
+    --name) (( $# >= 2 )) || { echo "missing --name value" >&2; exit 2; }; SERVER_NAME="$2"; shift 2 ;;
+    --allow-shell) AGENT_EXEC_MODE=full; shift ;;
+    --no-shell) AGENT_EXEC_MODE=disabled; shift ;;
     --help) break ;;
     *) echo "unknown installer option" >&2; exit 2 ;;
   esac
@@ -29,9 +34,15 @@ Usage:
 
 Optional: ZSSH_REF=<40-character-commit-sha> sudo -E bash deploy/install.sh
 
-Installs the private loopback-only zSSH gateway under the unprivileged
-zssh account, with Node.js, systemd startup, and local health verification.
-Plugin account enrollment is not currently provisioned by this command.
+Without --enroll: installs the private loopback-only zSSH gateway under the
+unprivileged zssh account, with Node.js, systemd startup, and local health
+verification.
+
+With --enroll (the command the zSSH plugin gives you in ChatGPT or Claude):
+installs only the outbound agent and links this server to your account.
+  --name <name>    name shown in the plugin (default: hostname)
+  --allow-shell    let the plugin run shell commands as the zssh user
+  --no-shell       turn shell access off again (default)
 HELP
   exit 0
 fi
@@ -47,6 +58,10 @@ if [[ -n "$ENROLL_CODE" || -n "$ENROLL_GATEWAY" ]]; then
     die "personal VPS enrollment requires a valid --enroll code and --gateway URL"
   [[ "$INSTALL_REF" =~ ^[a-f0-9]{40}$ ]] ||
     die "personal enrollment requires the installer and bootstrap pinned to the same Git SHA"
+fi
+if [[ -n "$SERVER_NAME" ]]; then
+  [[ "$SERVER_NAME" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$ ]] ||
+    die "--name may only contain letters, digits, dots, dashes and underscores"
 fi
 
 export DEBIAN_FRONTEND=noninteractive
@@ -171,15 +186,16 @@ if [[ -n "$ENROLL_CODE" ]]; then
   printf '%s\n' "$ENROLL_CODE" | runuser -u "$SERVICE_USER" -- env \
     HOME="$home" \
     FORCE_COLOR=0 \
-    node "$home/.local/src/zssh/scripts/enroll-target.mjs" --gateway "$ENROLL_GATEWAY"
+    node "$home/.local/src/zssh/scripts/enroll-target.mjs" --gateway "$ENROLL_GATEWAY" \
+      --name "${SERVER_NAME:-$(hostname -s)}"
   unset ENROLL_CODE
 
   target_id="$(runuser -u "$SERVICE_USER" -- env HOME="$home" FORCE_COLOR=0 \
     node -p 'JSON.parse(require("fs").readFileSync(process.env.HOME+"/.config/zssh/agent-identity.json", "utf8")).target_id')"
   [[ "$target_id" =~ ^zt_[A-Za-z0-9_-]{8,64}$ ]] || die "invalid agent identity after enrollment"
 
-  # Keep a persistent outbound agent ready for activation after the plugin
-  # confirms the exact target fingerprint. It never exposes an inbound port.
+  # Persistent outbound agent: it dials out to the gateway and never exposes
+  # an inbound port. Linked immediately unless the gateway requires approval.
   runuser -u "$SERVICE_USER" -- env \
     HOME="$home" \
     XDG_RUNTIME_DIR="$runtime" \
@@ -190,6 +206,7 @@ if [[ -n "$ENROLL_CODE" ]]; then
     ZSSH_AGENT_PRIVATE_KEY_FILE="$home/.config/zssh/agent-ed25519.pem" \
     ZSSH_PUBLIC_ALLOWED_ROOTS="$home/zssh-workspace" \
     ZSSH_EXPECTED_SHA="$INSTALL_REF" \
+    ZSSH_AGENT_EXEC_MODE="$AGENT_EXEC_MODE" \
     bash "$home/.local/src/zssh/deploy/install-target-agent.sh" "$home/.local/src/zssh"
   printf '%s\n' "ZSSH_PERSONAL_AGENT_INSTALLED target=$target_id. Secure outbound agent starts on boot and reconnects automatically."
 fi

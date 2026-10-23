@@ -5,7 +5,7 @@ import crypto from "node:crypto";
 import os from "node:os";
 import path from "node:path";
 import { promises as fs } from "node:fs";
-import { canonicalEnrollmentClaim } from "../enrollment-store.mjs";
+import { canonicalEnrollmentClaim, normalizeTargetLabel } from "../enrollment-store.mjs";
 import { normalizeTargetId } from "../pairing.mjs";
 
 function fail(message) {
@@ -13,9 +13,16 @@ function fail(message) {
 }
 
 const args = process.argv.slice(2);
-if (args.length !== 2 || args[0] !== "--gateway") {
-  fail("usage: node scripts/enroll-target.mjs --gateway https://trusted-zssh-gateway (personal code on stdin)");
+let serverName = os.hostname();
+if (args.length === 4 && args[2] === "--name") {
+  serverName = args.pop();
+  args.pop();
 }
+if (args.length !== 2 || args[0] !== "--gateway") {
+  fail("usage: node scripts/enroll-target.mjs --gateway https://trusted-zssh-gateway [--name server-name] (personal code on stdin)");
+}
+// Purely cosmetic: the gateway drops names it does not accept.
+const label = normalizeTargetLabel(serverName);
 if (typeof process.getuid !== "function" || process.getuid() === 0) {
   fail("enrollment must run as the unprivileged zssh account");
 }
@@ -88,7 +95,7 @@ const response = await fetch(url.origin + "/enrollment/v1/claim", {
   method: "POST",
   redirect: "manual",
   headers: { "content-type": "application/json", "accept": "application/json" },
-  body: JSON.stringify({ code, targetId, publicKeyPem, nonce, signature }),
+  body: JSON.stringify({ code, targetId, publicKeyPem, nonce, signature, label }),
   signal: AbortSignal.timeout(15000),
 });
 // The remote service should never echo the submitted code; never print raw
@@ -99,7 +106,7 @@ const expectedFingerprint = "SHA256:" + crypto.createHash("sha256")
   .update(crypto.createPublicKey(privateKey).export({ type: "spki", format: "der" }))
   .digest("base64").replace(/=+$/, "");
 if (
-  result?.awaiting_approval !== true ||
+  (result?.awaiting_approval !== true && result?.connected !== true) ||
   result?.target_id !== targetId ||
   result?.fingerprint !== expectedFingerprint
 ) {
@@ -107,4 +114,8 @@ if (
 }
 console.log("ZSSH_ENROLLMENT_CLAIM_ACCEPTED target=" + targetId);
 console.log("ZSSH_TARGET_FINGERPRINT " + expectedFingerprint);
-console.log("Approve this fingerprint in your zSSH ChatGPT plugin. Do not share the enrollment command.");
+if (result.connected) {
+  console.log("ZSSH_LINKED name=" + (result.label || targetId) + " — this server is now linked to your zSSH account.");
+} else {
+  console.log("Approve this fingerprint in your zSSH plugin (ChatGPT or Claude). Do not share the enrollment command.");
+}

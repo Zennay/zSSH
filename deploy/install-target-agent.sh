@@ -88,6 +88,14 @@ EOF
 fi
 chmod 600 "$ENV_FILE"
 
+# Shell access for the plugin is the VPS owner's choice (install.sh
+# --allow-shell / --no-shell). Re-running the installer can flip it.
+if [[ -n "${ZSSH_AGENT_EXEC_MODE:-}" ]]; then
+  [[ "$ZSSH_AGENT_EXEC_MODE" == full || "$ZSSH_AGENT_EXEC_MODE" == disabled ]] ||
+    { echo "ZSSH_AGENT_EXEC_MODE must be full or disabled" >&2; exit 2; }
+  sed -i "s/^ZSSH_EXEC_MODE=.*/ZSSH_EXEC_MODE=$ZSSH_AGENT_EXEC_MODE/" "$ENV_FILE"
+fi
+
 read_env_value() {
   local key="$1"
   local line

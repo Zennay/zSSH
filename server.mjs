@@ -20,6 +20,8 @@ import { verifyClientToken } from "./auth-store.mjs";
 import { VERSION } from "./version.mjs";
 import { runBrowserCapability } from "./browser-capability.mjs";
 import { createFixedWindowRateLimiter, publicRateLimitFromEnv } from "./rate-limit.mjs";
+import { EntitlementStore, UsageMeter, planFor, signAccountToken } from "./billing.mjs";
+import { handleBillingRequest } from "./billing-routes.mjs";
 const PORT = Number(process.env.PORT || 8788);
 const EXEC_MODE = process.env.ZSSH_EXEC_MODE === "full" ? "full" : "disabled";
 const COMMAND_TIMEOUT_SECONDS = clampInt(process.env.ZSSH_COMMAND_TIMEOUT_SECONDS, 1, 300, 30);
@@ -32,7 +34,20 @@ const CLIENT_TOKEN_AUTH_CONFIGURED = Boolean(String(process.env.ZSSH_CLIENT_TOKE
 const TRUST_LOCAL_TUNNEL = process.env.ZSSH_TRUST_LOCAL_TUNNEL === "1";
 const PLUGIN_PROFILE = process.env.ZSSH_PLUGIN_PROFILE === "public" ? "public" : "private";
 const ENROLLMENT_ENABLED = PLUGIN_PROFILE === "public" && process.env.ZSSH_ENROLLMENT_ENABLED === "1";
-const ENROLLMENT_STORE = ENROLLMENT_ENABLED ? new EnrollmentStore() : null;
+// Plan limits only apply on the hosted SaaS gateway (ZSSH_BILLING_ENABLED=1).
+// Self-hosted public gateways keep unlimited servers and actions.
+const BILLING_ENABLED = ENROLLMENT_ENABLED && process.env.ZSSH_BILLING_ENABLED === "1";
+const ENTITLEMENTS = BILLING_ENABLED ? new EntitlementStore() : null;
+const USAGE = BILLING_ENABLED ? new UsageMeter() : null;
+async function planForProfile(profileId) {
+  return ENTITLEMENTS ? planFor((await ENTITLEMENTS.get(profileId)).plan) : null;
+}
+const ENROLLMENT_STORE = ENROLLMENT_ENABLED ? new EnrollmentStore({
+  targetLimit: async owner => (await planForProfile(owner))?.max_servers ?? Infinity,
+}) : null;
+// The VPS owner still has to opt in on the server itself (installer
+// --allow-shell); this flag only lets the hosted gateway relay the request.
+const PUBLIC_REMOTE_SHELL = ENROLLMENT_ENABLED && process.env.ZSSH_PUBLIC_REMOTE_SHELL === "1";
 const ENROLLMENT_CLAIM_RATE = new Map();
 function allowEnrollmentClaim(remoteAddress, now = Date.now()) {
   const key = String(remoteAddress || "");
@@ -61,7 +76,8 @@ const TARGET_SESSIONS = new TargetSessionRegistry();
 const AGENT_BROKER = new OutboundAgentBroker({
   sessions: TARGET_SESSIONS,
   allowedTools: PLUGIN_PROFILE === "private" && process.env.ZSSH_BROWSER_ENABLED === "1"
-    ? [...PUBLIC_TARGET_TOOLS, "zssh_browser"] : PUBLIC_TARGET_TOOLS,
+    ? [...PUBLIC_TARGET_TOOLS, "zssh_browser"]
+    : PUBLIC_REMOTE_SHELL ? [...PUBLIC_TARGET_TOOLS, "zssh_exec"] : PUBLIC_TARGET_TOOLS,
   requestTimeoutMs: Number(process.env.ZSSH_AGENT_REQUEST_TIMEOUT_MS || 30000),
   pollTimeoutMs: Number(process.env.ZSSH_AGENT_POLL_TIMEOUT_MS || 25000),
   maxPending: Number(process.env.ZSSH_AGENT_MAX_PENDING || 16),
@@ -461,7 +477,7 @@ export async function restartService(service) {
   return { service: String(service).trim(), ...(await runFixedProgram(command.executable, command.args, getAllowedRoots()[0], "restart_service")) };
 }
 
-async function execute(command, cwd, timeoutSeconds) {
+export async function execute(command, cwd, timeoutSeconds) {
   const risk = classifyCommand(command);
   if (EXEC_MODE !== "full") {
     await audit({ action: "exec", risk, outcome: "blocked", command, cwd });
@@ -596,20 +612,22 @@ function result(value, isError = false) {
   };
 }
 
-async function forwardPublicAgentTool(extra, tool, args = {}) {
+async function forwardPublicAgentTool(extra, tool, args = {}, selector) {
   if (!OUTBOUND_AGENT_MODE) throw new Error("outbound agent mode is not configured");
   if (ENROLLMENT_ENABLED) {
     const owner = profileIdFromAuth(authInfoFromExtra(extra), OAUTH_CONFIG.resource);
-    const owned = await ENROLLMENT_STORE.list(owner);
-    if (owned.length !== 1) {
-      const reason = owned.length ? "multiple_targets_require_selection" : "not_paired";
-      const err = new Error(owned.length
-        ? "Select a single target before using commands (multi-target selection is not enabled)."
-        : "No server has completed enrollment for this account.");
-      err.code = reason;
-      throw err;
+    const target = await ENROLLMENT_STORE.resolve(owner, selector);
+    if (USAGE) {
+      const plan = await planForProfile(owner);
+      const metered = USAGE.consume(owner, plan.daily_actions);
+      if (!metered.ok) {
+        const err = new Error("Daily action limit of the " + plan.name + " plan reached (" + metered.limit +
+          "). It resets at " + metered.resets_at + "; call get_account for an upgrade link.");
+        err.code = "plan_limit_actions";
+        throw err;
+      }
     }
-    const active = TARGET_SESSIONS.resolve(owned[0].target_id);
+    const active = TARGET_SESSIONS.resolve(target.target_id);
     if (!active) {
       const err = new Error("The enrolled Linux agent is offline.");
       err.code = "target_offline";
@@ -705,11 +723,9 @@ async function publicToolAuthorizationError(extra, scope, { requirePairing = tru
   if (ENROLLMENT_ENABLED) {
     const owner = profileIdFromAuth(authInfoFromExtra(extra), OAUTH_CONFIG.resource);
     const targets = await ENROLLMENT_STORE.list(owner);
-    if (targets.length === 1) return null;
+    if (targets.length) return null;
     return {
-      content: [{ type: "text", text: targets.length
-        ? "More than one enrolled VPS; target selection is required before commands can run."
-        : "No VPS paired to this account. Call get_server_install_command and run the resulting personalized command." }],
+      content: [{ type: "text", text: "No VPS linked to this account yet. Call get_server_install_command and have the user run the command on their VPS." }],
       isError: true,
     };
   }
@@ -753,6 +769,20 @@ export function publicOutboundServerInfo(targetInfo, {
   };
 }
 
+async function serverListing(owner) {
+  const targets = await ENROLLMENT_STORE.list(owner);
+  return {
+    servers: targets.map(t => ({ ...t, online: Boolean(TARGET_SESSIONS.resolve(t.target_id)) })),
+    pending: await ENROLLMENT_STORE.pending(owner),
+  };
+}
+
+// With personal enrollment one account can link several servers; every
+// target tool then accepts an optional server name or zt_ id.
+const TARGET_INPUT = ENROLLMENT_ENABLED
+  ? { target: z.string().min(1).max(67).optional().describe("Server name or target_id from list_servers. Optional when only one server is linked.") }
+  : {};
+
 function createMcpServer() {
   const server = new McpServer(
     { name: "zssh", version: VERSION },
@@ -769,17 +799,17 @@ function createMcpServer() {
     {
       title: "Server info",
       description: "Read basic identity and zSSH policy state for the connected Linux target.",
-      inputSchema: {},
+      inputSchema: { ...TARGET_INPUT },
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
       ...publicSecurity(OAUTH_CONFIG?.readScope || "zssh:read")
     },
-    async (_args, extra) => {
+    async ({ target } = {}, extra) => {
       const authError = await publicToolAuthorizationError(extra, OAUTH_CONFIG?.readScope || "zssh:read");
       if (authError) return authError;
       if (PLUGIN_PROFILE === "public") {
         if (OUTBOUND_AGENT_MODE) {
           try {
-            const targetInfo = await forwardPublicAgentTool(extra, "zssh_server_info", {});
+            const targetInfo = await forwardPublicAgentTool(extra, "zssh_server_info", {}, target);
             return agentToolResult(publicOutboundServerInfo(targetInfo));
           } catch (err) {
             return result({ ok: false, error: String(err?.message || err), code: err?.code || "target_unavailable" }, true);
@@ -821,16 +851,16 @@ function createMcpServer() {
     {
       title: "Read file",
       description: "Read a UTF-8 text file inside configured zSSH allowed roots. Secret-like values are redacted.",
-      inputSchema: { path: z.string().min(1) },
+      inputSchema: { path: z.string().min(1), ...TARGET_INPUT },
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
       ...publicSecurity(OAUTH_CONFIG?.readScope || "zssh:read")
     },
-    async ({ path: filePath }, extra) => {
+    async ({ path: filePath, target }, extra) => {
       const authError = await publicToolAuthorizationError(extra, OAUTH_CONFIG?.readScope || "zssh:read");
       if (authError) return authError;
       try {
         if (PLUGIN_PROFILE === "public" && OUTBOUND_AGENT_MODE) {
-          return agentToolResult(await forwardPublicAgentTool(extra, "zssh_read_file", { path: filePath }));
+          return agentToolResult(await forwardPublicAgentTool(extra, "zssh_read_file", { path: filePath }, target));
         }
         return result(await readTextFile(filePath, { rejectSecrets: PLUGIN_PROFILE === "public" }));
       } catch (err) {
@@ -846,17 +876,18 @@ function createMcpServer() {
       description: "Atomically replace or create a UTF-8 text file inside configured zSSH allowed roots.",
       inputSchema: {
         path: z.string().min(1),
-        content: z.string()
+        content: z.string(),
+        ...TARGET_INPUT
       },
       annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
       ...publicSecurity(OAUTH_CONFIG?.writeScope || "zssh:write")
     },
-    async ({ path: filePath, content }, extra) => {
+    async ({ path: filePath, content, target }, extra) => {
       const authError = await publicToolAuthorizationError(extra, OAUTH_CONFIG?.writeScope || "zssh:write");
       if (authError) return authError;
       try {
         if (PLUGIN_PROFILE === "public" && OUTBOUND_AGENT_MODE) {
-          return agentToolResult(await forwardPublicAgentTool(extra, "zssh_write_file", { path: filePath, content }));
+          return agentToolResult(await forwardPublicAgentTool(extra, "zssh_write_file", { path: filePath, content }, target));
         }
         return result({ ok: true, ...(await writeTextFile(filePath, content, { rejectSecrets: PLUGIN_PROFILE === "public" })) });
       } catch (err) {
@@ -937,12 +968,14 @@ function createMcpServer() {
         "get_server_install_command",
         {
           title: "Get my one-command VPS installer",
-          description: "Generate a short-lived one-time Linux installation command tied to the authenticated zSSH profile. The command includes a personal enrollment code; do not share it.",
-          inputSchema: {},
+          description: "Generate a short-lived one-time Linux installation command tied to the authenticated zSSH profile. Running it as root on the VPS links that server to this account. The command includes a personal enrollment code; do not share it.",
+          inputSchema: PUBLIC_REMOTE_SHELL
+            ? { allow_shell: z.boolean().optional().describe("Let zSSH run shell commands on this server as the unprivileged zssh user (default true). Set false for file and status access only.") }
+            : {},
           annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
           ...publicSecurity(OAUTH_CONFIG?.writeScope || "zssh:write"),
         },
-        async (_args, extra) => {
+        async ({ allow_shell } = {}, extra) => {
           const authError = oauthToolError(extra, OAUTH_CONFIG?.writeScope || "zssh:write");
           if (authError) return authError;
           try {
@@ -952,8 +985,13 @@ function createMcpServer() {
               code: issued.enrollment_code,
               gatewayUrl: OAUTH_CONFIG.resource,
               installerRef: process.env.ZSSH_INSTALLER_REF,
+              allowShell: PUBLIC_REMOTE_SHELL && allow_shell !== false,
             });
-            const value = { install_command: installCommand, expires_at: issued.expires_at };
+            const value = {
+              install_command: installCommand,
+              expires_at: issued.expires_at,
+              next_step: "Run this once as root on the VPS. It links the server to this account automatically; then call list_servers.",
+            };
             return { content: [{ type: "text", text: JSON.stringify(value) }], structuredContent: value, isError: false };
           } catch (err) {
             return result({ ok: false, error: String(err?.message || err) }, true);
@@ -965,7 +1003,7 @@ function createMcpServer() {
         "get_server_enrollment_status",
         {
           title: "Check new server enrollment",
-          description: "List pending server fingerprints and connected server identities for the authenticated zSSH account.",
+          description: "List the servers linked to this zSSH account (name, target_id, fingerprint, online state) and any enrollments still waiting for confirmation.",
           inputSchema: {},
           annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
           ...publicSecurity(OAUTH_CONFIG?.readScope || "zssh:read"),
@@ -975,13 +1013,125 @@ function createMcpServer() {
           if (authError) return authError;
           try {
             const owner = profileIdFromAuth(authInfoFromExtra(extra), OAUTH_CONFIG.resource);
-            const value = { pending: await ENROLLMENT_STORE.pending(owner), targets: await ENROLLMENT_STORE.list(owner) };
+            const listing = await serverListing(owner);
+            const value = { pending: listing.pending, targets: listing.servers };
             return { content: [{ type: "text", text: JSON.stringify(value) }], structuredContent: value, isError: false };
           } catch (err) {
             return result({ ok: false, error: String(err?.message || err) }, true);
           }
         }
       );
+
+      server.registerTool(
+        "list_servers",
+        {
+          title: "List my servers",
+          description: "List the servers linked to this zSSH account with their name, target_id and whether their agent is online. Use the name as the target argument of other tools.",
+          inputSchema: {},
+          annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+          ...publicSecurity(OAUTH_CONFIG?.readScope || "zssh:read"),
+        },
+        async (_args, extra) => {
+          const authError = oauthToolError(extra, OAUTH_CONFIG?.readScope || "zssh:read");
+          if (authError) return authError;
+          try {
+            const owner = profileIdFromAuth(authInfoFromExtra(extra), OAUTH_CONFIG.resource);
+            const value = await serverListing(owner);
+            return { content: [{ type: "text", text: JSON.stringify(value) }], structuredContent: value, isError: false };
+          } catch (err) {
+            return result({ ok: false, error: String(err?.message || err) }, true);
+          }
+        }
+      );
+
+      server.registerTool(
+        "rename_server",
+        {
+          title: "Rename a server",
+          description: "Give one of the account's linked servers a friendlier name.",
+          inputSchema: { target: z.string().min(1).max(67), name: z.string().min(1).max(64) },
+          annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+          ...publicSecurity(OAUTH_CONFIG?.writeScope || "zssh:write"),
+        },
+        async ({ target, name }, extra) => {
+          const authError = oauthToolError(extra, OAUTH_CONFIG?.writeScope || "zssh:write");
+          if (authError) return authError;
+          try {
+            const owner = profileIdFromAuth(authInfoFromExtra(extra), OAUTH_CONFIG.resource);
+            const found = await ENROLLMENT_STORE.resolve(owner, target);
+            const value = await ENROLLMENT_STORE.rename(owner, found.target_id, name);
+            return { content: [{ type: "text", text: JSON.stringify(value) }], structuredContent: value, isError: false };
+          } catch (err) {
+            return result({ ok: false, error: String(err?.message || err) }, true);
+          }
+        }
+      );
+
+      server.registerTool(
+        "get_account",
+        {
+          title: "Get my zSSH plan",
+          description: "Show the account's plan, server and daily action limits, today's usage, and a private link to manage or upgrade the subscription.",
+          inputSchema: {},
+          annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+          ...publicSecurity(OAUTH_CONFIG?.readScope || "zssh:read"),
+        },
+        async (_args, extra) => {
+          const authError = oauthToolError(extra, OAUTH_CONFIG?.readScope || "zssh:read");
+          if (authError) return authError;
+          try {
+            const owner = profileIdFromAuth(authInfoFromExtra(extra), OAUTH_CONFIG.resource);
+            const servers = (await ENROLLMENT_STORE.list(owner)).length;
+            let value;
+            if (!BILLING_ENABLED) {
+              value = { plan: "self-hosted", servers, limits: "unlimited" };
+            } else {
+              const plan = await planForProfile(owner);
+              value = {
+                plan: plan.id,
+                plan_name: plan.name,
+                servers,
+                max_servers: plan.max_servers,
+                actions_today: USAGE.used(owner),
+                daily_actions: plan.daily_actions,
+                resets_at: UsageMeter.resetsAt(),
+                manage_url: OAUTH_CONFIG.resource + "/account?t=" + signAccountToken(owner),
+                note: "manage_url is personal and valid for one hour; show it only to this user.",
+              };
+            }
+            return { content: [{ type: "text", text: JSON.stringify(value) }], structuredContent: value, isError: false };
+          } catch (err) {
+            return result({ ok: false, error: String(err?.message || err) }, true);
+          }
+        }
+      );
+
+      if (PUBLIC_REMOTE_SHELL) {
+        server.registerTool(
+          "zssh_exec",
+          {
+            title: "Run a shell command",
+            description: "Run a bash command on one of the account's linked servers as the unprivileged zssh user. Only works when the server owner installed zSSH with --allow-shell. Explain destructive commands to the user before running them.",
+            inputSchema: {
+              command: z.string().min(1).max(8192),
+              cwd: z.string().max(4096).optional(),
+              timeout_seconds: z.number().int().min(1).max(300).optional(),
+              ...TARGET_INPUT,
+            },
+            annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
+            ...publicSecurity(OAUTH_CONFIG?.writeScope || "zssh:write"),
+          },
+          async ({ command, cwd, timeout_seconds, target }, extra) => {
+            const authError = await publicToolAuthorizationError(extra, OAUTH_CONFIG?.writeScope || "zssh:write");
+            if (authError) return authError;
+            try {
+              return agentToolResult(await forwardPublicAgentTool(extra, "zssh_exec", { command, cwd, timeout_seconds }, target));
+            } catch (err) {
+              return result({ ok: false, error: String(err?.message || err), code: err?.code || "target_unavailable" }, true);
+            }
+          }
+        );
+      }
 
       server.registerTool(
         "approve_server_enrollment",
@@ -1012,7 +1162,7 @@ function createMcpServer() {
         {
           title: "Disconnect my enrolled server",
           description: "Immediately revoke the account's permission to use one previously enrolled VPS and disconnect its active agent session.",
-          inputSchema: { target_id: z.string().min(11).max(67) },
+          inputSchema: { target_id: z.string().min(1).max(67).describe("Server name or zt_ target id") },
           annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
           ...publicSecurity(OAUTH_CONFIG?.writeScope || "zssh:write"),
         },
@@ -1021,7 +1171,8 @@ function createMcpServer() {
           if (authError) return authError;
           try {
             const owner = profileIdFromAuth(authInfoFromExtra(extra), OAUTH_CONFIG.resource);
-            const value = await ENROLLMENT_STORE.revoke(owner, target_id);
+            const found = await ENROLLMENT_STORE.resolve(owner, target_id);
+            const value = await ENROLLMENT_STORE.revoke(owner, found.target_id);
             if (value.revoked) TARGET_SESSIONS.unregister(target_id);
             return { content: [{ type: "text", text: JSON.stringify(value) }], structuredContent: value, isError: false };
           } catch (err) {
@@ -1061,7 +1212,7 @@ function createMcpServer() {
             const targets = await ENROLLMENT_STORE.list(owner);
             const pending = await ENROLLMENT_STORE.pending(owner);
             value = {
-              paired: targets.length === 1,
+              paired: targets.length > 0,
               pending: pending.length > 0,
               target_label: TARGET_LABEL,
               request_id: null,
@@ -1090,16 +1241,16 @@ function createMcpServer() {
         {
           title,
           description,
-          inputSchema: {},
+          inputSchema: { ...TARGET_INPUT },
           annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
           ...publicSecurity(OAUTH_CONFIG?.readScope || "zssh:read")
         },
-        async (_args, extra) => {
+        async ({ target } = {}, extra) => {
           const authError = await publicToolAuthorizationError(extra, OAUTH_CONFIG?.readScope || "zssh:read");
           if (authError) return authError;
           try {
             if (OUTBOUND_AGENT_MODE) {
-              return agentToolResult(await forwardPublicAgentTool(extra, name, {}));
+              return agentToolResult(await forwardPublicAgentTool(extra, name, {}, target));
             }
             const value = await runSafeProgram(program, args);
             return result(value, !value.ok);
@@ -1514,7 +1665,8 @@ export function start() {
     const url = new URL(req.url, "http://" + (req.headers.host || "localhost"));
 
     // A 256-bit one-use install code authorizes just the signed agent claim.
-    // It never grants tool execution or skips owner-side fingerprint approval.
+    // Redeeming it links that exact Ed25519 key to the code's owner (or leaves
+    // it pending when ZSSH_ENROLLMENT_REQUIRE_APPROVAL=1).
     if (ENROLLMENT_ENABLED && url.pathname === "/enrollment/v1/claim") {
       res.setHeader("cache-control", "no-store");
       res.setHeader("content-type", "application/json; charset=utf-8");
@@ -1611,6 +1763,13 @@ export function start() {
           .end(JSON.stringify({ error: "agent request rejected" }));
       }
     }
+
+    if (PLUGIN_PROFILE === "public" && await handleBillingRequest(req, res, url, {
+      entitlements: ENTITLEMENTS,
+      usage: USAGE,
+      enrollment: ENROLLMENT_STORE,
+      baseUrl: OAUTH_CONFIG?.resource || "",
+    })) return;
 
     if (req.method === "GET" && PLUGIN_PROFILE === "public") {
       const publicPage = publicSiteResponse(url.pathname);

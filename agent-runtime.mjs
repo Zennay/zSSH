@@ -1,4 +1,4 @@
-import { runSafeProgram, readTextFile, writeTextFile } from "./server.mjs";
+import { runSafeProgram, readTextFile, writeTextFile, execute } from "./server.mjs";
 import { VERSION } from "./version.mjs";
 import { runBrowserCapability } from "./browser-capability.mjs";
 
@@ -39,7 +39,7 @@ export async function executeAgentCommand(command, { targetLabel = process.env.Z
       target_label: String(targetLabel).slice(0, 80),
       platform: process.platform,
       arch: process.arch,
-      exec_mode: "disabled",
+      exec_mode: process.env.ZSSH_EXEC_MODE === "full" ? "full" : "disabled",
       transport: "outbound-agent",
     };
   }
@@ -53,6 +53,17 @@ export async function executeAgentCommand(command, { targetLabel = process.env.Z
     if (typeof args.path !== "string" || !args.path) throw new Error("path is required");
     if (typeof args.content !== "string") throw new Error("content must be a string");
     return { ok: true, ...(await writeTextFile(args.path, args.content, { rejectSecrets: true })) };
+  }
+
+  if (tool === "zssh_exec") {
+    // Only the VPS owner can turn this on (installer --allow-shell writes
+    // ZSSH_EXEC_MODE=full into the agent env). Commands run as the
+    // unprivileged zssh user, never root.
+    if (process.env.ZSSH_EXEC_MODE !== "full") {
+      throw new Error("zssh_exec is not exposed: shell access is off on this server. Re-run the zSSH installer with --allow-shell to enable it.");
+    }
+    if (typeof args.command !== "string" || !args.command.trim()) throw new Error("command is required");
+    return await execute(args.command, typeof args.cwd === "string" && args.cwd ? args.cwd : undefined, args.timeout_seconds);
   }
 
   if (tool === "zssh_browser") {
