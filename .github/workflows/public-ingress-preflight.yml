@@ -14,7 +14,8 @@ concurrency:
 jobs:
   preflight:
     name: Prove public DNS, TLS, health and MCP auth boundary
-    runs-on: ubuntu-latest
+    if: ((github.event_name != 'pull_request' && github.event_name != 'pull_request_target') || (github.event.pull_request.head.repo.full_name == github.repository && github.actor == 'Zennay'))
+    runs-on: [self-hosted, zssh, vps]
     timeout-minutes: 5
     env:
       ZSSH_PLUGIN_MCP_URL: ${{ vars.ZSSH_PLUGIN_MCP_URL }}

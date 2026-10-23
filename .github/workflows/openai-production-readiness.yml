@@ -27,8 +27,8 @@ concurrency:
 jobs:
   provenance:
     name: Canonical main provenance
-    if: github.event_name != 'workflow_run' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main')
-    runs-on: ubuntu-latest
+    if: (github.event_name != 'workflow_run' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main')) && ((github.event_name != 'pull_request' && github.event_name != 'pull_request_target') || (github.event.pull_request.head.repo.full_name == github.repository && github.actor == 'Zennay'))
+    runs-on: [self-hosted, zssh, vps]
     timeout-minutes: 5
     outputs:
       main_protected: ${{ steps.main-protection.outputs.protected }}
@@ -73,7 +73,8 @@ jobs:
   public_origin:
     name: Observe public production origin
     needs: provenance
-    runs-on: ubuntu-latest
+    if: ((github.event_name != 'pull_request' && github.event_name != 'pull_request_target') || (github.event.pull_request.head.repo.full_name == github.repository && github.actor == 'Zennay'))
+    runs-on: [self-hosted, zssh, vps]
     timeout-minutes: 3
     outputs:
       stage: ${{ steps.observe.outputs.stage }}
@@ -135,7 +136,8 @@ jobs:
     permissions:
       contents: read
       issues: write
-    runs-on: ubuntu-latest
+    if: ((github.event_name != 'pull_request' && github.event_name != 'pull_request_target') || (github.event.pull_request.head.repo.full_name == github.repository && github.actor == 'Zennay'))
+    runs-on: [self-hosted, zssh, vps]
     timeout-minutes: 5
     environment: openai-production
     env:

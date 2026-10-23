@@ -15,7 +15,8 @@ permissions:
 jobs:
   provenance:
     name: Require canonical merged-PR provenance
-    runs-on: ubuntu-latest
+    if: ((github.event_name != 'pull_request' && github.event_name != 'pull_request_target') || (github.event.pull_request.head.repo.full_name == github.repository && github.actor == 'Zennay'))
+    runs-on: [self-hosted, zssh, vps]
     timeout-minutes: 5
     steps:
       - name: Require canonical main ref
@@ -41,7 +42,8 @@ jobs:
   negative-proof:
     name: Prove normal direct main write is rejected
     needs: provenance
-    runs-on: ubuntu-latest
+    if: ((github.event_name != 'pull_request' && github.event_name != 'pull_request_target') || (github.event.pull_request.head.repo.full_name == github.repository && github.actor == 'Zennay'))
+    runs-on: [self-hosted, zssh, vps]
     timeout-minutes: 5
     environment: repository-governance
     steps:
