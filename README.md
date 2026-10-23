@@ -105,6 +105,38 @@ The public OAuth profile applies an application-layer fixed-window limit per opa
 
 Production hardening still requires a dedicated service account, scoped sudo/capabilities, stronger approval semantics, agent pairing, and review against current hosted-MCP requirements. The private single-owner deployment intentionally avoids a browser OAuth flow. Hosted clients can use a high-entropy capability URL over HTTPS; clients that support custom headers can instead use `x-zssh-key`.
 
+## Classic manual SSH recovery (private gateway)
+
+The private zSSH installation can be recovered through an ordinary SSH session
+without a browser agent, new VPS agent, public OAuth, or a new plugin package.
+Run these commands **as the existing non-root zSSH service user** (not root):
+
+```bash
+# From a checkout updated to a release containing the recovery script:
+bash ops/recover-private-gateway.sh --status
+bash ops/recover-private-gateway.sh --recover
+# Force a restart if the local health endpoint is healthy but the remote client is stale:
+bash ops/recover-private-gateway.sh --restart
+```
+
+The installed service is `zssh.service` and its local private health endpoint
+is `http://127.0.0.1:8788/health`. Without the helper script, the equivalent
+manual commands are:
+
+```bash
+export XDG_RUNTIME_DIR="/run/user/$(id -u)"
+export DBUS_SESSION_BUS_ADDRESS="unix:path=$XDG_RUNTIME_DIR/bus"
+systemctl --user restart zssh.service
+curl -fsS http://127.0.0.1:8788/health
+```
+
+From a root login, switch to the actual service owner first (commonly
+`sudo -iu ubuntu`), instead of starting a second root-owned gateway.
+This recovery **does not** rotate connection credentials or repair a terminated
+client-side plugin session; reconnect the plugin client separately if local
+health is green but the connector still fails. Never paste capability URLs,
+tokens, or gateway configuration into chat or issue reports.
+
 ## Private revocable client credentials
 
 Private/self-hosted zSSH installations can create independent client credentials instead of sharing one long-lived global bearer token. These credentials are **not** part of the public OpenAI OAuth profile and cannot bypass its OAuth + pairing checks.
