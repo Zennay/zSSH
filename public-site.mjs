@@ -381,7 +381,7 @@ ${CHART}
 </div></section>
 
 <section class="block" id="features"><div class="wrap">
-<div class="head"><div><span class="eyebrow">Security model</span><h2>Powerful for the assistant.<br>Boring for attackers.</h2></div><p>Every boundary stays on your side: you decide which server links, what it may do, and when it disconnects.</p></div>
+<div class="head"><div><span class="eyebrow">Security model</span><h2>Powerful for the assistant.<br>Boring for attackers.</h2></div><p>Your Linux target stays yours. Every boundary stays on your side: you decide which server links, what it may do, and when it disconnects.</p></div>
 <div class="features">
 <article class="card feature"><span class="ico">${ICONS.out}</span><h3>Outbound-only agent</h3><p>The agent dials out to the gateway over TLS. Nothing listens on your server, so there is nothing to scan.</p></article>
 <article class="card feature"><span class="ico">${ICONS.user}</span><h3>Unprivileged by design</h3><p>Runs as a dedicated <code>zssh</code> user, never root. Credential files and secret-like content are blocked.</p></article>
